@@ -75,7 +75,7 @@
       "source_ids": []
     },
     "response": {
-      "delta_over_delta_ref": 1.0,
+      "delta_over_L_ref": 1.0,
       "depth_direction": "surface_normal",
       "fluence_basis": "normalized_incident_peak",
       "kind": "log_fixed",
@@ -83,7 +83,7 @@
       "threshold_over_F_ref": 1.0
     },
     "schema_version": "1.0",
-    "source_equation": "a/F_ref 序列：a = delta_ref*[ln(F/F_ref)]_+（无量纲）",
+    "source_equation": "a/F_ref 序列：a = (delta/L_ref)*[ln(F/F_ref)]_+（无量纲，δ 以 L_ref 归一）",
     "source_figure_or_table": "执行细则 4.1/4.2 合成模式规定",
     "source_type": "synthetic_definition",
     "structure_type": "homogeneous",
@@ -92,10 +92,10 @@
       "scope": "analytic_all"
     }
   },
-  "card_sha256": "0a9256c8c7000ba8dc62fc653514a3afa921fcf2998a571d4868767e9766cb0c",
+  "card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
   "schema_version": "1.0",
   "watermark": {
-    "card_sha256": "0a9256c8c7000ba8dc62fc653514a3afa921fcf2998a571d4868767e9766cb0c",
+    "card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
     "card_version": "1.0.0",
     "evidence_status": "unverified",
     "family": "synthetic_demo",

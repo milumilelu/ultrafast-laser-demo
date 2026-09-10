@@ -5,8 +5,8 @@
 执行环境、命令和结果目录。
 
 已实施批次：A–C（M0 最小闭环，G01–G04）+ D（T07 参考评估器，G05）+
-E（T09 界面，G09-UI）+ F（T10 查表，G09-table）。
-未运行的项目（G06–G08、逐事件核查表接入、M1/M2/M3 相关）明确标记为「未运行」，
+E（T09 界面，G09-UI）+ F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）。
+未运行的项目（G07–G08、逐事件核查表接入、M1/M2/M3 相关）明确标记为「未运行」，
 不得用预期数值代替通过记录。
 
 用法::
@@ -284,10 +284,10 @@ def main() -> int:
     add("M0-synthetic", "examples/synthetic_demo_point.json", h6, "单位系统", "dimensionless",
         res6.statistics["unit_system"], "", "== dimensionless", res6.statistics["unit_system"] == "dimensionless",
         str(dir6), "数值实现验证", "禁止导出物理 um 深度")
-    add("M0-synthetic", "examples/synthetic_demo_point.json", h6, "中心深度 (delta_ref)", 10.0,
+    add("M0-synthetic", "examples/synthetic_demo_point.json", h6, "中心深度 (L_ref)", 10.0,
         res6.statistics["center_depth_internal"], rel_err(res6.statistics["center_depth_internal"], 10.0),
         "rel <= 1e-12", rel_err(res6.statistics["center_depth_internal"], 10.0) <= 1e-12, str(dir6),
-        "数值实现验证", "5 脉冲 × 2 delta_ref")
+        "数值实现验证", "5 脉冲 × 2.0（h/L_ref 无量纲）；depth 与几何同一长度尺度")
 
     # ---------------- G05（批次 D：YSZ/SiC 参考评估器）----------------
     from ufdemo import references as ref
@@ -363,8 +363,55 @@ def main() -> int:
         not any("surface" in p.name for p in dir_g05y.iterdir()), str(dir_g05y), "数值实现验证",
         "目录中无 final_surface.npz，避免被误当形貌结果")
 
-    # ---------------- G09 / 界面操作检查（批次 E：T09）----------------
+    # ---------------- G06 / 分相查询与跨相截断（批次 G：T11–T13）----------------
     sys.path.insert(0, str(ROOT / "tools"))
+    from structure_report import (  # noqa: E402
+        STRUCTURE_CASES,
+        collect_g06_checks,
+        collect_structure_rows,
+        solve_case as solve_structure_case,
+        write_markdown as write_structure_markdown,
+    )
+
+    structure_results: dict[str, Any] = {}
+    for _name, _label, _zh in STRUCTURE_CASES:
+        cfg_s, card_s, res_s = solve_structure_case(_name)
+        res_s.run_id = _label
+        saved_s = save_run(res_s, out_root / _label, project_root=ROOT, code_info=code)
+        structure_results[_name] = res_s
+        add("G06", f"examples/{_name}", saved_s.config_sha256, "结构实例求解状态",
+            "completed（合成结构，内部单位）",
+            f"{_zh}｜结构类型 {res_s.metadata.get('structure', {}).get('structure_type')}"
+            f"｜种子 {res_s.metadata.get('structure', {}).get('seed')}"
+            f"｜事件 {(res_s.diagnostics.get('events') or {}).get('n_events')}",
+            "", "", res_s.status == "completed", str(out_root / _label), "数值实现验证",
+            "相响应为内联合成定义；跨相截断为有损近似")
+
+    structure_rows = collect_structure_rows(structure_results)
+    g06_rows = collect_g06_checks(structure_results)
+
+    struct_csv = D / "structure_instances.csv"
+    with open(struct_csv, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(structure_rows[0].keys()))
+        w.writeheader()
+        w.writerows(structure_rows)
+
+    g06_csv = D / "g06_phase_interfaces.csv"
+    with open(g06_csv, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(g06_rows[0].keys()))
+        w.writeheader()
+        w.writerows(g06_rows)
+
+    g06_md_path = write_structure_markdown(structure_rows, g06_rows)
+
+    for r in g06_rows:
+        add("G06", "examples/（两个合成结构算例）", "", r["kind"], r["expected"], r["measured"],
+            "", "", r["status"] == "通过", str(out_root), "数值实现验证", r["detail"])
+    n_g06_fail = sum(1 for r in g06_rows if r["status"] == "失败")
+    if n_g06_fail:
+        print(f"!! G06 检查未全通过：失败 {n_g06_fail}", file=sys.stderr)
+
+    # ---------------- G09 / 界面操作检查（批次 E：T09）----------------
     from ui_probe import run_ui_checks  # noqa: E402
 
     ui_probe_dir = out_root / "_ui_probe"
@@ -454,8 +501,6 @@ def main() -> int:
         "逐事件核接入属批次 H（T14）")
 
     # ---------------- 未运行项 ----------------
-    not_run("G06", "（合成两相/铺层）", "同相合并等价、不同相不跳过、固定种子复现", "见执行细则 10 节",
-            "批次 G（T11–T13）未实施：结构化相界面在配置层拦截", "数值实现验证")
     not_run("G07", "（斜入射基准）", "0° 退化；60° 足迹比 2、中心能流减半；可见性", "见执行细则 10 节",
             "批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）", "数值实现验证")
     not_run("G08", "（分组求解）", "分组与逐脉冲偏差 <= 1%；回退正确", "见执行细则 10 节",
@@ -488,7 +533,7 @@ def main() -> int:
     n_nr = sum(1 for r in ROWS if r["status"] == "未运行")
 
     md = [
-        "# 验收报告（批次 A–F：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表）",
+        "# 验收报告（批次 A–G：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构）",
         "",
         f"- 生成时间（UTC）：{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}",
         f"- 代码版本：commit={code.get('commit')}｜工作区有改动={code.get('working_tree_dirty')}｜源码清单哈希={code['source_manifest_sha256'][:16]}…",
@@ -501,6 +546,8 @@ def main() -> int:
         "> E 的界面操作检查为「数值实现验证」（提交/回放的求解次数记账）；",
         "> F 的查表为「数值实现验证」（schema/插值/越界/路由），SiC 曲线由材料卡参数按式(6) 重算，",
         "> **不构成对原文曲线的复现**。原图/原表数字化与工况对应完成前不建立实验回归用例。",
+        "> G 的分相结构为「数值实现验证」（同相合并/界面不跳过/种子复现/截断命名），",
+        "> 相响应为内联合成定义、跨相截断为有损近似，**不含任何实验复现结论**。",
         "",
         "## 逐项结果",
         "",
@@ -526,9 +573,12 @@ def main() -> int:
         "python -m ufdemo run examples/synthetic_demo_point.json --out runs/m0_synth --force-new-suffix",
         "python -m ufdemo reference examples/ysz_reference_case.json --out runs/g05_ysz_reference",
         "python -m ufdemo reference examples/sic_reference_case.json --out runs/g05_sic_reference",
+        "python -m ufdemo run examples/alsic_particle_composite.json --out runs/g06_alsic_particles --force-new-suffix",
+        "python -m ufdemo run examples/cfrp_laminated_ply.json --out runs/g06_cfrp_plies --force-new-suffix",
         "python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5",
         "python tools/make_curves.py",
         "python tools/table_report.py",
+        "python tools/structure_report.py",
         "python tools/migrate_materials.py",
         "python tools/ui_probe.py",
         "python tools/run_acceptance.py",
@@ -658,13 +708,17 @@ def main() -> int:
     print(f"报告：{D / 'g05_reference_semantics.md'}")
     print(f"报告：{ui_csv}")
     print(f"报告：{ui_md_path}")
+    print(f"报告：{struct_csv}")
+    print(f"报告：{g06_csv}")
+    print(f"报告：{g06_md_path}")
     print(f"报告：{table_md_path}")
     print(f"报告：{table_err_csv}")
     print(f"报告：{table_interp_csv}")
     print(f"插图：{table_fig}")
     print(f"通过 {n_pass}｜失败 {n_fail}｜未运行 {n_nr}")
     print(f"界面检查：通过 {n_ui_pass}｜失败 {n_ui_fail}｜未运行 {n_ui_nr}")
-    return 0 if n_fail == 0 else 1
+    print(f"G06 检查：通过 {len(g06_rows) - n_g06_fail}｜失败 {n_g06_fail}｜结构实例 {len(structure_rows)}")
+    return 0 if (n_fail == 0 and n_g06_fail == 0) else 1
 
 
 if __name__ == "__main__":

@@ -1,0 +1,220 @@
+{
+  "approximations": [],
+  "axis_order": [
+    "y",
+    "x"
+  ],
+  "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
+  "card_version": "1.0.0",
+  "code": {
+    "commit": "ccf07172f9cab218c687c406d40a286519d6befa",
+    "git_available": true,
+    "python": "3.13.14",
+    "source_file_count": 18,
+    "source_manifest_sha256": "fdc54e3f1bf071382b7aa8c239abf1e0f41cf0d05f61154714dad0d63baf82f1",
+    "working_tree_dirty": true
+  },
+  "config_sha256": "fb1d5adbe4e92499f760bcba15c0d47981f7e45d1c0f271d8570d466df4ae98f",
+  "enabled_features": {
+    "acceleration": "off",
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "oblique_incidence": false,
+    "removal_available": true,
+    "snapshot_policy": "events",
+    "structured_interface": true,
+    "threshold_only": false
+  },
+  "environment": {
+    "executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
+    "numpy": "2.3.5",
+    "platform": "win32",
+    "pytest": "9.1.1",
+    "python": "3.13.14 (main, Jun 11 2026, 04:04:46) [MSC v.1944 64 bit (AMD64)]"
+  },
+  "events_processed": 16,
+  "evidence_status": "literature_reported",
+  "laser_metadata": {
+    "direction_unit_input": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "direction_unit_normalized": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "direction_was_renormalized": false,
+    "peak_fluence_internal": 7.3890560989306495,
+    "power_measurement_location": "sample_surface"
+  },
+  "material_card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
+  "run_id": "g06_cfrp_plies",
+  "schema_version": "1.0",
+  "seed": 20260911,
+  "source_type": "research_card_migration",
+  "status": "completed",
+  "structure": {
+    "algorithm_version": "structure_v1",
+    "clipped_events": 14,
+    "final_phase_cell_counts": {
+      "fiber": 11056,
+      "resin": 8825
+    },
+    "is_uniform": false,
+    "layer_bounds": [
+      0.0,
+      2.0,
+      4.0,
+      6.0,
+      8.0
+    ],
+    "layers": [
+      {
+        "fiber_angle_deg": 0.0,
+        "fiber_phase": "fiber",
+        "fiber_volume_fraction": 0.55,
+        "fiber_width": 0.39999999999999997,
+        "matrix_phase": "resin",
+        "n_merged_from": 1,
+        "thickness": 2.0
+      },
+      {
+        "fiber_angle_deg": 90.0,
+        "fiber_phase": "fiber",
+        "fiber_volume_fraction": 0.55,
+        "fiber_width": 0.39999999999999997,
+        "matrix_phase": "resin",
+        "n_merged_from": 1,
+        "thickness": 2.0
+      },
+      {
+        "fiber_angle_deg": 0.0,
+        "fiber_phase": "fiber",
+        "fiber_volume_fraction": 0.55,
+        "fiber_width": 0.39999999999999997,
+        "matrix_phase": "resin",
+        "n_merged_from": 1,
+        "thickness": 2.0
+      },
+      {
+        "fiber_angle_deg": 90.0,
+        "fiber_phase": "fiber",
+        "fiber_volume_fraction": 0.55,
+        "fiber_width": 0.39999999999999997,
+        "matrix_phase": "resin",
+        "n_merged_from": 1,
+        "thickness": 2.0
+      }
+    ],
+    "n_layers_input": 4,
+    "n_layers_merged": 4,
+    "n_phases": 2,
+    "notes": [],
+    "phase_switch_events": 14,
+    "phases": [
+      {
+        "delta_internal": 0.35,
+        "depth_direction": "surface_normal",
+        "material_id": null,
+        "name": "resin",
+        "note": "合成定义：树脂相。不得用卡上整体 Fth1=0.84 F_ref 充当该相阈值。",
+        "output_semantics": "event_depth_increment",
+        "phase_id": 1,
+        "response_source": "synthetic_definition",
+        "role": "matrix",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "threshold_internal": 0.7,
+        "unit_mode": "dimensionless"
+      },
+      {
+        "delta_internal": 0.15,
+        "depth_direction": "surface_normal",
+        "material_id": null,
+        "name": "fiber",
+        "note": "合成定义：碳纤维相；缺分相标定，不输出物理深度。",
+        "output_semantics": "event_depth_increment",
+        "phase_id": 2,
+        "response_source": "synthetic_definition",
+        "role": "fiber",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "threshold_internal": 2.1,
+        "unit_mode": "dimensionless"
+      }
+    ],
+    "same_phase_merge": false,
+    "seed": 20260911,
+    "structure_type": "laminated_fiber_composite",
+    "target_volume_fraction": null,
+    "total_thickness": 8.0,
+    "truncation_note": "跨相截断是有损近似：被截断的候选量记为「未应用候选去除体积」，不是剩余热量，也不是界面能量传输结果。",
+    "unapplied_candidate_removal_volume_internal": 0.2135211041618531,
+    "volume_fraction": {
+      "actual_volume_fraction": {
+        "fiber": 0.55
+      },
+      "n_samples": 0,
+      "note": "铺层结构的纤维体积分数按条纹几何（fiber_width / period）解析给出，与 target_volume_fraction 分别报告；单层设定值不代表任意层组合的整体比例。",
+      "target_volume_fraction": null,
+      "volume_fraction_method": "analytic_from_ply_pattern"
+    },
+    "warnings": [],
+    "z_top": 0.0
+  },
+  "unit": {
+    "E_ref_J": 1.0000000000000002e-06,
+    "F_ref_J_m2": 10000.0,
+    "L_ref_m": 1e-05,
+    "delta_ref_m": 1e-07,
+    "labels": {
+      "depth": "L_ref",
+      "energy": "F_ref*L_ref^2",
+      "fluence": "F_ref",
+      "length": "L_ref"
+    },
+    "physical_depth_export_allowed": false,
+    "unit_system": "dimensionless"
+  },
+  "validation": {
+    "allowed_run_modes": [
+      "threshold_only",
+      "synthetic_demo"
+    ],
+    "errors": [],
+    "estimated_events": 16,
+    "estimated_memory_bytes": 4294296,
+    "evidence_status": "literature_reported",
+    "material_id": "cfrp_t700_yb01_800nm",
+    "notes": [
+      "合成演示：所有长度按 L_ref 归一、能流按 F_ref 归一，禁止导出物理 μm 深度。",
+      "分相结构：逐事件响应取自 structure.phases 的内联合成定义；材料卡仅提供身份与能力，其 SI 响应字段 ['threshold_J_m2'] 不参与计算（各相阈值单独标定）。",
+      "合成结构：laminated_fiber_composite｜算法 structure_v1｜种子 20260911｜相 ['resin', 'fiber']。跨相截断是有损近似，被截断的候选量记为「未应用候选去除体积」，不是剩余能量。",
+      "合成结构模式：逐事件去除核由分相内联定义提供（父卡仅提供结构身份）；父卡逐事件核不可用：响应类型 'reference_N_threshold' 不是固定阈值对数核；缺 delta_m"
+    ],
+    "ok": true,
+    "run_mode": "synthetic_demo",
+    "unit_system": "dimensionless",
+    "warnings": []
+  },
+  "warnings": [
+    "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
+    "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+  ],
+  "written_at_utc": "2026-09-10T16:22:30.378718+00:00",
+  "written_files": [
+    "config.json",
+    "material_snapshot.json",
+    "statistics.csv",
+    "profiles.csv",
+    "diagnostics.json",
+    "snapshots/snap_0000.npz",
+    "snapshots/snap_0001.npz",
+    "snapshots/snap_0002.npz",
+    "snapshots/snap_0003.npz",
+    "snapshots/index.json",
+    "events.csv",
+    "final_surface.npz"
+  ]
+}

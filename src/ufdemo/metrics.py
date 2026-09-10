@@ -23,7 +23,16 @@ class RoiSpec:
     bounds_xy_m: tuple[float, float, float, float] | None = None  # x0, x1, y0, y1
 
     @staticmethod
-    def from_dict(raw: Mapping[str, Any], idx: int) -> "RoiSpec":
+    def from_dict(raw: Mapping[str, Any], idx: int, unit: Any = None) -> "RoiSpec":
+        """解析一个 ROI。
+
+        ``unit`` 给定 ``UnitContext`` 时，``radius_m`` / ``center_xy_m`` /
+        ``bounds_xy_m`` 按该上下文换算到**内部长度尺度**：合成模式下网格坐标
+        （``surface.x`` / ``surface.y``）是 ``x/L_ref``，若直接拿配置里的米制
+        半径去比较，会把 ``1 L_ref`` 误当成 ``1e-5 L_ref``，掩膜只剩中心一个
+        单元。任务书「合成模式的单位规则」要求参与几何的长度同处一个尺度，
+        因此这里必须换算，SI 模式下换算为恒等。
+        """
         if not isinstance(raw, Mapping):
             raise UFDemoError(CONFIG_INVALID, f"output.roi[{idx}] 必须是对象", field_path=f"output.roi[{idx}]", actual=raw)
         name = str(raw.get("name", f"roi_{idx}"))
@@ -38,11 +47,16 @@ class RoiSpec:
                 actual=raw,
                 requirement="radius_m + center_xy_m，或 bounds_xy_m",
             )
+
+        def _len(value: Any) -> float:
+            v = float(value)
+            return v if unit is None else float(unit.length_to_internal(v))
+
         return RoiSpec(
             name=name,
-            radius_m=float(radius) if radius is not None else None,
-            center_xy_m=tuple(float(v) for v in center) if center is not None else None,  # type: ignore[arg-type]
-            bounds_xy_m=tuple(float(v) for v in bounds) if bounds is not None else None,  # type: ignore[arg-type]
+            radius_m=_len(radius) if radius is not None else None,
+            center_xy_m=tuple(_len(v) for v in center) if center is not None else None,  # type: ignore[arg-type]
+            bounds_xy_m=tuple(_len(v) for v in bounds) if bounds is not None else None,  # type: ignore[arg-type]
         )
 
 
@@ -106,7 +120,12 @@ def domain_statistics(surface: Any) -> dict[str, Any]:
 
 
 def roi_mask(surface: Any, roi: RoiSpec) -> tuple[Any, str]:
-    """ROI 掩膜：按单元中心是否落入几何区域判定。"""
+    """ROI 掩膜：按单元中心是否落入几何区域判定。
+
+    前提：``roi`` 的几何量已与 ``surface.x`` / ``surface.y`` 同处内部长度尺度
+    （由 :meth:`RoiSpec.from_dict` 用 ``UnitContext`` 换算），否则合成模式下
+    掩膜尺度会差 ``1/L_ref`` 倍。
+    """
     import numpy as np
 
     XX, YY = np.meshgrid(surface.x, surface.y)
@@ -164,7 +183,10 @@ def roi_statistics(surface: Any, rois: Any) -> list[RoiResult]:
 
 
 def cross_section(surface: Any, *, axis: str = "x", offsets_m: Any = (0.0,)) -> list[dict[str, Any]]:
-    """提取截面。``axis='x'`` 表示沿 x 扫描、在给定 y 偏移处取值。"""
+    """提取截面。``axis='x'`` 表示沿 x 扫描、在给定 y 偏移处取值。
+
+    ``offsets_m`` 必须已是内部长度尺度（调用方负责按 ``UnitContext`` 换算）。
+    """
     out: list[dict[str, Any]] = []
     for off in offsets_m:
         if axis == "x":

@@ -66,15 +66,14 @@ def clock_index_bounds(path: PathConfig, laser: LaserConfig) -> tuple[int, int]:
     if laser.repetition_rate_Hz is None or not path.segments:
         return (0, -1)
     f = laser.repetition_rate_Hz
-    t0 = max(0.0, path.t0_s)
+    t0 = path.t0_s
     t_end = max(s.end_s for s in path.segments)
     if t_end <= t0:
         return (0, -1)
-    scale = max(1.0, abs(t_end * f))
+    scale = max(1.0, abs((t_end - t0) * f))
     idx_tol = max(1e-9, 1e-12 * scale)
-    j_start = int(math.ceil(t0 * f - idx_tol))
-    j_end = int(math.floor(t_end * f + idx_tol))
-    return (max(0, j_start), j_end)
+    j_end = int(math.floor((t_end - t0) * f + idx_tol))
+    return (0, j_end)
 
 
 def _segment_at(path: PathConfig, t: float) -> PathSegment | None:

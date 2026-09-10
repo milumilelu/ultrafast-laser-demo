@@ -1,0 +1,55 @@
+{
+  "diagnostics": {
+    "events": {
+      "n_ablating_events": 21,
+      "n_events": 21
+    },
+    "fluence_ledger": {
+      "emitted_energy_internal": 243.74074575231558,
+      "estimated_intercepted_energy_internal": 243.74074317946216,
+      "max_domain_truncated_fraction": 1.0555696428049544e-08,
+      "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
+    },
+    "phase": {
+      "final_phase_cell_counts": {
+        "Al_matrix": 16143,
+        "SiC_particle": 9778
+      },
+      "initial_phase_cell_counts": {
+        "Al_matrix": 16287,
+        "SiC_particle": 9634
+      },
+      "phase_names": {
+        "1": "Al_matrix",
+        "2": "SiC_particle"
+      },
+      "structured_interface": true
+    },
+    "removal": {
+      "applied_volume_internal": 10.0995081414978,
+      "candidate_volume_internal": 13.348868600151567,
+      "clipped_events": 21,
+      "n_clipped_cells": 877,
+      "phase_switch_cells": 300,
+      "phase_switch_events": 18,
+      "unapplied_candidate_removal_volume_internal": 3.249360458653769,
+      "unapplied_fraction_of_candidate": 0.24341841664520353
+    },
+    "stage": "finished",
+    "threshold": {
+      "n_above_threshold_cells": 0
+    }
+  },
+  "elapsed_s": 0.35271859999920707,
+  "errors": [],
+  "events_processed": 21,
+  "events_total": 21,
+  "removal_available": true,
+  "run_id": "g06_alsic_particles",
+  "status": "completed",
+  "warnings": [
+    "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "跨相截断频繁：21/21 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
+    "有 18 个事件出现相标签切换，累计 300 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+  ]
+}

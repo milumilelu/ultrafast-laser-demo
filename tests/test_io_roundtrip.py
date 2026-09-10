@@ -162,7 +162,12 @@ def test_reproducibility_with_same_seed(tmp_path):
 
 
 def test_synthetic_demo_forbids_physical_depth_export():
-    """合成模式禁止导出物理 μm 深度；列名使用无量纲名称。"""
+    """合成模式禁止导出物理 μm 深度；列名使用无量纲名称。
+
+    深度与平面几何必须用**同一个**无量纲长度尺度（任务书「合成模式的单位
+    规则」）。深度是从 ``h/L_ref`` 场减得的高度差，所以标签是 ``L_ref``——
+    写成 ``delta_ref`` 会与网格、ROI 差 ``L_ref/delta_ref`` 倍。
+    """
     raw = load_example("synthetic_demo_point.json")
     cfg = make_config(raw, base_dir=ROOT)
     material = load_material_card(ROOT / raw["material_card_file"])
@@ -170,9 +175,9 @@ def test_synthetic_demo_forbids_physical_depth_export():
     assert res.status == "completed", res.errors
     assert cfg.unit.mode == "dimensionless"
     assert cfg.unit.allows_physical_depth_export is False
-    assert res.statistics["depth_unit"] == "delta_ref"
+    assert res.statistics["depth_unit"] == "L_ref"
     assert res.statistics["length_unit"] == "L_ref"
     # 无量纲量应与 SI 版解析算例同量级（同归一化参数），但不带物理单位
     assert res.statistics["center_depth_internal"] == pytest.approx(10.0, rel=1e-12)
     for p in res.profiles:
-        assert p["depth_units_label"].startswith("delta_ref")
+        assert p["depth_units_label"].startswith("L_ref")

@@ -1,0 +1,141 @@
+{
+  "capabilities": {
+    "cumulative_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "event_depth_increment": {
+      "available": false,
+      "conditional": false,
+      "missing": [
+        "fluence_basis",
+        "depth_direction",
+        "threshold",
+        "delta_m"
+      ],
+      "reason": "响应类型 'missing' 不是固定阈值对数核；缺 fluence_basis、depth_direction、threshold、delta_m"
+    },
+    "synthetic_structure": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许生成显式标记的合成结构"
+    },
+    "table_import": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许导入受校验的曲线卡（批次 F / T10 交付）"
+    },
+    "threshold_only": {
+      "available": false,
+      "conditional": false,
+      "missing": [
+        "threshold"
+      ],
+      "reason": "无可用阈值；阈值展示也不开放"
+    },
+    "track_or_pass_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "volume_per_energy": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    }
+  },
+  "card": {
+    "allowed_run_modes": [
+      "synthetic_demo"
+    ],
+    "applicability": {
+      "physical_material_prediction_allowed": false,
+      "reason": "两相去除核缺失；只开放合成结构与资料浏览。"
+    },
+    "branch_id": "alsic_sicp_aa2024",
+    "card_version": "1.0.0",
+    "enabled_by_default": true,
+    "evidence_status": "literature_reported",
+    "history_definition": {
+      "exposure_count_meaning": "not_applicable",
+      "mode": "none"
+    },
+    "id": "alsic_sicp_aa2024_1030nm",
+    "identity": {
+      "family": "铝基碳化硅",
+      "grade": "SiCp/AA2024 候选（配方待确认）",
+      "material_identity_confirmed_by_user": false
+    },
+    "limitations": [
+      "不平均两相阈值；不拿纳秒阈值替代飞秒值。",
+      "不得把块体 4H-SiC 卡当成颗粒相标定。"
+    ],
+    "microstructure": {
+      "actual_particle_size_m": null,
+      "actual_volume_fraction": null,
+      "synthetic_geometry_example": {
+        "SiC_volume_fraction": 0.45,
+        "from_nanosecond_study_geometry_only": true,
+        "mean_particle_diameter_m": 3e-05,
+        "source": "S09"
+      }
+    },
+    "phases": [
+      {
+        "delta_m": null,
+        "name": "Al_matrix",
+        "threshold_J_m2": null
+      },
+      {
+        "delta_m": null,
+        "name": "SiC_particle",
+        "threshold_J_m2": null
+      }
+    ],
+    "provenance": {
+      "from": "F01 P10-P15；F02 alsic_phase_template",
+      "source_ids": [
+        "S07",
+        "S08",
+        "S09"
+      ]
+    },
+    "response": {
+      "delta_m": null,
+      "depth_direction": null,
+      "fluence_basis": null,
+      "kind": "missing",
+      "output_semantics": "threshold_only",
+      "threshold_J_m2": null
+    },
+    "source_type": "research_card_migration",
+    "structure_type": "particle_composite",
+    "validity_domain": {
+      "laser": {
+        "pulse_duration_fs": 800,
+        "wavelength_nm": 1030
+      },
+      "note": "本轮可访问正文范围不足，未核得完整阈值与去除尺度。",
+      "scope": "unknown"
+    }
+  },
+  "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
+  "schema_version": "1.0",
+  "watermark": {
+    "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
+    "card_version": "1.0.0",
+    "evidence_status": "literature_reported",
+    "family": "铝基碳化硅",
+    "grade": "SiCp/AA2024 候选（配方待确认）",
+    "identity_confirmed_by_user": false,
+    "material_id": "alsic_sicp_aa2024_1030nm",
+    "physical_prediction_allowed": false,
+    "source_type": "research_card_migration"
+  }
+}

@@ -1,13 +1,13 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D/E/F）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–G）
 
-> 版本：`0.4.0-f1`｜日期：2026-09-10｜状态：**批次 A–F 已实施并通过验收；M0 已放行，M1 条件齐备待审批**
+> 版本：`0.5.0-g1`｜日期：2026-09-10｜状态：**批次 A–G 已实施并通过验收；M0 已放行，M1 条件齐备待审批**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
-> + 查表（F，曲线插值与越界处理）。分相结构、逐事件核查表接入、加速尚未开始，
-> 详见 `docs/reports/progress.md`。
+> + 查表（F，曲线插值与越界处理）+ 分相结构（G，颗粒/铺层与跨相界面截断）。
+> 逐事件核查表接入、加速与斜入射尚未开始，详见 `docs/reports/progress.md`。
 
 ---
 
@@ -26,7 +26,7 @@
 | **YSZ/SiC 文献参考评估器**（有效 N、阈值函数、平均率、协议累计深度） | ✅ 批次 D（T07），`python -m ufdemo reference` |
 | **Streamlit 界面**（参数表单、形貌/截面/时间轴回放、参考评估器、查表、历史运行） | ✅ 批次 E（T09）+ F，`streamlit run app.py` |
 | **查表**（曲线 schema、分段线性 / 保形 PCHIP、越界处理、语义路由） | ✅ 批次 F（T10），`python -m ufdemo table` |
-| 分相颗粒 / 铺层 / 界面截断 | ❌ 批次 G（T11–T13） |
+| **分相结构**（`phase_at` / `next_different_interface`、颗粒 / 铺层、跨相界面截断） | ✅ 批次 G（T11–T13），`examples/alsic_particle_composite.json`、`examples/cfrp_laminated_ply.json` |
 | 七材料能力入口与展示 / 逐事件核查表接入 | ❌ 批次 H（T14） |
 | 冻结几何批量加速 / 动态角度 | ❌ 批次 I、J（T17、T18） |
 
@@ -208,6 +208,55 @@ python tools/table_report.py     # 生成错误 CSV 与原始点/插值图
 
 ---
 
+## 3d. 分相结构（批次 G / T11–T13）
+
+结构配置声明 `structure_type`，相由 `phases[]` 内联给出响应（阈值按 `F_ref`，
+去除尺度按 `L_ref`）。接口统一为 `phase_at(x,y,z)` 与 `next_different_interface(x,y,z)`。
+
+```bash
+python -m ufdemo run examples/alsic_particle_composite.json --out runs/g06_alsic_particles --force-new-suffix
+python -m ufdemo run examples/cfrp_laminated_ply.json      --out runs/g06_cfrp_plies      --force-new-suffix
+python tools/structure_report.py      # 生成结构实例 CSV、G06 检查 CSV 与报告
+python -m pytest -q -m g06
+```
+
+```text
+examples/
+├── alsic_particle_composite.json   # 颗粒增强铝基（合成，seed 固定）
+└── cfrp_laminated_ply.json         # CFRP 铺层 [0/90/0/90]（合成）
+docs/reports/
+├── structure_instances.csv         # 每个结构实例一行（含目标/实际体积分数、截断诊断）
+├── g06_phase_interfaces.csv        # 13 项检查：7 检查 + 6 红线
+└── g06_phase_interfaces.md         # G06 报告（含 §8 规则对应与边界声明）
+```
+
+分相结构的五条硬规矩：
+
+1. **一个真实脉冲只调用当前暴露相的一个核。** `_per_phase_candidate` 按 `phase_id`
+   分派到**单一**相核；**不拆伪脉冲**（不把同一脉冲能量摊到两相叠加）。
+2. **跨相截断 = 有损近似。** `applied = min(候选去除量, next_different_interface)`；
+   到界面后更新相标签，**下一个真实脉冲**才对新相响应。
+3. **截断量命名固定为「未应用候选去除体积」。** 诊断字段
+   `unapplied_candidate_removal_volume_internal`；**不是剩余能量**，
+   也不在相之间重新分配。
+4. **同相相邻区间预先合并，接触界面用统一浮点容差**（`CONTACT_TOL_REL`）；
+   单测覆盖「恰好到达界面的下一脉冲」，防止卡在零厚层。
+5. **δ 写作 `delta_over_L_ref`（δ/L_ref）。** 与层厚、光斑、离焦同一长度尺度；
+   旧字段 `delta_over_delta_ref` 一律拒绝（会让深度整体放大 100 倍）。
+
+三条**红线**（配置层拦截，不靠按钮禁用）：
+
+* 相**不得借用其它材料卡**做标定（如借单晶 SiC 当颗粒相）→ `MATERIAL_CAPABILITY_MISSING`；
+* **整体阈值不得拆给分相**（`assert_phase_threshold_not_split`）→ `MATERIAL_CAPABILITY_MISSING`；
+* **「分相截断 × 动态角度」互斥** → `CONFIG_INVALID`。
+
+> 结构几何是**合成**的：颗粒顺序放置（`seed` 固定）、铺层为解析条纹；
+> 目标体积分数与实际体积分数**分别报告**，不强制相等。
+> 本批**不含任何实验复现结论**。界面新增 `phase_id` 图层与结构诊断面板；
+> 未启用分相结构的运行时**如实报不可用**，不返回全 0 假数组。
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -246,6 +295,18 @@ python tools/table_report.py     # 生成错误 CSV 与原始点/插值图
 * **曲线去向按语义硬分流**：只有 `event_depth_increment` 可进逐事件核
   （`assert_curve_can_enter_event_kernel`，另含固定条件比对）；体积/平均率/累计
   曲线只进评估器，**不得反推局部深度**（`assert_no_local_depth_from_volume`）。
+* **相不是材料卡**：分相结构的相用**内联合成定义**（阈值 `F_ref`、去除尺度
+  `L_ref`），**不得**引用别的材料卡做标定，也**不得**沿用父卡整体阈值来源
+  （`assert_phase_threshold_not_split`）；整体阈值不得拆给分相。
+* **δ 用 `L_ref` 尺度**：相去除尺度写作 `delta_over_L_ref`（δ/L_ref），与层厚、
+  光斑、离焦同一尺度；旧字段 `delta_over_delta_ref` 一律拒绝（见
+  `docs/decisions/ADR-0012-phase-structure-and-truncation.md`）。
+* **跨相截断是有损近似且命名固定**：`applied = min(候选, next_different_interface)`；
+  被截断量记为「未应用候选去除体积」（`unapplied_candidate_removal_volume_internal`），
+  **不是剩余能量**，不回流、不重分配。
+* **分相结构只在配置层放行**：`phase_at` / `next_different_interface` 是唯一接口；
+  「分相截断 × 动态角度」在 `validate_run` 互斥；未启用分相时界面 `phase_id`
+  图层如实报不可用。
 
 ---
 
@@ -253,7 +314,9 @@ python tools/table_report.py     # 生成错误 CSV 与原始点/插值图
 
 1. **M0 只开放正入射**。斜入射 / 法向厚度转换 / 遮挡未实现，非正入射
    配置会被 `GEOMETRY_UNSUPPORTED` 拦截（不是靠按钮禁用）。
-2. **只有单相均质表面**。结构化相界面、颗粒、铺层未实现，配置层拦截。
+2. **只支持正入射**；表面几何现支持**均质单相**与**解析分相结构**（铺层条纹 /
+   随机颗粒，批次 G），但**不支持任意三维几何**。斜入射与动态角度未实现
+   （「分相截断 × 动态角度」在配置层互斥）。
 3. **历史与孵化未实现**。`solver.history_enabled=true` 会报错；
    局部受照计数已记录，但不用作孵化输入。
 4. **不能从阈值反推绝对深度**。CFRP / Inconel 718 / 金刚石 / 铝基 SiC /
@@ -302,6 +365,7 @@ ultrafast-demo/
 │   ├── references.py     # 文献参考评估器（批次 D：YSZ/SiC 有效N、阈值、平均率）
 │   ├── ui_service.py     # 界面逻辑层（批次 E；不导入 Streamlit/Plotly）
 │   ├── tables.py         # 查表：曲线 schema、插值核、越界与语义路由（批次 F）
+│   ├── structure.py      # 分相结构：相/结构接口、铺层与颗粒、种子与体积分数（批次 G）
 │   ├── geometry.py       # 批次 J 占位（斜入射/可见性）
 │   ├── accelerators.py   # 批次 I 占位（批量加速）
 │   └── __main__.py       # CLI
@@ -310,14 +374,15 @@ ultrafast-demo/
 │   ├── make_examples.py       # 生成 examples/*.json
 │   ├── make_curves.py         # 生成 data/curves 示例曲线与无效夹具（批次 F）
 │   ├── table_report.py        # 查表报告：错误 CSV + 原始点/插值图（批次 F）
-│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F 增补查表检查）
+│   ├── structure_report.py    # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
+│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F/G 增补检查）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
 ├── data/curves/          # 响应曲线卡（*.curve.json + *.points.csv，批次 F）
 ├── data/references/      # 原始来源快照与输入指纹
-├── examples/             # 可运行配置
+├── examples/             # 可运行配置（含两个合成结构实例，批次 G）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0011）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0012）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -330,14 +395,16 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 251 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91）
+python -m pytest -q                  # 277 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + 回归 5）
 python -m pytest -q -m g05           # 只跑文献语义回归
+python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
 python -m pytest -q -m g09           # 界面与查表的 G09 相关测试
 python tools/migrate_materials.py    # 迁移 + 7 项准入探针
 python tools/make_curves.py          # 生成示例曲线与无效夹具（批次 F）
 python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插值图
+python tools/structure_report.py     # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
-python tools/run_acceptance.py       # 实际执行并生成验收报告（A–F）
+python tools/run_acceptance.py       # 实际执行并生成验收报告（A–G）
 ```
 
 产物：
@@ -350,10 +417,12 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–F
 * `docs/reports/table_lookup.md` —— **查表汇总报告（G09-table）**；
 * `docs/reports/table_errors.csv` —— **错误 CSV**：每条违规输入与错误码；
 * `docs/reports/curve_interpolation.html` / `.csv` —— **原始点与插值图**；
+* `docs/reports/structure_instances.csv` —— **分相结构实例统计（批次 G）**；
+* `docs/reports/g06_phase_interfaces.md` / `.csv` —— **G06 分相报告与检查明细（批次 G）**；
 * `docs/reports/material_migration.csv` —— 字段级迁移记录；
 * `docs/reports/material_admission.csv` —— 四种必查拒绝情况；
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–F 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–G 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

@@ -1,0 +1,55 @@
+{
+  "diagnostics": {
+    "events": {
+      "n_ablating_events": 16,
+      "n_events": 16
+    },
+    "fluence_ledger": {
+      "emitted_energy_internal": 185.70723485890707,
+      "estimated_intercepted_energy_internal": 185.70723289863784,
+      "max_domain_truncated_fraction": 1.0555696428049544e-08,
+      "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
+    },
+    "phase": {
+      "final_phase_cell_counts": {
+        "fiber": 11056,
+        "resin": 8825
+      },
+      "initial_phase_cell_counts": {
+        "fiber": 10998,
+        "resin": 8883
+      },
+      "phase_names": {
+        "1": "resin",
+        "2": "fiber"
+      },
+      "structured_interface": true
+    },
+    "removal": {
+      "applied_volume_internal": 9.604408185049268,
+      "candidate_volume_internal": 9.817929289211122,
+      "clipped_events": 14,
+      "n_clipped_cells": 106,
+      "phase_switch_cells": 106,
+      "phase_switch_events": 14,
+      "unapplied_candidate_removal_volume_internal": 0.2135211041618531,
+      "unapplied_fraction_of_candidate": 0.021748079240750947
+    },
+    "stage": "finished",
+    "threshold": {
+      "n_above_threshold_cells": 0
+    }
+  },
+  "elapsed_s": 0.02129369999966002,
+  "errors": [],
+  "events_processed": 16,
+  "events_total": 16,
+  "removal_available": true,
+  "run_id": "g06_cfrp_plies",
+  "status": "completed",
+  "warnings": [
+    "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
+    "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+  ]
+}

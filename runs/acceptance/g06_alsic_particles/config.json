@@ -1,0 +1,230 @@
+{
+  "grid": {
+    "center_x_m": 0.0,
+    "center_y_m": 0.0,
+    "dx_m": 1e-06,
+    "dy_m": 1e-06,
+    "initial_height_m": 0.0,
+    "initial_surface": "flat",
+    "nx": 161,
+    "ny": 161,
+    "origin": "cell_center"
+  },
+  "label": "synthetic_alsic_particle_composite",
+  "laser": {
+    "direction_unit": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "focus_xyz_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "m2": null,
+    "parameter_sources": [
+      "synthetic_definition"
+    ],
+    "power_measurement_location": "sample_surface",
+    "pulse_duration_s": null,
+    "pulse_energy_J": 1.1606702178681694e-05,
+    "rayleigh_range_m": null,
+    "repetition_rate_Hz": 1000.0,
+    "spot_radius_m": 1e-05,
+    "wavelength_m": null
+  },
+  "material_card_file": "data/materials/alsic_sicp_aa2024_1030nm.json",
+  "material_id": "alsic_sicp_aa2024_1030nm",
+  "notes": "批次 G / T12：铝基 SiC 合成颗粒。几何（颗粒直径 3 um）取自材料卡 microstructure 示例且只作几何；目标体积分数 0.32 是生成参数（卡里的 0.45 来自纳秒研究、超出随机顺序放置可达上限），实际体积分数由确定性采样单独报告。两相阈值/去除尺度一律内联合成定义，缺分相标定故不输出物理深度。路径为 3 行 × 7 脉冲（v/f = 2 um）以同时暴露基体与颗粒。",
+  "output": {
+    "cross_section": {
+      "axis": "x",
+      "offsets_m": [
+        0.0
+      ]
+    },
+    "max_snapshot_bytes": 268435456,
+    "max_snapshots": 4,
+    "roi": [
+      {
+        "center_xy_m": [
+          0.0,
+          0.0
+        ],
+        "name": "center_1Lref",
+        "radius_m": 1e-05
+      },
+      {
+        "center_xy_m": [
+          7e-05,
+          7e-05
+        ],
+        "name": "corner_off",
+        "radius_m": 1e-05
+      }
+    ],
+    "snapshot_every_n_passes": 1,
+    "snapshot_policy": "passes"
+  },
+  "path": {
+    "segments": [
+      {
+        "end_s": 0.007,
+        "end_xyz_m": [
+          7e-06,
+          -6e-06,
+          0.0
+        ],
+        "label": "particle_row0",
+        "laser_on": true,
+        "pass_id": 0,
+        "segment_id": 0,
+        "speed_m_s": 0.002,
+        "start_s": 0.0,
+        "start_xyz_m": [
+          -7e-06,
+          -6e-06,
+          0.0
+        ]
+      },
+      {
+        "end_s": 0.009000000000000001,
+        "end_xyz_m": [
+          -7e-06,
+          0.0,
+          0.0
+        ],
+        "label": "turn_to_row1",
+        "laser_on": false,
+        "pass_id": 0,
+        "segment_id": 1,
+        "speed_m_s": 0.0029999999999999988,
+        "start_s": 0.007,
+        "start_xyz_m": [
+          -7e-06,
+          -6e-06,
+          0.0
+        ]
+      },
+      {
+        "end_s": 0.016,
+        "end_xyz_m": [
+          -7e-06,
+          0.0,
+          0.0
+        ],
+        "label": "particle_row1",
+        "laser_on": true,
+        "pass_id": 0,
+        "segment_id": 2,
+        "speed_m_s": 0.002,
+        "start_s": 0.009000000000000001,
+        "start_xyz_m": [
+          7e-06,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "end_s": 0.018000000000000002,
+        "end_xyz_m": [
+          7e-06,
+          6e-06,
+          0.0
+        ],
+        "label": "turn_to_row2",
+        "laser_on": false,
+        "pass_id": 0,
+        "segment_id": 3,
+        "speed_m_s": 0.0029999999999999975,
+        "start_s": 0.016,
+        "start_xyz_m": [
+          7e-06,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "end_s": 0.025,
+        "end_xyz_m": [
+          7e-06,
+          6e-06,
+          0.0
+        ],
+        "label": "particle_row2",
+        "laser_on": true,
+        "pass_id": 0,
+        "segment_id": 4,
+        "speed_m_s": 0.002,
+        "start_s": 0.018000000000000002,
+        "start_xyz_m": [
+          -7e-06,
+          6e-06,
+          0.0
+        ]
+      }
+    ],
+    "t0_s": 0.0,
+    "time_tolerance_s": 1e-12
+  },
+  "reference_scales": {
+    "F_ref_J_m2": 10000.0,
+    "L_ref_m": 1e-05,
+    "delta_ref_m": 1e-07
+  },
+  "run_mode": "synthetic_demo",
+  "schema_version": "1.0",
+  "seed": 20260910,
+  "solver": {
+    "acceleration": "off",
+    "budget_safety_factor": 1.5,
+    "cancel_check_interval": 256,
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "memory_budget_bytes": 1073741824,
+    "mode": "reference",
+    "multiline_incubation": false,
+    "structured_interface": true,
+    "tail_epsilon": 1e-08
+  },
+  "structure": {
+    "particles": {
+      "depth_m": 5e-05,
+      "diameter_spread_rel": 0.25,
+      "matrix_phase": "Al_matrix",
+      "max_placement_attempts": 40000,
+      "mean_diameter_m": 3e-05,
+      "min_gap_rel": 0.05,
+      "particle_phase": "SiC_particle"
+    },
+    "phases": [
+      {
+        "delta_over_L_ref": 0.5,
+        "depth_direction": "surface_normal",
+        "name": "Al_matrix",
+        "note": "合成定义：铝基体相，未用任何单晶 SiC 或纳秒阈值。",
+        "output_semantics": "event_depth_increment",
+        "response_source": "synthetic_definition",
+        "role": "matrix",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "threshold_over_F_ref": 1.0
+      },
+      {
+        "delta_over_L_ref": 0.2,
+        "depth_direction": "surface_normal",
+        "name": "SiC_particle",
+        "note": "合成定义：颗粒相；不得把块体 4H-SiC 卡当作该相标定。",
+        "output_semantics": "event_depth_increment",
+        "response_source": "synthetic_definition",
+        "role": "particle",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "threshold_over_F_ref": 2.35
+      }
+    ],
+    "seed": 20260910,
+    "structure_type": "particle_composite",
+    "target_volume_fraction": 0.32
+  },
+  "unit_system": "dimensionless"
+}

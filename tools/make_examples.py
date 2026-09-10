@@ -34,6 +34,11 @@ EP = F0 * math.pi * W0 * W0 / 2.0
 
 UM = 1.0e-6
 
+# 合成模式参考尺度（无量纲内部量：长度/L_ref、能流/F_ref）
+L_REF_M = 1.0e-5     # m = 10 um
+F_REF = 1.0e4        # J/m^2 = 1 J/cm^2
+DELTA_REF_M = 1.0e-7  # m = 100 nm，仅用于 d/delta_ref 显示换算
+
 
 def base_config(*, label: str, grid: dict, laser: dict, path: dict, output: dict, notes: str = "") -> dict:
     return {
@@ -94,6 +99,76 @@ def seg(seg_id: int, pass_id: int, t0: float, t1: float, a, b, *, on: bool, labe
         "speed_m_s": speed,
         "laser_on": on,
         "label": label
+    }
+
+
+def synthetic_base(*, label: str, seed: int, grid: dict, laser: dict, path: dict, output: dict,
+                   structure: dict, notes: str = "",
+                   material_id: str | None = None, material_card_file: str | None = None) -> dict:
+    """无量纲合成配置骨架（任务书 4.2 节 / 166 行「合成模式的单位规则」）。
+
+    所有长度除以 ``L_ref``、能流除以 ``F_ref`` 后显式给出；``delta_ref`` 只保留为
+    显示换算基准，不参与几何。``structured_interface`` 必须与 ``structure`` 同时出现，
+    不一致会在配置层被拒（不允许"配了结构却被静默忽略"）。
+    """
+    return {
+        "schema_version": "1.0",
+        "label": label,
+        "run_mode": "synthetic_demo",
+        "unit_system": "dimensionless",
+        "reference_scales": {"L_ref_m": L_REF_M, "F_ref_J_m2": F_REF, "delta_ref_m": DELTA_REF_M},
+        "material_id": material_id,
+        "material_card_file": material_card_file,
+        "seed": seed,
+        "grid": grid,
+        "laser": laser,
+        "path": path,
+        "solver": {
+            "mode": "reference",
+            "geometry_feedback": "fixed_geometry",
+            "history_enabled": False,
+            "tail_epsilon": 1e-08,
+            "memory_budget_bytes": 1073741824,
+            "budget_safety_factor": 1.5,
+            "cancel_check_interval": 256,
+            "acceleration": "off",
+            "multiline_incubation": False,
+            "structured_interface": True,
+        },
+        "output": output,
+        "structure": structure,
+        "notes": notes,
+    }
+
+
+def synthetic_laser(*, f_rep: float) -> dict:
+    """峰值能流 = e^2 * F_ref 的合成光束（与 M0 合成演示同一约定）。"""
+    return {
+        "wavelength_m": None,
+        "pulse_duration_s": None,
+        "pulse_energy_J": math.exp(2.0) * F_REF * math.pi * L_REF_M ** 2 / 2.0,
+        "repetition_rate_Hz": f_rep,
+        "spot_radius_m": L_REF_M,
+        "focus_xyz_m": [0.0, 0.0, 0.0],
+        "direction_unit": [0.0, 0.0, 1.0],
+        "rayleigh_range_m": None,
+        "m2": None,
+        "power_measurement_location": "sample_surface",
+        "parameter_sources": ["synthetic_definition"],
+    }
+
+
+def synthetic_grid(*, nx: int, ny: int, dx_um: float) -> dict:
+    return {
+        "nx": nx,
+        "ny": ny,
+        "dx_m": dx_um * UM,
+        "dy_m": dx_um * UM,
+        "center_x_m": 0.0,
+        "center_y_m": 0.0,
+        "origin": "cell_center",
+        "initial_surface": "flat",
+        "initial_height_m": 0.0,
     }
 
 
@@ -253,6 +328,151 @@ def main() -> None:
                        "roi": [{"name": "center_1Lref", "radius_m": 1.0e-5, "center_xy_m": [0.0, 0.0]}]},
             "notes": "合成演示：所有长度按 L_ref=10 um 归一、能流按 F_ref=1 J/cm^2 归一；禁止导出物理 um 深度。"
         }
+    )
+
+    # --- 6. 铝基 SiC 合成颗粒（批次 G / T12）-----------------------------
+    # 颗粒尺寸与体积分数只借卡里 microstructure.synthetic_geometry_example 的
+    # **几何**（S09，来自纳秒研究），不借它的阈值：两相响应一律内联合成定义。
+    f_g = 1000.0
+    dt_g = 1.0 / f_g
+    rows_y = [-6 * UM, 0.0, 6 * UM]
+    seg_g: list[dict] = []
+    sg_id, tg = 0, 0.0
+    for row, y in enumerate(rows_y):
+        a, b = ((-7 * UM, y, 0.0), (7 * UM, y, 0.0)) if row % 2 == 0 else ((7 * UM, y, 0.0), (-7 * UM, y, 0.0))
+        seg_g.append(seg(sg_id, 0, tg, tg + 7 * dt_g, a, b, on=True, label=f"particle_row{row}")); sg_id += 1; tg += 7 * dt_g
+        if row < len(rows_y) - 1:
+            y_next = rows_y[row + 1]
+            x_turn = a[0]
+            seg_g.append(seg(sg_id, 0, tg, tg + 2 * dt_g, (x_turn, y, 0.0), (x_turn, y_next, 0.0),
+                             on=False, label=f"turn_to_row{row + 1}")); sg_id += 1; tg += 2 * dt_g
+
+    write(
+        "alsic_particle_composite.json",
+        synthetic_base(
+            label="synthetic_alsic_particle_composite",
+            seed=20260910,
+            material_id="alsic_sicp_aa2024_1030nm",
+            material_card_file="data/materials/alsic_sicp_aa2024_1030nm.json",
+            grid=synthetic_grid(nx=161, ny=161, dx_um=1.0),
+            laser=synthetic_laser(f_rep=f_g),
+            path={"t0_s": 0.0, "time_tolerance_s": 1e-12, "segments": seg_g},
+            output={
+                "snapshot_policy": "passes", "snapshot_every_n_passes": 1, "max_snapshots": 4,
+                "max_snapshot_bytes": 268435456,
+                "cross_section": {"axis": "x", "offsets_m": [0.0]},
+                "roi": [
+                    {"name": "center_1Lref", "radius_m": L_REF_M, "center_xy_m": [0.0, 0.0]},
+                    {"name": "corner_off", "radius_m": L_REF_M, "center_xy_m": [70 * UM, 70 * UM]},
+                ],
+            },
+            structure={
+                "structure_type": "particle_composite",
+                "seed": 20260910,
+                # 目标体积分数是**生成参数**：0.45（卡里纳秒研究的几何）超出随机顺序放置
+                # 的可达上限，这里取 0.32 保证颗粒能全部放下；实际值另行报告。
+                "target_volume_fraction": 0.32,
+                "phases": [
+                    {
+                        "name": "Al_matrix", "role": "matrix",
+                        "threshold_over_F_ref": 1.00, "delta_over_L_ref": 0.50,
+                        "depth_direction": "surface_normal",
+                        "output_semantics": "event_depth_increment",
+                        "response_source": "synthetic_definition",
+                        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+                        "note": "合成定义：铝基体相，未用任何单晶 SiC 或纳秒阈值。",
+                    },
+                    {
+                        "name": "SiC_particle", "role": "particle",
+                        "threshold_over_F_ref": 2.35, "delta_over_L_ref": 0.20,
+                        "depth_direction": "surface_normal",
+                        "output_semantics": "event_depth_increment",
+                        "response_source": "synthetic_definition",
+                        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+                        "note": "合成定义：颗粒相；不得把块体 4H-SiC 卡当作该相标定。",
+                    },
+                ],
+                "particles": {
+                    "matrix_phase": "Al_matrix", "particle_phase": "SiC_particle",
+                    "mean_diameter_m": 3.0e-5,          # = 3 L_ref，几何只取自卡中 S09 示例
+                    "depth_m": 5.0e-5,                  # = 5 L_ref 颗粒层厚度
+                    "min_gap_rel": 0.05,
+                    "diameter_spread_rel": 0.25,
+                    "max_placement_attempts": 40000,
+                },
+            },
+            notes=(
+                "批次 G / T12：铝基 SiC 合成颗粒。几何（颗粒直径 3 um）取自材料卡 "
+                "microstructure 示例且只作几何；目标体积分数 0.32 是生成参数（卡里的 0.45 来自纳秒研究、"
+                "超出随机顺序放置可达上限），实际体积分数由确定性采样单独报告。"
+                "两相阈值/去除尺度一律内联合成定义，缺分相标定故不输出物理深度。"
+                "路径为 3 行 × 7 脉冲（v/f = 2 um）以同时暴露基体与颗粒。"
+            ),
+        )
+    )
+
+    # --- 7. CFRP 合成铺层（批次 G / T13）---------------------------------
+    # 铺层 [0/90/0/90]；树脂/纤维阈值不得等于卡上整体 Fth1(=0.84 F_ref)。
+    f_l = 1000.0
+    write(
+        "cfrp_laminated_ply.json",
+        synthetic_base(
+            label="synthetic_cfrp_laminated_ply",
+            seed=20260911,
+            material_id="cfrp_t700_yb01_800nm",
+            material_card_file="data/materials/cfrp_t700_yb01_800nm.json",
+            grid=synthetic_grid(nx=141, ny=141, dx_um=1.0),
+            laser=synthetic_laser(f_rep=f_l),
+            path={
+                "t0_s": 0.0, "time_tolerance_s": 1e-12,
+                "segments": [seg(0, 0, 0.0, 16.0 / f_l, (0, 0, 0), (0, 0, 0), on=True, label="ply_drill_point")],
+            },
+            output={
+                "snapshot_policy": "events", "snapshot_events": [0, 5, 10], "max_snapshots": 6,
+                "max_snapshot_bytes": 268435456,
+                "cross_section": {"axis": "x", "offsets_m": [0.0]},
+                "roi": [{"name": "drill_1Lref", "radius_m": L_REF_M, "center_xy_m": [0.0, 0.0]}],
+            },
+            structure={
+                "structure_type": "laminated_fiber_composite",
+                "seed": 20260911,
+                "phases": [
+                    {
+                        "name": "resin", "role": "matrix",
+                        "threshold_over_F_ref": 0.70, "delta_over_L_ref": 0.35,
+                        "depth_direction": "surface_normal",
+                        "output_semantics": "event_depth_increment",
+                        "response_source": "synthetic_definition",
+                        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+                        "note": "合成定义：树脂相。不得用卡上整体 Fth1=0.84 F_ref 充当该相阈值。",
+                    },
+                    {
+                        "name": "fiber", "role": "fiber",
+                        "threshold_over_F_ref": 2.10, "delta_over_L_ref": 0.15,
+                        "depth_direction": "surface_normal",
+                        "output_semantics": "event_depth_increment",
+                        "response_source": "synthetic_definition",
+                        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+                        "note": "合成定义：碳纤维相；缺分相标定，不输出物理深度。",
+                    },
+                ],
+                "layers": [
+                    {"thickness_m": 2.0e-5, "matrix_phase": "resin", "fiber_phase": "fiber",
+                     "fiber_angle_deg": 0.0, "fiber_volume_fraction": 0.55, "fiber_width_m": 4.0e-6},
+                    {"thickness_m": 2.0e-5, "matrix_phase": "resin", "fiber_phase": "fiber",
+                     "fiber_angle_deg": 90.0, "fiber_volume_fraction": 0.55, "fiber_width_m": 4.0e-6},
+                    {"thickness_m": 2.0e-5, "matrix_phase": "resin", "fiber_phase": "fiber",
+                     "fiber_angle_deg": 0.0, "fiber_volume_fraction": 0.55, "fiber_width_m": 4.0e-6},
+                    {"thickness_m": 2.0e-5, "matrix_phase": "resin", "fiber_phase": "fiber",
+                     "fiber_angle_deg": 90.0, "fiber_volume_fraction": 0.55, "fiber_width_m": 4.0e-6},
+                ],
+            },
+            notes=(
+                "批次 G / T13：CFRP 合成铺层 [0/90/0/90]，层厚 2 L_ref、纤维体积分数 55%。"
+                "相响应为内联合成定义（树脂阈值 0.70 ≠ 卡上整体 Fth1=0.84 F_ref，避免把整体阈值拆给分相）。"
+                "定点 16 脉冲用于逐层钻进，观察相标签切换与跨相截断。"
+            ),
+        )
     )
 
 

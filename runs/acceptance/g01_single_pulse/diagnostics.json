@@ -7,12 +7,22 @@
     "fluence_ledger": {
       "emitted_energy_internal": 1.1606702178681694e-05,
       "estimated_intercepted_energy_internal": 1.1606702060440452e-05,
-      "max_domain_truncated_fraction": 2.8520279471422327e-09,
+      "max_domain_truncated_fraction": 1.0187324539501219e-08,
       "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
+    },
+    "phase": {
+      "final_phase_cell_counts": {},
+      "initial_phase_cell_counts": {},
+      "phase_names": {},
+      "structured_interface": false
     },
     "removal": {
       "applied_volume_internal": 3.1411e-17,
       "candidate_volume_internal": 3.1411e-17,
+      "clipped_events": 0,
+      "n_clipped_cells": 0,
+      "phase_switch_cells": 0,
+      "phase_switch_events": 0,
       "unapplied_candidate_removal_volume_internal": 0.0
     },
     "stage": "finished",
@@ -20,7 +30,7 @@
       "n_above_threshold_cells": 0
     }
   },
-  "elapsed_s": 0.0021521000016946346,
+  "elapsed_s": 0.002265099999931408,
   "errors": [],
   "events_processed": 1,
   "events_total": 1,

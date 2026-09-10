@@ -233,7 +233,16 @@ class UnitContext:
 
     @property
     def depth_label(self) -> str:
-        return "m" if self.mode == "SI" else "delta_ref"
+        """深度标签。
+
+        合成模式下深度是直接从 ``h/L_ref`` 主减得的高度差，与平面几何、光斑、
+        离焦同处**同一个**无量纲长度尺度（任务书「合成模式的单位规则」：参与
+        几何计算的长度必须采用同一尺度 ``L_ref``），所以标签是 ``L_ref`` 而非
+        ``delta_ref``：把 ``10 L_ref`` 写成 ``10 delta_ref`` 会与几何量差 100 倍。
+        ``delta_ref_m`` 仍保存在 ``reference_scales`` 中，需要 ``d/delta_ref``
+        显示时按 ``delta_ref_m / L_ref_m`` 换算，换算关系不丢失。
+        """
+        return "m" if self.mode == "SI" else "L_ref"
 
     @property
     def allows_physical_depth_export(self) -> bool:
@@ -671,6 +680,8 @@ class SolverConfig:
     # M3 组合默认关闭（细则 8 节末）
     multiline_incubation: bool = False
     structured_interface: bool = False
+    # 动态角度属批次 J（T18）；此处提前占位，用于与分相截断做互斥校验
+    dynamic_angle: bool = False
     acceleration: str = "off"
     extra: Mapping[str, Any] = field(default_factory=dict)
 
@@ -701,6 +712,7 @@ class SolverConfig:
             cancel_check_interval=int(raw.get("cancel_check_interval", 256)),
             multiline_incubation=bool(raw.get("multiline_incubation", False)),
             structured_interface=bool(raw.get("structured_interface", False)),
+            dynamic_angle=bool(raw.get("dynamic_angle", False)),
             acceleration=accel,
             extra=dict(raw.get("extra", {}) or {}),
         )
@@ -716,6 +728,7 @@ class SolverConfig:
             "cancel_check_interval": self.cancel_check_interval,
             "multiline_incubation": self.multiline_incubation,
             "structured_interface": self.structured_interface,
+            "dynamic_angle": self.dynamic_angle,
             "acceleration": self.acceleration,
         }
 
@@ -764,6 +777,87 @@ class OutputConfig:
 
 
 # ---------------------------------------------------------------------------
+# 2c. StructureConfig（批次 G / T11–T13）
+# ---------------------------------------------------------------------------
+
+# 与 ``structure.STRUCTURE_TYPES`` 同义；此处复制常量是为了不让 config 反向依赖
+# 几何模块（几何模块在方法内部才导入 response，链条仍保持单向）。
+STRUCTURE_TYPES: tuple[str, ...] = (
+    "homogeneous",
+    "particle_composite",
+    "laminated_fiber_composite",
+)
+
+# 合成结构的相响应能力名（与 materials.CAP_SYNTHETIC_STRUCTURE 同值）。
+_CAP_SYNTHETIC_STRUCTURE = "synthetic_structure"
+
+
+@dataclass
+class StructureConfig:
+    """合成复合材料的相结构配置。
+
+    默认 ``structure_type="homogeneous"``，即沿用 M0 的单相路径。其它类型必须
+    显式开启 ``solver.structured_interface``，两者不一致时在配置层拒绝——
+    不允许"配了结构但被静默忽略"，也不允许"开了开关却没有结构"。
+    """
+
+    structure_type: str = "homogeneous"
+    seed: int = 0
+    phases: tuple[Mapping[str, Any], ...] = ()
+    layers: tuple[Mapping[str, Any], ...] = ()
+    particles: Mapping[str, Any] | None = None
+    target_volume_fraction: float | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self.structure_type != "homogeneous"
+
+    @staticmethod
+    def from_dict(raw: Mapping[str, Any] | None) -> "StructureConfig":
+        raw = raw or {}
+        if not isinstance(raw, Mapping):
+            raise UFDemoError(CONFIG_INVALID, "structure 必须是 JSON 对象", field_path="structure", actual=type(raw).__name__)
+        stype = _require_str(raw.get("structure_type", "homogeneous"), "structure.structure_type", STRUCTURE_TYPES)
+        seed = raw.get("seed", 0)
+        if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "structure.seed 必须是非负整数",
+                field_path="structure.seed",
+                actual=seed,
+                suggestion="固定种子才能复现几何；不写时默认 0。",
+            )
+        tvf = raw.get("target_volume_fraction")
+        if tvf is not None and (not isinstance(tvf, (int, float)) or isinstance(tvf, bool) or not (0.0 < float(tvf) < 1.0)):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "structure.target_volume_fraction 必须落在 (0,1)",
+                field_path="structure.target_volume_fraction",
+                actual=tvf,
+                requirement="0 < Vf < 1",
+                suggestion="目标比例只是生成参数；有限随机样本不必然等于它，实际值另报。",
+            )
+        return StructureConfig(
+            structure_type=stype,
+            seed=seed,
+            phases=tuple(raw.get("phases") or ()),
+            layers=tuple(raw.get("layers") or ()),
+            particles=raw.get("particles"),
+            target_volume_fraction=(None if tvf is None else float(tvf)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "structure_type": self.structure_type,
+            "seed": self.seed,
+            "phases": [dict(p) for p in self.phases],
+            "layers": [dict(layer) for layer in self.layers],
+            "particles": None if self.particles is None else dict(self.particles),
+            "target_volume_fraction": self.target_volume_fraction,
+        }
+
+
+# ---------------------------------------------------------------------------
 # 3. RunConfig
 # ---------------------------------------------------------------------------
 
@@ -779,6 +873,7 @@ class RunConfig:
     path: PathConfig
     solver: SolverConfig
     output: OutputConfig
+    structure: StructureConfig = field(default_factory=StructureConfig)
     seed: int = 0
     material_card_file: str | None = None
     label: str = ""
@@ -813,6 +908,7 @@ class RunConfig:
         path = PathConfig.from_dict(raw.get("path") or {}, laser, unit)
         solver = SolverConfig.from_dict(raw.get("solver") or {})
         output = OutputConfig.from_dict(raw.get("output"))
+        structure = StructureConfig.from_dict(raw.get("structure"))
         seed = raw.get("seed", 0)
         if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
             raise UFDemoError(CONFIG_INVALID, "seed 必须是非负整数", field_path="seed", actual=seed)
@@ -826,6 +922,7 @@ class RunConfig:
             path=path,
             solver=solver,
             output=output,
+            structure=structure,
             seed=seed,
             material_card_file=card_file,
             label=str(raw.get("label", "")),
@@ -850,6 +947,7 @@ class RunConfig:
             "path": self.path.to_dict(),
             "solver": self.solver.to_dict(),
             "output": self.output.to_dict(),
+            "structure": self.structure.to_dict(),
         }
 
     @property
@@ -1177,6 +1275,37 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
             )
         else:
             notes.append("合成演示：所有长度按 L_ref 归一、能流按 F_ref 归一，禁止导出物理 μm 深度。")
+            # 合成模式下「只有一个长度尺度」：卡里的 J/m^2 与 m 是物理量，
+            # 直接当成 F_ref / L_ref 单位会差出多个数量级（本工程默认 100 倍以上）。
+            # 因此除了分相结构（响应完全来自 structure.phases 的内联定义）之外，
+            # 无量纲配置只能配已归一化的合成卡。
+            raw_resp = dict((getattr(material, "raw", {}) or {}).get("response", {}) or {})
+            si_fields = [k for k in ("threshold_J_m2", "delta_m") if raw_resp.get(k) is not None]
+            if si_fields:
+                if not config.solver.structured_interface:
+                    fail(
+                        UFDemoError(
+                            CONFIG_INVALID,
+                            "无量纲配置不能直接把 SI 材料卡的响应当内部量使用",
+                            field_path="material_card_file",
+                            actual={"card": getattr(material, "id", None), "si_fields": si_fields},
+                            requirement=(
+                                "合成模式必须使用已按 F_ref / L_ref 归一化的响应"
+                                "（threshold_over_F_ref / delta_over_L_ref），"
+                                "或改为分相结构并从 structure.phases 内联给出各相响应"
+                            ),
+                            suggestion=(
+                                "卡中的阈值单位是 J/m^2、去除尺度单位是 m；"
+                                "把它们当作 F_ref / L_ref 单位的内部量会整体差若干数量级。"
+                                "请改用合成卡，或开启 solver.structured_interface 并把响应写进 phases。"
+                            ),
+                        )
+                    )
+                else:
+                    notes.append(
+                        "分相结构：逐事件响应取自 structure.phases 的内联合成定义；"
+                        f"材料卡仅提供身份与能力，其 SI 响应字段 {si_fields} 不参与计算（各相阈值单独标定）。"
+                    )
             if config.material_card_file is None:
                 warnings.append("合成演示未提供 material_card_file，将只使用配置内置响应。")
     else:
@@ -1263,17 +1392,79 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
                 suggestion="设 false；属批次 G/H。",
             )
         )
-    if config.solver.structured_interface:
+    if config.solver.multiline_incubation:
         fail(
             UFDemoError(
                 NOT_IMPLEMENTED,
-                "结构化相界面尚未实现",
-                field_path="solver.structured_interface",
+                "多层跨相孵化尚未实现",
+                field_path="solver.multiline_incubation",
                 actual=True,
-                requirement="相界面截断属批次 G（T11–T13）",
-                suggestion="设 false。",
+                requirement="M0 不启用复合材料跨层孵化（细则 5.2 末）",
+                suggestion="设 false；属批次 H。",
             )
         )
+
+    # 8b. 结构化相界面（批次 G / T11–T13）：一致性 + 互斥 + 结构 schema
+    st = getattr(config, "structure", None)
+    structure_enabled = bool(st is not None and st.enabled)
+    if structure_enabled and not config.solver.structured_interface:
+        fail(
+            UFDemoError(
+                CONFIG_INVALID,
+                "配置了相结构，但 solver.structured_interface=false",
+                field_path="solver.structured_interface",
+                actual=False,
+                requirement="带 structure 的配置必须显式开启 solver.structured_interface",
+                suggestion=(
+                    "设 solver.structured_interface=true（软件不会静默忽略已配置的相结构），"
+                    "或把 structure.structure_type 改回 homogeneous。"
+                ),
+            )
+        )
+    if config.solver.structured_interface and not structure_enabled:
+        fail(
+            UFDemoError(
+                CONFIG_INVALID,
+                "solver.structured_interface=true，但未提供相结构",
+                field_path="structure",
+                actual=None,
+                requirement="需要 structure.structure_type ∈ particle_composite / laminated_fiber_composite",
+                suggestion="补齐 structure 块，或设 solver.structured_interface=false。",
+            )
+        )
+    if config.solver.structured_interface and config.solver.dynamic_angle:
+        fail(
+            UFDemoError(
+                CONFIG_INVALID,
+                "分相截断与动态角度不得同时启用",
+                field_path="solver",
+                actual={"structured_interface": True, "dynamic_angle": True},
+                requirement="二者互斥（执行细则 8 节末）",
+                suggestion=(
+                    "法向去除与垂直相列路径混用会让几何意义不唯一；"
+                    "先关闭其一。扩展时必须单独定义几何意义并增加测试。"
+                ),
+            )
+        )
+    if config.solver.dynamic_angle:
+        fail(
+            UFDemoError(
+                NOT_IMPLEMENTED,
+                "动态角度尚未实现",
+                field_path="solver.dynamic_angle",
+                actual=True,
+                requirement="动态角度属批次 J（T18）",
+                suggestion="设 solver.dynamic_angle=false。",
+            )
+        )
+    if structure_enabled:
+        from .structure import check_structure_config
+
+        struct_errors, struct_notes, struct_warnings = check_structure_config(config, material)
+        for e in struct_errors:
+            fail(e)
+        notes.extend(struct_notes)
+        warnings.extend(struct_warnings)
 
     # 9. 资源预算
     solver_for_budget = SolverConfig(**{**config.solver.__dict__, "extra": {"snapshot_policy": config.output.snapshot_policy, "max_snapshots": config.output.max_snapshots}})
@@ -1304,16 +1495,37 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
     if config.run_mode in ("reference_case", "synthetic_demo"):
         ok_cap, cap_reason = _cap_available(SEMANTIC_EVENT_INCREMENT)
         if not ok_cap:
-            fail(
-                UFDemoError(
-                    MATERIAL_CAPABILITY_MISSING,
-                    f"材料卡不支持逐事件去除增量：{cap_reason}",
-                    field_path="material_id",
-                    actual=config.material_id,
-                    requirement="需要 event_depth_increment 能力（完整阈值 + 去除尺度 + 匹配条件）",
-                    suggestion="补齐 δ 与阈值并确认条件；不得用相近材料、不同脉宽或纳秒数据补成“完整参数”。",
+            if structure_enabled:
+                # 合成结构模式：逐事件响应由**分相内联定义**提供，父卡只提供结构身份
+                # 与资料来源。这与细则 7 节「铝基 SiC 只开放无量纲合成颗粒」一致。
+                ok_struct, struct_reason = _cap_available(_CAP_SYNTHETIC_STRUCTURE)
+                if not ok_struct:
+                    fail(
+                        UFDemoError(
+                            MATERIAL_CAPABILITY_MISSING,
+                            f"材料卡不开放合成结构：{struct_reason}",
+                            field_path="material_id",
+                            actual=config.material_id,
+                            requirement="需要 synthetic_structure 能力（或父卡自带逐事件去除核）",
+                            suggestion="改用开放合成结构的材料卡，或补齐父卡的逐事件核。",
+                        )
+                    )
+                else:
+                    notes.append(
+                        "合成结构模式：逐事件去除核由分相内联定义提供（父卡仅提供结构身份）；"
+                        f"父卡逐事件核不可用：{cap_reason}"
+                    )
+            else:
+                fail(
+                    UFDemoError(
+                        MATERIAL_CAPABILITY_MISSING,
+                        f"材料卡不支持逐事件去除增量：{cap_reason}",
+                        field_path="material_id",
+                        actual=config.material_id,
+                        requirement="需要 event_depth_increment 能力（完整阈值 + 去除尺度 + 匹配条件）",
+                        suggestion="补齐 δ 与阈值并确认条件；不得用相近材料、不同脉宽或纳秒数据补成“完整参数”。",
+                    )
                 )
-            )
 
     return ValidationReport(
         ok=not errors,

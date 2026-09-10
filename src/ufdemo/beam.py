@@ -156,7 +156,11 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
     h_ref = surface.initial_height if options.geometry_feedback == "fixed_geometry" else h
 
     # --- 局部窗口 ----------------------------------------------------------
-    r_cut = cut_radius(w0, options.tail_epsilon)
+    # 离焦会扩大光斑；窗口必须覆盖整个当前表面可能出现的最大光斑。
+    fx, fy, fz = event.focus_xyz_m
+    max_s = max(abs(float(np.min(h_ref)) - fz), abs(float(np.max(h_ref)) - fz))
+    w_bound = w_of_s(w0, max_s, zR)
+    r_cut = cut_radius(w_bound, options.tail_epsilon)
     if options.section is not None:
         iy0, iy1, ix0, ix1 = options.section
         iy0, iy1 = max(0, int(iy0)), min(surface.grid.ny, int(iy1))
@@ -192,15 +196,14 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
     xn = surface.x[ix0:ix1]
     yn = surface.y[iy0:iy1]
     XX, YY = np.meshgrid(xn, yn)  # (ny_win, nx_win)
-    HH = h[iy0:iy1, ix0:ix1]
+    HH = h_ref[iy0:iy1, ix0:ix1]
 
     fx, fy, fz = event.focus_xyz_m
     # 正入射：k=(0,0,±1)。取 k_z=+1 的约定，轴向距离 s = h - z_f
     s_field = HH - fz
     dx2 = (XX - fx) ** 2 + (YY - fy) ** 2
     # r^2 = |q-q_f|^2 - s^2；仅将浮点舍入导致的极小负值截为零
-    r2 = dx2 + s_field ** 2 - s_field ** 2
-    r2 = np.maximum(r2, 0.0)
+    r2 = dx2  # 正入射直接计算，避免大轴向距离下的消减误差。
 
     if zR is None:
         F = gaussian_fluence_perp(r2, emitted, w0)
@@ -208,8 +211,9 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
         s_mean = 0.0
     else:
         s_mean = float(np.mean(s_field))
-        w_used = w_of_s(w0, s_mean, zR)
-        F = gaussian_fluence_perp(r2, emitted, w_used)
+        w_field = w0 * np.sqrt(1.0 + (s_field / zR) ** 2)
+        w_used = float(np.max(w_field))
+        F = gaussian_fluence_perp(r2, emitted, w_field)
 
     if not np.all(np.isfinite(F)):
         raise UFDemoError(
@@ -220,14 +224,15 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
             suggestion="检查 spot_radius_m、pulse_energy_J 与网格间距。",
         )
 
-    mask = r2 <= r_cut * r_cut
+    local_w = w0 if zR is None else w_field
+    mask = r2 <= local_w ** 2 * math.log(1.0 / options.tail_epsilon) / 2.0
     dA = surface.grid.dx_m * surface.grid.dy_m
     intercepted = float(np.sum(F[mask]) * dA)
     total_plane = float(np.sum(F) * dA)
 
     # 尾部截断：裁剪半径之外的能量占比（解析值）。它是数值设置，不是物理阈值。
     tail_frac_analytic = math.exp(-2.0 * (r_cut * r_cut) / (w_used * w_used))
-    domain_frac = 1.0 - (total_plane / emitted) if emitted > 0 else 0.0
+    domain_frac = max(0.0, min(1.0, 1.0 - intercepted / emitted)) if emitted > 0 else 0.0
 
     notes: list[str] = []
     if abs(float(np.min(HH)) - float(np.max(HH))) > 0.0 and options.geometry_feedback == "fixed_geometry":

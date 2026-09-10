@@ -22,6 +22,8 @@
 ## 后果
 
 * `UnitContext.allows_physical_depth_export` 在合成模式下为 `False`，
-  导出与截面标签使用 `delta_ref` / `L_ref`，**不会**出现 `depth_um`。
+  导出与截面标签使用 `L_ref`（深度是 `h/L_ref` 的高度差，与几何/光斑/离焦同尺度；
+  见 ADR-0012「相关修订」），**不会**出现 `depth_um`。`delta_ref_m` 仍保存在
+  `reference_scales`，需要 `d/delta_ref` 显示时按 `delta_ref_m / L_ref_m` 换算。
 * 求解精度与显示降采样分开记录；所有统计从求解场计算。
 * `config.py` 中 `GridConfig.axis()` 是唯一生成坐标轴的入口。

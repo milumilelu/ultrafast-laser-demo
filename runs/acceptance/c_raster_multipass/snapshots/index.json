@@ -9,11 +9,11 @@
       "phase_id"
     ],
     "bytes": 771834,
-    "event_index": 0,
+    "event_index": 34,
     "file": "snap_0000.npz",
     "final": false,
     "pass_id": 1,
-    "time_s": 0.0
+    "time_s": 0.00062
   },
   {
     "arrays": [
@@ -25,11 +25,11 @@
       "phase_id"
     ],
     "bytes": 771834,
-    "event_index": 35,
+    "event_index": 69,
     "file": "snap_0001.npz",
     "final": false,
     "pass_id": 2,
-    "time_s": 0.0007
+    "time_s": 0.00132
   },
   {
     "arrays": [
@@ -41,11 +41,11 @@
       "phase_id"
     ],
     "bytes": 771834,
-    "event_index": 70,
+    "event_index": 104,
     "file": "snap_0002.npz",
     "final": false,
     "pass_id": 3,
-    "time_s": 0.0014
+    "time_s": 0.00202
   },
   {
     "arrays": [

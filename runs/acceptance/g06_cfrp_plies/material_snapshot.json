@@ -1,0 +1,160 @@
+{
+  "capabilities": {
+    "cumulative_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "event_depth_increment": {
+      "available": false,
+      "conditional": false,
+      "missing": [
+        "delta_m"
+      ],
+      "reason": "响应类型 'reference_N_threshold' 不是固定阈值对数核；缺 delta_m"
+    },
+    "synthetic_structure": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许生成显式标记的合成结构"
+    },
+    "table_import": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许导入受校验的曲线卡（批次 F / T10 交付）"
+    },
+    "threshold_only": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "条件对应阈值可用；N 的定义必须同时显示，禁止当作单脉冲阈值"
+    },
+    "track_or_pass_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "volume_per_energy": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    }
+  },
+  "card": {
+    "allowed_run_modes": [
+      "threshold_only",
+      "synthetic_demo"
+    ],
+    "applicability": {
+      "physical_material_prediction_allowed": false,
+      "reason": "δ 缺失，只能做协议限定阈值展示与合成铺层。"
+    },
+    "branch_id": "cfrp_t700_yb01",
+    "card_version": "1.0.0",
+    "enabled_by_default": true,
+    "evidence_status": "literature_reported",
+    "history_definition": {
+      "exposure_count_meaning": "local_effective_count",
+      "history_activation_policy": "由扫描多脉冲试验反演；未标定条件默认关闭",
+      "mode": "power_law_incubation"
+    },
+    "id": "cfrp_t700_yb01_800nm",
+    "identity": {
+      "family": "CFRP",
+      "grade": "T700 / YB01",
+      "material_identity_confirmed_by_user": false
+    },
+    "limitations": [
+      "整体阈值不是两相阈值。",
+      "δ 缺失时不输出绝对深度。",
+      "不声称预测分层或热影响区。"
+    ],
+    "phases": [
+      {
+        "delta_m": null,
+        "name": "resin",
+        "threshold_J_m2": null
+      },
+      {
+        "delta_m": null,
+        "name": "fiber",
+        "threshold_J_m2": null
+      }
+    ],
+    "provenance": {
+      "from": "F01 P16-P21；F02 cfrp_t700_yb01_800nm",
+      "source_ids": [
+        "S03",
+        "S18",
+        "S21"
+      ]
+    },
+    "reference_protocol": {
+      "protocol_id": "cfrp_t700_yb01_threshold_only",
+      "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。",
+      "required_history": {
+        "definition": "Fth1 反演基准，仅为占位定义",
+        "effective_count": 1
+      },
+      "required_laser": {
+        "pulse_duration_s": {
+          "rel_tol": 0.05,
+          "value": 9e-14
+        },
+        "repetition_rate_Hz": {
+          "rel_tol": 0.02,
+          "value": 1000.0
+        },
+        "spot_radius_m": {
+          "rel_tol": 0.1,
+          "value": 3e-06
+        },
+        "wavelength_m": {
+          "rel_tol": 0.02,
+          "value": 8e-07
+        }
+      }
+    },
+    "response": {
+      "delta_m": null,
+      "depth_direction": "not_applicable",
+      "fluence_basis": "incident_peak_fluence",
+      "incubation": {
+        "S": 0.8855,
+        "formula": "Fth(N)=Fth1*N^(S-1)",
+        "kind": "power_law_incubation"
+      },
+      "kind": "reference_N_threshold",
+      "output_semantics": "threshold_only",
+      "threshold_J_m2": 8400.0,
+      "threshold_kind": "multipulse_fitted_Fth1"
+    },
+    "source_equation": "Fth(N) = Fth1 * N^(S-1)",
+    "source_figure_or_table": "F01 P16-P18（S03）",
+    "source_type": "research_card_migration",
+    "structure_type": "laminated_fiber_composite",
+    "validity_domain": {
+      "note": "仅协议限定阈值展示；绝对深度不开放。",
+      "protocol_id": "cfrp_t700_yb01_threshold_only",
+      "scope": "reference_protocol_only"
+    }
+  },
+  "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
+  "schema_version": "1.0",
+  "watermark": {
+    "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
+    "card_version": "1.0.0",
+    "evidence_status": "literature_reported",
+    "family": "CFRP",
+    "grade": "T700 / YB01",
+    "identity_confirmed_by_user": false,
+    "material_id": "cfrp_t700_yb01_800nm",
+    "physical_prediction_allowed": false,
+    "source_type": "research_card_migration"
+  }
+}

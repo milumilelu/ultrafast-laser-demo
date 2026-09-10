@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ufdemo"
-version = "0.4.0-f1"
+version = "0.5.0-g1"
 description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面）"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,8 +32,8 @@ markers = [
   "g03: G03 零输入/边界/阈值",
   "g04: G04 路径与观测算子",
   "g05: G05 文献语义回归（YSZ/SiC 参考评估器）",
-  "g06: G06 两相与铺层红线（批次 G，未实施）",
+  "g06: G06 分相查询/颗粒/铺层/界面截断（批次 G）",
   "g07: G07 斜入射与表面几何（批次 J，未实施）",
   "g08: G08 分组模式与逐脉冲一致（批次 I，未实施）",
-  "g09: G09 查表/导出/界面（界面 E 已交付；查表 F 未实施）",
+  "g09: G09 查表/导出/界面（界面 E、查表 F 已交付；逐事件核接入属批次 H 未实施）",
 ]

@@ -1,0 +1,14 @@
+﻿case,kind,expected,measured,status,detail
+G06,同相合并等价,合并前后几何逐位一致,合并 3→2 层，几何逐位一致,通过,同相相邻铺层合并后 phase_at / next_different_interface 与预合并单层等价
+G06,同相层界不假截断/不同相不跳过,同相列 inf；异相列 = 层厚,同相列 inf；异相列 1（= 层厚）,通过,同相层界不假截断，真实相界面距离解析给出
+G06,颗粒界面不跳过,进入/离开距离解析命中,进入 0.3｜离开 0.5｜无颗粒列 inf,通过,解析射线-球求交：进入/离开界面均命中，不越过
+G06,不拆伪脉冲,单次应用 = 单一相核候选量,中心列一次应用 0.1887093983 = 单一纤维核 0.1887093983,通过,一个真实脉冲只调用当前暴露相的一个核，未拆成两相叠加
+G06,固定种子重现,同种子逐位一致，异种子不同,同种子 7 个颗粒逐位一致；异种子几何不同,通过,固定种子可复现，且换种子确有影响
+G06,目标/实际体积分数分列,两者分别给出且方法可追溯,"目标 0.32｜实际 {""Al_matrix"": 0.72815, ""SiC_particle"": 0.27185}（grid_sample, n=20000）",通过,目标与实际体积分数分别报告，不强制相等
+G06,跨相截断命名与诊断,「未应用候选去除体积」+ 四项统计,截断事件 14｜相切换事件 14｜未应用占比 0.02175,通过,截断量命名为「未应用候选去除体积」，且不以剩余能量表述
+G06,红线：旧 δ 字段,拒绝（RESPONSE_SEMANTICS_INVALID）,RESPONSE_SEMANTICS_INVALID,通过,相 'x' 使用了旧字段 delta_over_delta_ref
+G06,红线：相借用其它材料卡,拒绝（MATERIAL_CAPABILITY_MISSING）,MATERIAL_CAPABILITY_MISSING,通过,相 'SiC_particle' 不能引用其它材料卡（material_id='sic_4h_cface_1035nm_multishot'）
+G06,红线：相沿用整体阈值来源,拒绝（MATERIAL_CAPABILITY_MISSING）,MATERIAL_CAPABILITY_MISSING,通过,相 'resin' 的 response_source='parent_card_threshold' 不被允许
+G06,红线：整体阈值拆给分相,拒绝（MATERIAL_CAPABILITY_MISSING）,MATERIAL_CAPABILITY_MISSING,通过,相 'resin' 的阈值与父卡整体阈值相同（0.84）
+G06,红线：结构×动态角度互斥,拒绝（CONFIG_INVALID）,CONFIG_INVALID,通过,配置层拦截：分相截断与动态角度不得同时启用
+G06,红线：结构类型与卡一致,拒绝（CONDITION_MISMATCH）,CONDITION_MISMATCH,通过,结构类型与材料卡声明不一致时拒绝

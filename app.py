@@ -430,6 +430,11 @@ def _result_panel(state: U.SessionState):
                 st.plotly_chart(fig, width="stretch", key="r_fig_tl")
             st.caption("拖动时间轴只读取已保存快照，求解次数不变。")
 
+    _result_footers(frozen)
+
+
+def _result_footers(frozen: U.FrozenRun):
+    """结果区页脚：警告、错误与（批次 G）相结构诊断。无图可渲染时也会显示。"""
     if frozen.warnings:
         with st.expander(f"警告（{len(frozen.warnings)}）", expanded=False):
             for w in frozen.warnings:
@@ -438,6 +443,43 @@ def _result_panel(state: U.SessionState):
         with st.expander(f"错误（{len(frozen.errors)}）", expanded=True):
             for e in frozen.errors:
                 st.write(f"- [{e.get('code')}] {e.get('message')}（{e.get('field_path')}）")
+    _structure_diagnostics_block(frozen)
+
+
+def _structure_diagnostics_block(frozen: U.FrozenRun):
+    """批次 G：相结构诊断（分相统计与跨相截断）。
+
+    均质运行没有分相结构，本块不显示。跨相截断项名称固定为
+    「未应用候选去除体积」——它不是剩余热量，也不是界面能量传输结果。
+    """
+    d = frozen.structure_diagnostics
+    if not d:
+        return
+    vf = d.get("volume_fraction") or {}
+    target = d.get("target_volume_fraction")
+    actual = vf.get("actual_volume_fraction")
+    with st.expander(
+        f"相结构诊断｜{d.get('structure_type')}｜算法 {d.get('algorithm_version')}｜"
+        f"种子 {d.get('seed')}｜相数 {len(d.get('phases') or [])}",
+        expanded=False,
+    ):
+        st.caption(
+            f"目标体积分数：{'未声明' if target is None else f'{target:.4g}'}｜"
+            f"实际体积分数（{vf.get('volume_fraction_method') or '未估计'}）："
+            f"{actual if actual is not None else '未估计'}。"
+            "目标比例不代表有限样本必然等于该值，两者分别报告。"
+        )
+        if d.get("same_phase_merge"):
+            st.caption("同相相邻铺层已预先合并；未在人为层边界处截断。")
+        rows = frozen.structure_summary_rows()
+        if rows:
+            st.caption("各相阈值/去除尺度为**内联合成定义**（内部单位：F_ref / L_ref），不从材料卡借用。")
+            st.dataframe(rows, hide_index=True, width="stretch")
+        if d.get("clipped_events"):
+            st.caption("跨相截断是有损近似：实际去除取「候选」与「到下一不同相界面距离」的较小值。")
+        st.dataframe(frozen.truncation_rows(), hide_index=True, width="stretch")
+        if d.get("truncation_note"):
+            st.caption(d["truncation_note"])
 
 
 # ---------------------------------------------------------------------------

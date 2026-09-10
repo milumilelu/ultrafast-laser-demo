@@ -1,0 +1,174 @@
+{
+  "schema_version": "1.0",
+  "label": "synthetic_cfrp_laminated_ply",
+  "run_mode": "synthetic_demo",
+  "unit_system": "dimensionless",
+  "reference_scales": {
+    "L_ref_m": 1e-05,
+    "F_ref_J_m2": 10000.0,
+    "delta_ref_m": 1e-07
+  },
+  "material_id": "cfrp_t700_yb01_800nm",
+  "material_card_file": "data/materials/cfrp_t700_yb01_800nm.json",
+  "seed": 20260911,
+  "grid": {
+    "nx": 141,
+    "ny": 141,
+    "dx_m": 1e-06,
+    "dy_m": 1e-06,
+    "center_x_m": 0.0,
+    "center_y_m": 0.0,
+    "origin": "cell_center",
+    "initial_surface": "flat",
+    "initial_height_m": 0.0
+  },
+  "laser": {
+    "wavelength_m": null,
+    "pulse_duration_s": null,
+    "pulse_energy_J": 1.1606702178681694e-05,
+    "repetition_rate_Hz": 1000.0,
+    "spot_radius_m": 1e-05,
+    "focus_xyz_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "direction_unit": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "rayleigh_range_m": null,
+    "m2": null,
+    "power_measurement_location": "sample_surface",
+    "parameter_sources": [
+      "synthetic_definition"
+    ]
+  },
+  "path": {
+    "t0_s": 0.0,
+    "time_tolerance_s": 1e-12,
+    "segments": [
+      {
+        "segment_id": 0,
+        "pass_id": 0,
+        "start_s": 0.0,
+        "end_s": 0.016,
+        "start_xyz_m": [
+          0,
+          0,
+          0
+        ],
+        "end_xyz_m": [
+          0,
+          0,
+          0
+        ],
+        "speed_m_s": 0.0,
+        "laser_on": true,
+        "label": "ply_drill_point"
+      }
+    ]
+  },
+  "solver": {
+    "mode": "reference",
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "tail_epsilon": 1e-08,
+    "memory_budget_bytes": 1073741824,
+    "budget_safety_factor": 1.5,
+    "cancel_check_interval": 256,
+    "acceleration": "off",
+    "multiline_incubation": false,
+    "structured_interface": true
+  },
+  "output": {
+    "snapshot_policy": "events",
+    "snapshot_events": [
+      0,
+      5,
+      10
+    ],
+    "max_snapshots": 6,
+    "max_snapshot_bytes": 268435456,
+    "cross_section": {
+      "axis": "x",
+      "offsets_m": [
+        0.0
+      ]
+    },
+    "roi": [
+      {
+        "name": "drill_1Lref",
+        "radius_m": 1e-05,
+        "center_xy_m": [
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "structure": {
+    "structure_type": "laminated_fiber_composite",
+    "seed": 20260911,
+    "phases": [
+      {
+        "name": "resin",
+        "role": "matrix",
+        "threshold_over_F_ref": 0.7,
+        "delta_over_L_ref": 0.35,
+        "depth_direction": "surface_normal",
+        "output_semantics": "event_depth_increment",
+        "response_source": "synthetic_definition",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "note": "合成定义：树脂相。不得用卡上整体 Fth1=0.84 F_ref 充当该相阈值。"
+      },
+      {
+        "name": "fiber",
+        "role": "fiber",
+        "threshold_over_F_ref": 2.1,
+        "delta_over_L_ref": 0.15,
+        "depth_direction": "surface_normal",
+        "output_semantics": "event_depth_increment",
+        "response_source": "synthetic_definition",
+        "source_equation": "a = (delta/L_ref)*[ln(F/F_ref)]_+",
+        "note": "合成定义：碳纤维相；缺分相标定，不输出物理深度。"
+      }
+    ],
+    "layers": [
+      {
+        "thickness_m": 2e-05,
+        "matrix_phase": "resin",
+        "fiber_phase": "fiber",
+        "fiber_angle_deg": 0.0,
+        "fiber_volume_fraction": 0.55,
+        "fiber_width_m": 4e-06
+      },
+      {
+        "thickness_m": 2e-05,
+        "matrix_phase": "resin",
+        "fiber_phase": "fiber",
+        "fiber_angle_deg": 90.0,
+        "fiber_volume_fraction": 0.55,
+        "fiber_width_m": 4e-06
+      },
+      {
+        "thickness_m": 2e-05,
+        "matrix_phase": "resin",
+        "fiber_phase": "fiber",
+        "fiber_angle_deg": 0.0,
+        "fiber_volume_fraction": 0.55,
+        "fiber_width_m": 4e-06
+      },
+      {
+        "thickness_m": 2e-05,
+        "matrix_phase": "resin",
+        "fiber_phase": "fiber",
+        "fiber_angle_deg": 90.0,
+        "fiber_volume_fraction": 0.55,
+        "fiber_width_m": 4e-06
+      }
+    ]
+  },
+  "notes": "批次 G / T13：CFRP 合成铺层 [0/90/0/90]，层厚 2 L_ref、纤维体积分数 55%。相响应为内联合成定义（树脂阈值 0.70 ≠ 卡上整体 Fth1=0.84 F_ref，避免把整体阈值拆给分相）。定点 16 脉冲用于逐层钻进，观察相标签切换与跨相截断。"
+}

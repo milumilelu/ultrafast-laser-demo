@@ -30,6 +30,8 @@ class UpdateDiagnostics:
     counter_before_max: int
     counter_after_max: int
     clipped_events: int = 0
+    n_clipped_cells: int = 0
+    phase_switch_cells: int = 0
     notes: list[str] = field(default_factory=list)
 
     COMBINE_FIELDS = ("candidate_volume_internal", "applied_volume_internal", "clipped_volume_internal", "n_ablating_cells")
@@ -44,25 +46,27 @@ class UpdateDiagnostics:
             "counter_before_max": self.counter_before_max,
             "counter_after_max": self.counter_after_max,
             "clipped_events": self.clipped_events,
+            "n_clipped_cells": self.n_clipped_cells,
+            "phase_switch_cells": self.phase_switch_cells,
             "notes": list(self.notes),
             "volume_name_note": "未应用候选去除体积不是剩余能量，也不是热损失。",
         }
 
 
 class _StructureProtocol:
-    """阶段 G（T11–T13）才实现的结构接口占位。
+    """单相均质结构的占位实现（批次 G 起由 ``ufdemo.structure`` 提供真实实现）。
 
-    M0 只有单一均质相，因此 ``phase_at`` 恒为 0、``next_different_interface``
-    返回 ``inf``。相界面截断属批次 G，配置层已拦截。
+    ``phase_at`` 恒为 0、``next_different_interface`` 返回 ``inf``，因此
+    ``apply_increment`` 的截断分支不会被触发，M0 路径逐位不变。
     """
 
     is_uniform = True
 
-    def phase_at(self, x, y, z):  # pragma: no cover - M2 实现
-        raise NotImplementedError("结构化相界面属批次 G（T11–T13）")
+    def phase_at(self, x, y, z):  # pragma: no cover - 由 uniform 分支短路
+        raise NotImplementedError("单相均质结构不提供 phase_at")
 
-    def next_different_interface(self, x, y, z):  # pragma: no cover - M2 实现
-        raise NotImplementedError("结构化相界面属批次 G（T11–T13）")
+    def next_different_interface(self, x, y, z):  # pragma: no cover - 由 uniform 分支短路
+        raise NotImplementedError("单相均质结构不提供 next_different_interface")
 
 
 @dataclass
@@ -105,6 +109,34 @@ class SurfaceState:
             warning_mask=np.zeros((grid.ny, grid.nx), dtype=bool),
             history_enabled=history_enabled,
         )
+
+    # -- 相标签 -------------------------------------------------------------
+    def initialize_phases(self, structure: Any) -> None:
+        """按结构给初始表面打相标签（批次 G）。均质结构直接返回，不改动。"""
+        import numpy as np
+
+        if structure is None or getattr(structure, "is_uniform", True):
+            return
+        self.structure = structure
+        xx = np.broadcast_to(self.x[None, :], self.height.shape)
+        yy = np.broadcast_to(self.y[:, None], self.height.shape)
+        pid = np.asarray(structure.phase_at(xx, yy, self.initial_height)).astype(np.uint16)
+        if pid.shape != self.height.shape:
+            raise UFDemoError(
+                NUMERIC_NONFINITE,
+                "相标签形状与高度场不一致",
+                field_path="structure.phase_at",
+                actual=list(pid.shape),
+                requirement=f"与网格形状 {list(self.height.shape)} 一致",
+            )
+        self.phase_id = pid
+
+    def phase_counts(self) -> dict[str, int]:
+        """当前相标签的单元计数；均质结构返回空字典。"""
+        st = self.structure
+        if st is None or getattr(st, "is_uniform", True):
+            return {}
+        return st.phase_cell_counts(self.phase_id)
 
     # -- 索引 ---------------------------------------------------------------
     def nearest_index_x(self, x_value: float) -> int:
@@ -149,19 +181,52 @@ class SurfaceState:
         dA = self.grid.dx_m * self.grid.dy_m
         cand = float(candidate_volume_internal) if candidate_volume_internal is not None else float(np.sum(vals) * dA)
 
-        # 结构截断（批次 G）：M0 为均质相，直接应用
+        # 第 7 步：相界面截断（批次 G）。均质相直接应用，逐位不变。
         applied = vals
-        clipped = 0.0
+        n_clipped_cells = 0
+        phase_switch_cells = 0
+        notes: list[str] = []
         if structure is not None and not getattr(structure, "is_uniform", True):
-            raise UFDemoError(
-                RESOURCE_BUDGET_EXCEEDED,
-                "结构化相界面的高度更新属批次 G（T11–T13）",
-                field_path="solver.structured_interface",
-                actual=True,
-                suggestion="设 solver.structured_interface=false。",
-            )
-
+            xg = np.broadcast_to(self.x[ix0:ix1][None, :], vals.shape)
+            yg = np.broadcast_to(self.y[iy0:iy1][:, None], vals.shape)
+            zg = self.height[iy0:iy1, ix0:ix1]
+            dist = np.asarray(structure.next_different_interface(xg, yg, zg), dtype=np.float64)
+            if dist.shape != vals.shape:
+                raise UFDemoError(
+                    NUMERIC_NONFINITE,
+                    "相界面距离与候选去除量形状不匹配",
+                    field_path="structure.next_different_interface",
+                    actual=list(np.shape(dist)),
+                    requirement=f"与窗口形状 {list(vals.shape)} 一致",
+                )
+            if not np.all(np.isfinite(dist) | np.isinf(dist)):
+                raise UFDemoError(NUMERIC_NONFINITE, "相界面距离含 NaN", field_path="structure.next_different_interface")
+            # 细则 8 节界面更新规则 2、3：实际去除取「候选」与「到界面距离」的较小值
+            applied = np.minimum(vals, np.maximum(dist, 0.0))
+            n_clipped_cells = int(np.count_nonzero(applied < vals))
+            if n_clipped_cells:
+                notes.append(
+                    "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；"
+                    "被截断的候选量计入「未应用候选去除体积」。"
+                )
         self.height[iy0:iy1, ix0:ix1] -= applied
+
+        # 第 8 步：达到界面后更新相标签（下一真实脉冲才对新相响应）
+        if structure is not None and not getattr(structure, "is_uniform", True):
+            touched = applied > 0.0
+            if np.any(touched):
+                xg = np.broadcast_to(self.x[ix0:ix1][None, :], vals.shape)
+                yg = np.broadcast_to(self.y[iy0:iy1][:, None], vals.shape)
+                new_pid = np.asarray(structure.phase_at(xg, yg, self.height[iy0:iy1, ix0:ix1])).astype(np.uint16)
+                old = self.phase_id[iy0:iy1, ix0:ix1]
+                changed = touched & (new_pid != old)
+                phase_switch_cells = int(np.count_nonzero(changed))
+                if phase_switch_cells:
+                    self.phase_id[iy0:iy1, ix0:ix1] = np.where(changed, new_pid, old)
+                    notes.append(
+                        f"本事件后有 {phase_switch_cells} 个单元格暴露到新相；"
+                        "新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+                    )
 
         # 计数（uint32 溢出检查）
         window = self.exposure_count[iy0:iy1, ix0:ix1]
@@ -190,6 +255,10 @@ class SurfaceState:
             n_ablating_cells=int(np.count_nonzero(touched)),
             counter_before_max=before,
             counter_after_max=after,
+            clipped_events=1 if n_clipped_cells else 0,
+            n_clipped_cells=n_clipped_cells,
+            phase_switch_cells=phase_switch_cells,
+            notes=notes,
         )
 
     def accumulate_illumination(self, section: tuple[int, int, int, int], fluence: Any, mask: Any) -> float:

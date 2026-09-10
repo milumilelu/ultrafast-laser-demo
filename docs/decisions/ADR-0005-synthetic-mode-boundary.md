@@ -21,7 +21,8 @@
    `applicability.physical_material_prediction_allowed = false`；
    文件名以 `_` 开头以便目录加载时区分。
 5. **禁止物理深度导出**：`UnitContext.allows_physical_depth_export` 为
-   `False`，截面与统计标签使用 `delta_ref`，不生成 `depth_um`。
+   `False`，截面与统计标签使用 `L_ref`（不是 `delta_ref`；见 ADR-0012「相关修订」），
+   不生成 `depth_um`。
 
 ## 后果
 

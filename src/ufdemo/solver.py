@@ -16,12 +16,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from .beam import BeamOptions, beam_patch
-from .config import RunConfig, SolverConfig, validate_run
-from .errors import NUMERIC_NONFINITE, RESOURCE_BUDGET_EXCEEDED, UFDemoError
+from .config import LaserConfig, PathConfig, RunConfig, SolverConfig, validate_run
+from .errors import NUMERIC_NONFINITE, RESPONSE_SEMANTICS_INVALID, RESOURCE_BUDGET_EXCEEDED, UFDemoError
 from .metrics import RoiSpec, cross_section, domain_statistics, removal_volume, roi_statistics
 from .materials import CAP_EVENT_INCREMENT, MaterialSpec, resolve_material
 from .paths import PulseEvent, iter_events
 from .response import FixedThresholdLogLaw, HistoryState, build_pulse_law
+from .structure import load_structure
 from .surface import SurfaceState
 
 
@@ -52,9 +53,59 @@ def _is_cancelled(token: Any) -> bool:
     return bool(getattr(token, "cancelled", False))
 
 
+def _per_phase_candidate(
+    surface: SurfaceState,
+    patch: Any,
+    section: tuple[int, int, int, int],
+    phase_laws: Mapping[int, Any],
+    history: HistoryState,
+    material: Any,
+) -> Any:
+    """按**当前暴露相**分派响应核。
+
+    细则 8 节界面更新规则 1：当前脉冲只调用当前暴露相的响应。这里对每个相
+    各调用一次核，且每个单元只被**一个**核处理——因此不存在把同一个物理脉冲
+    拆成两个伪脉冲分别施加给两相的实现（任务书 G06 红线）。
+    """
+    import numpy as np
+
+    iy0, iy1, ix0, ix1 = section
+    pid = surface.phase_id[iy0:iy1, ix0:ix1]
+    F = np.asarray(patch.fluence, dtype=np.float64)
+    mask = np.asarray(patch.mask, dtype=bool)
+    if F.shape != pid.shape or mask.shape != pid.shape:
+        raise UFDemoError(
+            NUMERIC_NONFINITE,
+            "光斑窗口与相标签形状不匹配",
+            field_path="structure.phase_at",
+            actual={"fluence": list(F.shape), "phase_id": list(pid.shape)},
+            requirement="两者一致",
+        )
+
+    present = {int(v) for v in np.unique(pid[mask]).tolist()} if mask.any() else set()
+    unknown = sorted(present - set(int(k) for k in phase_laws))
+    if unknown:
+        raise UFDemoError(
+            RESPONSE_SEMANTICS_INVALID,
+            f"受照单元落在未定义响应的相标签上：{unknown}",
+            field_path="structure.phases",
+            actual=unknown,
+            requirement=f"已定义相 id：{sorted(int(k) for k in phase_laws)}",
+            suggestion="补齐该相的阈值与去除尺度；不得用邻近相或父卡参数顶替。",
+        )
+
+    out = np.zeros(F.shape, dtype=np.float64)
+    for pid_value, law in phase_laws.items():
+        sel = (pid == int(pid_value)) & mask
+        if not np.any(sel):
+            continue
+        incr = law.increment(np.where(sel, F, 0.0), history, material)
+        out = np.where(sel, incr.values, out)
+    return out
+
+
 @dataclass
 class RunResult:
-    """任务书 7.1 的 ``RunResult``。"""
 
     status: str  # running/completed/cancelled/failed
     run_id: str
@@ -203,16 +254,35 @@ def solve(
         result.elapsed_s = time.perf_counter() - t_start
         return result
 
-    # --- 初始化表面 --------------------------------------------------------
+    # --- 初始化表面与相结构（批次 G）--------------------------------------
+    structure = load_structure(config, material)
+    structured = bool(structure is not None and not getattr(structure, "is_uniform", True))
+    result.metadata["enabled_features"]["structured_interface"] = structured
+    structure_summary: dict[str, Any] | None = None
+    if structured:
+        from .structure import sample_volume_fraction
+
+        structure_summary = structure.summary()
+        # 目标体积分数与**实际**体积分数分开报告（有限样本不强制等于目标）
+        structure_summary["volume_fraction"] = sample_volume_fraction(structure)
+        result.metadata["structure"] = structure_summary
+
     surface = SurfaceState.initialize(config.grid, config.laser, history_enabled=False)
+    if structured:
+        surface.initialize_phases(structure)
     result.surface = surface
 
     # --- 响应核 ------------------------------------------------------------
     law: FixedThresholdLogLaw | None = None
+    phase_laws: dict[int, Any] = {}
     if not threshold_only:
-        law = build_pulse_law(material, unit=config.unit)
+        if structured:
+            # 每个暴露相各自的响应核；逐事件只调用当前相那一个
+            phase_laws = structure.laws(unit_mode=config.unit.mode)
+        else:
+            law = build_pulse_law(material, unit=config.unit)
 
-    rois = [RoiSpec.from_dict(r, i) for i, r in enumerate(config.output.roi or ())]
+    rois = [RoiSpec.from_dict(r, i, config.unit) for i, r in enumerate(config.output.roi or ())]
     cs_cfg = dict(config.output.cross_section or {}) if config.output.cross_section else None
 
     if progress_callback:
@@ -231,6 +301,16 @@ def solve(
         "candidate_volume_internal": 0.0,
         "applied_volume_internal": 0.0,
         "unapplied_candidate_removal_volume_internal": 0.0,
+        "clipped_events": 0,
+        "n_clipped_cells": 0,
+        "phase_switch_cells": 0,
+        "phase_switch_events": 0,
+    }
+    result.diagnostics["phase"] = {
+        "structured_interface": structured,
+        "initial_phase_cell_counts": dict(surface.phase_counts()),
+        "final_phase_cell_counts": {},
+        "phase_names": ({p.phase_id: p.name for p in structure.phases} if structured else {}),
     }
     result.diagnostics["fluence_ledger"] = {
         "emitted_energy_internal": 0.0,
@@ -293,25 +373,32 @@ def solve(
             result.events_processed = n_events
             continue
 
-        assert law is not None
+        # 非 threshold_only 必须有响应核：单相走 law，分相走 phase_laws。
+        # （分相时 law 为 None，逐事件只调用当前暴露相那一个核。）
+        assert law is not None or phase_laws, "非 threshold_only 模式必须存在响应核"
         if patch.empty:
             result.events_processed = n_events
             continue
 
         # 第 3、5 步：读取本事件开始时的状态 → 能流 → 候选去除量
         history = HistoryState(exposure_count=None)
-        incr = law.increment(patch.fluence, history, material)
+        if phase_laws:
+            # 只调用**当前暴露相**的响应；一个物理脉冲绝不拆给两个相各算一次
+            cand_arr = _per_phase_candidate(surface, patch, section, phase_laws, history, material)
+        else:
+            assert law is not None
+            incr = law.increment(patch.fluence, history, material)
+            cand_arr = np.where(patch.mask, incr.values, 0.0)
 
         # 第 6 步：语义/方向/非负/有限校验已在 IncrementResult.validate() 内完成
-        cand_arr = np.where(patch.mask, incr.values, 0.0)
         cand_vol = float(np.sum(cand_arr) * surface.grid.dx_m * surface.grid.dy_m)
 
-        # 第 7、8 步：相界面截断（M0 无结构）+ 一次提交
+        # 第 7、8 步：相界面截断（批次 G）+ 一次提交
         diag = surface.apply_increment(
             cand_arr,
             event_index=event.index,
             section=section,
-            structure=None,
+            structure=structure,
             candidate_volume_internal=cand_vol,
         )
 
@@ -321,6 +408,17 @@ def solve(
         rem["candidate_volume_internal"] += diag.candidate_volume_internal
         rem["applied_volume_internal"] += diag.applied_volume_internal
         rem["unapplied_candidate_removal_volume_internal"] += diag.clipped_volume_internal
+        rem["clipped_events"] += int(diag.clipped_events)
+        rem["n_clipped_cells"] += int(diag.n_clipped_cells)
+        rem["phase_switch_cells"] += int(diag.phase_switch_cells)
+        for note in diag.notes:
+            if note.startswith("本事件后有"):
+                # 逐事件相切换说明合并为收尾的一条汇总（细则 5.4：诊断不刷屏）
+                if diag.phase_switch_cells:
+                    rem["phase_switch_events"] += 1
+                continue
+            if note not in warnings:
+                warnings.append(note)
 
         result.events_processed = n_events
 
@@ -348,6 +446,32 @@ def solve(
     geom_note = "固定几何解析基准：本事件使用初始表面高度计算离焦，忽略当前高度变化。"
     if config.solver.geometry_feedback == "fixed_geometry" and geom_note in warnings:
         pass  # 已由 beam 提示一次即可
+
+    # 结构化结果：相标签终态、截断统计与频繁跨界警告（细则 3.3、8 节）
+    if structured:
+        result.diagnostics["phase"]["final_phase_cell_counts"] = dict(surface.phase_counts())
+        rem = result.diagnostics["removal"]
+        clip_vol = rem["unapplied_candidate_removal_volume_internal"]
+        cand_vol = rem["candidate_volume_internal"]
+        result.diagnostics["removal"]["unapplied_fraction_of_candidate"] = (
+            (clip_vol / cand_vol) if cand_vol > 0 else 0.0
+        )
+        if n_events > 0 and rem["clipped_events"] / n_events > 0.5:
+            warnings.append(
+                f"跨相截断频繁：{rem['clipped_events']}/{n_events} 个事件被相界面截断。"
+                "此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。"
+            )
+        if rem["phase_switch_events"]:
+            warnings.append(
+                f"有 {rem['phase_switch_events']} 个事件出现相标签切换，累计 {rem['phase_switch_cells']} 个单元暴露到新相；"
+                "新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+            )
+        # 复用初始化时算好的 summary（含目标/实际体积分数），只补终态与截断统计
+        assert structure_summary is not None
+        structure_summary["final_phase_cell_counts"] = dict(surface.phase_counts())
+        structure_summary["clipped_events"] = rem["clipped_events"]
+        structure_summary["phase_switch_events"] = rem["phase_switch_events"]
+        structure_summary["unapplied_candidate_removal_volume_internal"] = clip_vol
 
     # 最后一个事件后始终生成最终状态
     _finalize_statistics(result, surface, config, rois, cs_cfg, threshold_only)
@@ -378,23 +502,52 @@ def solve(
 # ---------------------------------------------------------------------------
 
 
-def _snapshot_event_set(config: RunConfig) -> set[int]:
-    if config.output.snapshot_policy != "events":
+def _pass_end_event_indices(path: PathConfig, laser: LaserConfig, every_n: int) -> set[int]:
+    """``snapshot_policy="passes"`` 的触发点：**每 N 遍最后一个事件**的 index。
+
+    细则语义是「逐遍策略在每一遍结束时记录形貌」，触发点是该遍**最后一个事件
+    之后**，而不是下一遍第一个事件之前——后者会把下一遍的首脉冲一起算进去，
+    使第 1 遍的快照落到第 3 个事件而不是第 2 个。
+
+    「每 N 遍」按普通的逐遍计数理解：第 N、2N、3N……遍各记一次，**含末遍**。
+    末遍结束处会与收尾快照（``final=True``）落在同一个事件上，两条记录内容相同
+    但语义不同（一条是「逐遍策略的第 k 条」，一条是「始终存在的最终状态」），
+    与批次 C 已交付的栅格验收行「3 遍 → 3 条逐遍 + 最终 = 4」一致。
+    ``max_snapshots`` 在此仅约束逐遍快照，收尾快照不计入该额度。
+    """
+    if every_n < 1:
         return set()
-    return {int(v) for v in (config.output.snapshot_events or ())}
+    order: list[int] = []
+    last_index: dict[int, int] = {}
+    for ev in iter_events(path, laser):
+        if ev.pass_id not in last_index:
+            order.append(ev.pass_id)
+        last_index[ev.pass_id] = ev.index
+    ends: set[int] = set()
+    for ordinal, pass_id in enumerate(order):
+        if (ordinal + 1) % every_n == 0:
+            ends.add(last_index[pass_id])
+    return ends
+
+
+def _snapshot_event_set(config: RunConfig) -> set[int]:
+    """事件级快照触发点：``events`` 直接取给定 index，``passes`` 由逐遍边界算出。"""
+    policy = config.output.snapshot_policy
+    if policy == "events":
+        return {int(v) for v in (config.output.snapshot_events or ())}
+    if policy == "passes":
+        return _pass_end_event_indices(
+            config.path, config.laser, int(config.output.snapshot_every_n_passes or 1)
+        )
+    return set()
 
 
 def _should_snapshot(config: RunConfig, event: PulseEvent, targets: set[int], result: RunResult) -> bool:
-    if config.output.snapshot_policy == "none":
+    if config.output.snapshot_policy not in ("events", "passes"):
         return False
     if len(result.snapshots) >= config.output.max_snapshots:
         return False
-    if config.output.snapshot_policy == "events":
-        return event.index in targets
-    if config.output.snapshot_policy == "passes":
-        n = int(config.output.snapshot_every_n_passes or 1)
-        return event.pass_id > 0 and (event.pass_id % n == 0) and (not result.snapshots or result.snapshots[-1]["pass_id"] != event.pass_id)
-    return False
+    return event.index in targets
 
 
 def _snapshot_payload(surface: SurfaceState, config: RunConfig, event: PulseEvent | None, final: bool) -> dict[str, Any]:
@@ -458,13 +611,22 @@ def _finalize_statistics(result: RunResult, surface: SurfaceState, config: RunCo
         return
 
     stats["removal_available"] = True
+    if surface.structure is not None and not getattr(surface.structure, "is_uniform", True):
+        # 相单元计数按「名称」展开为独立行，便于 statistics.csv 直接读取
+        for name, cnt in surface.phase_counts().items():
+            stats[f"phase_cell_count[{name}]"] = cnt
+        stats["structured_interface"] = True
     result.statistics = stats
     result.rois = [r.to_dict() for r in roi_statistics(surface, rois)]
     if cs_cfg:
         axis = str(cs_cfg.get("axis", "x"))
-        offsets = cs_cfg.get("offsets_m", [0.0])
+        # 截面偏移同样属于「参与几何的长度」，必须换到内部尺度后再与网格比较
+        offsets = [config.unit.length_to_internal(float(v)) for v in cs_cfg.get("offsets_m", [0.0])]
         profiles = cross_section(surface, axis=axis, offsets_m=offsets)
         if not config.unit.allows_physical_depth_export:
             for p in profiles:
-                p["depth_units_label"] = f"{config.unit.depth_label}（按 delta_ref 归一，不是物理深度）"
+                p["depth_units_label"] = (
+                    f"{config.unit.depth_label}（与几何同一无量纲尺度，不是物理深度；"
+                    "需要 d/delta_ref 时按 reference_scales 换算）"
+                )
         result.profiles = profiles

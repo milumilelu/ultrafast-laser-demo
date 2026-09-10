@@ -21,13 +21,13 @@
     "fluence_basis": "normalized_incident_peak",
     "depth_direction": "surface_normal",
     "threshold_over_F_ref": 1.0,
-    "delta_over_delta_ref": 1.0
+    "delta_over_L_ref": 1.0
   },
   "history_definition": {
     "mode": "none",
     "exposure_count_meaning": "not_applicable"
   },
-  "source_equation": "a/F_ref 序列：a = delta_ref*[ln(F/F_ref)]_+（无量纲）",
+  "source_equation": "a/F_ref 序列：a = (delta/L_ref)*[ln(F/F_ref)]_+（无量纲，δ 以 L_ref 归一）",
   "source_figure_or_table": "执行细则 4.1/4.2 合成模式规定",
   "validity_domain": {
     "scope": "analytic_all",

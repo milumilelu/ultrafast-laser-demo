@@ -39,10 +39,13 @@ from .solver import RunResult, solve
 LAYER_LABELS: dict[str, str] = {
     "height": "当前表面高度",
     "depth": "去除深度",
-    "cumulative_fluence": "累计入射剂量（能量沉积观测量）",
+    "cumulative_fluence": "累计入射剂量",
     "illumination_count": "有效照射计数",
     "threshold_mask": "超阈值/改性标记（受限阈值协议量）",
     "warning_mask": "域外/截断等警告标记",
+    # 批次 G：分相结构的"相编号"图。只显示**当前暴露相**的编号，
+    # 是几何/身份标签，不是任何损伤或热学量。
+    "phase_id": "材料相标签（当前暴露相的编号）",
 }
 
 # 禁止出现在界面与导出里的措辞（执行细则 11.3，严格子串口径）。
@@ -64,6 +67,54 @@ UNAVAILABLE_LAYERS: dict[str, str] = {
         "不得用累计剂量与单脉冲阈值比较来伪造该标记，也不得把它读作热学损伤标记。"
     ),
 }
+
+
+# ---------------------------------------------------------------------------
+# 批次 G：相结构诊断（只读展示，不参与任何计算）
+# ---------------------------------------------------------------------------
+
+
+def build_structure_diagnostics(
+    diagnostics_inner: Mapping[str, Any] | None,
+    structure_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """把求解器写出的相结构诊断整理成界面可展示的字典。
+
+    入参对应 ``result.diagnostics`` 与 ``result.metadata["structure"]``；两者都能从
+    运行目录（``diagnostics.json`` / ``metadata.json``）读回，因此**实时运行与历史
+    读取走同一条路径**，不会出现"读回的历史运行看不到分相统计"。
+
+    均质单相运行返回空字典（界面不显示分相面板，也不提供相标签图层）。
+    """
+    sm = dict(structure_summary or {})
+    if not sm or sm.get("structure_type") in (None, "homogeneous") or "phases" not in sm:
+        return {}
+    diag = dict(diagnostics_inner or {})
+    phase = dict(diag.get("phase") or {})
+    removal = dict(diag.get("removal") or {})
+    vf = dict(sm.get("volume_fraction") or {})
+    return {
+        "structured_interface": True,
+        "structure_type": sm.get("structure_type"),
+        "algorithm_version": sm.get("algorithm_version"),
+        "seed": sm.get("seed"),
+        "phases": list(sm.get("phases") or []),
+        "phase_names": {str(k): v for k, v in (phase.get("phase_names") or {}).items()},
+        "initial_phase_cell_counts": dict(phase.get("initial_phase_cell_counts") or {}),
+        "final_phase_cell_counts": dict(phase.get("final_phase_cell_counts") or {}),
+        "volume_fraction": vf,
+        "target_volume_fraction": sm.get("target_volume_fraction"),
+        "same_phase_merge": sm.get("same_phase_merge"),
+        "clipped_events": removal.get("clipped_events"),
+        "n_clipped_cells": removal.get("n_clipped_cells"),
+        "phase_switch_cells": removal.get("phase_switch_cells"),
+        "phase_switch_events": removal.get("phase_switch_events"),
+        "unapplied_candidate_removal_volume_internal": removal.get(
+            "unapplied_candidate_removal_volume_internal"
+        ),
+        "unapplied_fraction_of_candidate": removal.get("unapplied_fraction_of_candidate"),
+        "truncation_note": sm.get("truncation_note"),
+    }
 
 STATUS_ZH = {
     "completed": "已完成",
@@ -141,6 +192,8 @@ class FrozenRun:
     events_processed: int = 0
     events_total: int = 0
     removal_available: bool = True
+    # 批次 G：相结构诊断（实时运行与历史读取同源；均质运行为空）
+    structure_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 内存中的结果与表面（用于渲染；不写回表单）
     result: RunResult | None = None
     # 从磁盘读取的最终表面数组（历史运行；同样只读，不求解）
@@ -196,7 +249,11 @@ class FrozenRun:
         arrs = self.arrays_from(snapshot_index)
         out: dict[str, str | None] = {}
         for name in LAYER_LABELS:
-            if name in UNAVAILABLE_LAYERS:
+            if name == "depth" and not self.removal_available:
+                out[name] = "该运行不提供去除深度"
+            elif name == "phase_id" and not self.structure_diagnostics:
+                out[name] = "该运行未启用分相结构（均质单相，没有相编号可显示）"
+            elif name in UNAVAILABLE_LAYERS:
                 out[name] = UNAVAILABLE_LAYERS[name]
             elif name in arrs:
                 out[name] = None
@@ -208,6 +265,8 @@ class FrozenRun:
 
     def depth_of(self, snapshot_index: int | None = None):
         """``depth = h0 - h``；只读，不写入任何状态。"""
+        if not self.removal_available:
+            return None
         if snapshot_index is None:
             s = self.surface()
             if s is not None:
@@ -235,6 +294,9 @@ class FrozenRun:
             )
         if name in UNAVAILABLE_LAYERS:
             return None
+        if name == "phase_id" and not self.structure_diagnostics:
+            # 均质运行没有相结构：不拿全零数组冒充"相标签图"
+            return None
         if name == "depth":
             return self.depth_of(snapshot_index)
         arrs = self.arrays_from(snapshot_index)
@@ -260,6 +322,49 @@ class FrozenRun:
             "run_mode",
         )
         return [{"metric": k, "value": st.get(k)} for k in keys]
+
+    def structure_summary_rows(self) -> list[dict[str, Any]]:
+        """批次 G：每个相一行的分相统计（供界面表格；无分相结构时返回空）。"""
+        d = self.structure_diagnostics
+        if not d:
+            return []
+        init = d.get("initial_phase_cell_counts") or {}
+        fin = d.get("final_phase_cell_counts") or {}
+        rows: list[dict[str, Any]] = []
+        for ph in d.get("phases") or []:
+            name = ph.get("name")
+            rows.append(
+                {
+                    "phase_id": ph.get("phase_id"),
+                    "name": name,
+                    "role": ph.get("role"),
+                    "threshold_internal": ph.get("threshold_internal"),
+                    "delta_internal": ph.get("delta_internal"),
+                    "initial_cells": init.get(name),
+                    "final_cells": fin.get(name),
+                }
+            )
+        return rows
+
+    def truncation_rows(self) -> list[dict[str, Any]]:
+        """批次 G：跨相截断诊断（名称固定为「未应用候选去除体积」）。"""
+        d = self.structure_diagnostics
+        if not d:
+            return []
+        return [
+            {"metric": "被截断的事件数", "value": d.get("clipped_events")},
+            {"metric": "被截断的单元次数", "value": d.get("n_clipped_cells")},
+            {"metric": "相标签切换的单元次数", "value": d.get("phase_switch_cells")},
+            {"metric": "出现相标签切换的事件数", "value": d.get("phase_switch_events")},
+            {
+                "metric": "未应用候选去除体积（内部单位）",
+                "value": d.get("unapplied_candidate_removal_volume_internal"),
+            },
+            {
+                "metric": "未应用候选占比",
+                "value": d.get("unapplied_fraction_of_candidate"),
+            },
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +532,9 @@ def submit(
         events_total=result.events_total,
         removal_available=result.removal_available,
         result=result,
+        structure_diagnostics=build_structure_diagnostics(
+            getattr(result, "diagnostics", None), (result.metadata or {}).get("structure")
+        ),
     )
 
     state.frozen = frozen
@@ -457,6 +565,7 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
     loaded = load_run(run_dir)
     cfg = dict(loaded.config or {})
     mat_snap = dict(loaded.material_snapshot or {})
+    mat_snap = dict(mat_snap.get("card", mat_snap))
     wm = {
         "material_id": mat_snap.get("id") or cfg.get("material_id"),
         "family": (mat_snap.get("identity") or {}).get("family"),
@@ -494,9 +603,9 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         profiles=list(loaded.profiles or []),
         snapshots=list(loaded.snapshots or []),
         warnings=list(loaded.warnings),
-        errors=[],
-        events_processed=len(loaded.events or []),
-        events_total=len(loaded.events or []),
+        errors=list(loaded.diagnostics.get("errors", [])),
+        events_processed=loaded.diagnostics.get("events_processed", 0),
+        events_total=loaded.diagnostics.get("events_total", 0),
         removal_available=(
             "depth" in (loaded.surface or {})
             or ("height" in (loaded.surface or {}) and cfg.get("run_mode") != "threshold_only")
@@ -511,6 +620,10 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         snapshot_files=[
             e.get("file") for e in (loaded.snapshots or []) if e.get("file")
         ],
+        structure_diagnostics=build_structure_diagnostics(
+            (loaded.diagnostics or {}).get("diagnostics"),
+            (loaded.metadata or {}).get("structure"),
+        ),
     )
     state.frozen = frozen
     state.read_count += 1

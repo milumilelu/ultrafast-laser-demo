@@ -62,11 +62,29 @@ def _normalize_response(raw: Mapping[str, Any]) -> dict[str, Any]:
     """把卡内的**声明单位**字段映射为内部量。
 
     * SI 卡：``threshold_J_m2`` / ``delta_m``
-    * 合成卡：``threshold_over_F_ref`` / ``delta_over_delta_ref``（已是内部归一量）
+    * 合成卡：``threshold_over_F_ref`` / ``delta_over_L_ref``（已是内部归一量）
+
+    合成卡里 δ 的归一化基准是 **L_ref**，不是 delta_ref：逐事件更新作用在
+    ``h/L_ref`` 上，深度就是 ``h/L_ref`` 之差，与光斑、层厚、颗粒尺寸同处一个
+    尺度（任务书「合成模式的单位规则」）。若把 ``δ/delta_ref`` 当成内部量直接相减，
+    深度会被放大 ``L_ref/delta_ref`` 倍（本工程默认 100 倍）。旧字段名
+    ``delta_over_delta_ref`` 一律拒绝，避免静默的百倍错误。
 
     不做任何跨材料或跨脉宽的补值：缺失保持 ``None``。
     """
     r = dict(raw)
+    if r.get("delta_over_delta_ref") is not None:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "合成卡使用了旧字段 delta_over_delta_ref",
+            field_path="response.delta_over_delta_ref",
+            actual=r.get("delta_over_delta_ref"),
+            requirement="改用 delta_over_L_ref（δ/L_ref，与几何同一长度尺度）",
+            suggestion=(
+                "δ/L_ref 与 δ/delta_ref 相差 L_ref/delta_ref 倍；"
+                "直接沿用旧值会让深度整体差 100 倍。"
+            ),
+        )
     if r.get("threshold_internal") is None:
         if r.get("threshold_J_m2") is not None:
             r["threshold_internal"] = r.get("threshold_J_m2")
@@ -77,8 +95,8 @@ def _normalize_response(raw: Mapping[str, Any]) -> dict[str, Any]:
     if r.get("delta_internal") is None:
         if r.get("delta_m") is not None:
             r["delta_internal"] = r.get("delta_m")
-        elif r.get("delta_over_delta_ref") is not None:
-            r["delta_internal"] = r.get("delta_over_delta_ref")
+        elif r.get("delta_over_L_ref") is not None:
+            r["delta_internal"] = r.get("delta_over_L_ref")
         else:
             r["delta_internal"] = None
     return r
