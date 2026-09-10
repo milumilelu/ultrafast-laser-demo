@@ -1,0 +1,47 @@
+"""ufdemo —— 七种材料超快激光加工 Demo（逐脉冲事件引擎 + 2.5D 高度场）。
+
+已实施批次：
+
+* A–C（M0 最小 CLI 闭环）：``config`` / ``materials`` / ``beam`` / ``paths`` /
+  ``response`` / ``surface`` / ``solver`` / ``metrics`` / ``io``
+* D（T07 文献参考评估器）：``references``（YSZ/SiC 有效 N、阈值、平均率；
+  **不求解网格，不进入逐事件主循环**）
+* E（T09 界面）：``ui_service``（纯逻辑，不导入 Streamlit）+ ``app.py``
+  （Streamlit 渲染层）
+
+尚未实现（按批次推进）：``accelerators``（I）、``geometry``（J）、查表（F）、
+合成相结构（G）。科学核心不导入 Streamlit 或 Plotly，也不通过全局 UI 状态取得输入。
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+__all__ = ["__version__", "SCHEMA_VERSION", "project_root", "default_runs_dir"]
+
+# M0 放行版本为 0.1.0-m0；批次 D 之后升到 0.2.0；批次 E（界面）作为候选版本。
+__version__ = "0.3.0-e1"
+
+from .config import SCHEMA_VERSION  # noqa: E402  (放在 __version__ 之后以免循环)
+
+
+def project_root() -> Path:
+    """工程根目录（``ultrafast-demo/``）。"""
+    return Path(__file__).resolve().parents[2]
+
+
+def default_material_dir() -> Path:
+    return project_root() / "data" / "materials"
+
+
+def default_runs_dir() -> Path:
+    """默认运行输出根目录。
+
+    可用环境变量 ``UFDEMO_RUNS_DIR`` 覆写——界面冒烟/验收探针据此把「提交计算」
+    产生的运行写到临时目录，避免污染工作区 ``runs/``。
+    """
+    override = os.environ.get("UFDEMO_RUNS_DIR")
+    if override:
+        return Path(override)
+    return project_root() / "runs"

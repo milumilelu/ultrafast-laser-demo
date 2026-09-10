@@ -1,0 +1,31 @@
+{
+  "diagnostics": {
+    "events": {
+      "n_ablating_events": 10,
+      "n_events": 10
+    },
+    "fluence_ledger": {
+      "emitted_energy_internal": 0.00011606702178681694,
+      "estimated_intercepted_energy_internal": 0.00011606702060440449,
+      "max_domain_truncated_fraction": 2.8520279471422327e-09,
+      "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
+    },
+    "removal": {
+      "applied_volume_internal": 3.1411000000000004e-16,
+      "candidate_volume_internal": 3.1411000000000004e-16,
+      "unapplied_candidate_removal_volume_internal": 0.0
+    },
+    "stage": "finished",
+    "threshold": {
+      "n_above_threshold_cells": 0
+    }
+  },
+  "elapsed_s": 0.004955300002620788,
+  "errors": [],
+  "events_processed": 10,
+  "events_total": 10,
+  "removal_available": true,
+  "run_id": "g02_ten_pulses",
+  "status": "completed",
+  "warnings": []
+}

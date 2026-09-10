@@ -1,0 +1,69 @@
+{
+  "id": "glass_ceramic_unbranded_1030nm",
+  "branch_id": "glass_ceramic_unbranded",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "微晶玻璃",
+    "grade": null,
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous_effective",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "synthetic_demo"
+  ],
+  "response": {
+    "kind": "missing",
+    "output_semantics": "threshold_only",
+    "fluence_basis": null,
+    "depth_direction": null,
+    "threshold_J_m2": null,
+    "delta_m": null
+  },
+  "history_definition": {
+    "mode": "none",
+    "exposure_count_meaning": "not_applicable"
+  },
+  "validity_domain": {
+    "scope": "unknown",
+    "note": "实际牌号未定：必须先区分 ZERODUR、锂二硅酸盐等。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "完整响应缺失；只开放合成均质表面与导入接口。"
+  },
+  "enabled_by_default": true,
+  "separate_reference_candidates": [
+    {
+      "branch_id": "glass_ceramic_dental_1030nm",
+      "grade": "dental glass-ceramic, brand unconfirmed",
+      "wavelength_nm": 1030,
+      "pulse_duration_fs_range": [
+        550,
+        600
+      ],
+      "source": "S10"
+    },
+    {
+      "branch_id": "zerodur_thermal_only",
+      "grade": "SCHOTT ZERODUR",
+      "thermal_only": true,
+      "rho_kg_m3": 2530,
+      "Cp_J_kgK": 800,
+      "k_W_mK": 1.46,
+      "source": "S11"
+    }
+  ],
+  "limitations": [
+    "禁止将石英、硼硅玻璃或镀膜损伤阈值代入。",
+    "透明材料内部改性不在表面高度场范围。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S10",
+      "S11"
+    ],
+    "from": "F01 P31-P37；F02 glass_ceramic_template"
+  }
+}

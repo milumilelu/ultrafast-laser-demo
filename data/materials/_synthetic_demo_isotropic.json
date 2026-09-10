@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "id": "synthetic_demo_isotropic",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "synthetic_demo",
+    "grade": "isotropic_normalized_surface",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "unverified",
+  "source_type": "synthetic_definition",
+  "fixture_only": true,
+  "allowed_run_modes": [
+    "synthetic_demo",
+    "threshold_only"
+  ],
+  "response": {
+    "kind": "log_fixed",
+    "output_semantics": "event_depth_increment",
+    "fluence_basis": "normalized_incident_peak",
+    "depth_direction": "surface_normal",
+    "threshold_over_F_ref": 1.0,
+    "delta_over_delta_ref": 1.0
+  },
+  "history_definition": {
+    "mode": "none",
+    "exposure_count_meaning": "not_applicable"
+  },
+  "source_equation": "a/F_ref 序列：a = delta_ref*[ln(F/F_ref)]_+（无量纲）",
+  "source_figure_or_table": "执行细则 4.1/4.2 合成模式规定",
+  "validity_domain": {
+    "scope": "analytic_all",
+    "note": "无量纲合成定义；不赋予真实材料预测意义。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "合成定义：只验证流程、几何与界面。"
+  },
+  "enabled_by_default": true,
+  "limitations": [
+    "禁止导出物理 μm 深度。",
+    "禁止据此比较七种材料真实加工速度。"
+  ],
+  "provenance": {
+    "source_ids": [],
+    "from": "细则 2.2 沙盒规则"
+  }
+}

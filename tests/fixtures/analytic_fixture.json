@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "id": "analytic_fixture_not_a_material",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "mathematical_fixture",
+    "grade": null,
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "unverified",
+  "source_type": "analytic_test_definition",
+  "fixture_only": true,
+  "allowed_run_modes": ["reference_case", "threshold_only", "synthetic_demo"],
+  "capabilities_declared": ["event_depth_increment", "threshold_only"],
+  "response": {
+    "kind": "log_fixed",
+    "output_semantics": "event_depth_increment",
+    "fluence_basis": "incident_surface_peak",
+    "depth_direction": "surface_normal",
+    "threshold_J_m2": 10000.0,
+    "delta_m": 1e-07
+  },
+  "history_definition": {
+    "mode": "none",
+    "exposure_count_meaning": "not_applicable",
+    "note": "人工解析基准关闭全部历史与孵化。"
+  },
+  "source_equation": "a(r) = delta * [ln(F0/Fth) - 2 r^2 / w^2]_+ ; V = pi w^2 delta / 4 * [ln(F0/Fth)]^2",
+  "source_figure_or_table": "执行细则 10 节 G01 表（人工构造的数学测试核，不是实际材料参数）",
+  "validity_domain": {
+    "scope": "analytic_all",
+    "note": "无限域解析解；有限网格体积收敛由 G01 网格细化记录检查。",
+    "physical_material_prediction_allowed": false
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "allowed_if": "仅用于测试套件 G01–G04 的数值实现验证"
+  },
+  "provenance": {
+    "source_type": "analytic_test_definition",
+    "origin": "ultrafast_laser_demo_execution_spec.md 第 10 节 G01",
+    "note": "采用 SI 便于检验单位，只进入测试套件，不出现在真实材料预测列表。"
+  }
+}

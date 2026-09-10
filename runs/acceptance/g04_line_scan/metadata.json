@@ -1,0 +1,106 @@
+{
+  "approximations": [],
+  "axis_order": [
+    "y",
+    "x"
+  ],
+  "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
+  "card_version": "1.0.0",
+  "code": {
+    "commit": "4748cb258c1e965431eb089e5116f8a3855291ea",
+    "git_available": true,
+    "python": "3.13.14",
+    "source_file_count": 17,
+    "source_manifest_sha256": "babe6c196493b308a29a18401a6492265d8b47278bf536030c16d385541a9c96",
+    "working_tree_dirty": true
+  },
+  "config_sha256": "8e610d924c2d3187f51988fb70ffc44862359c08ebce2daf9328d4d02e9ca15e",
+  "enabled_features": {
+    "acceleration": "off",
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "oblique_incidence": false,
+    "removal_available": true,
+    "snapshot_policy": "events",
+    "structured_interface": false,
+    "threshold_only": false
+  },
+  "environment": {
+    "executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
+    "numpy": "2.3.5",
+    "platform": "win32",
+    "pytest": "9.1.1",
+    "python": "3.13.14 (main, Jun 11 2026, 04:04:46) [MSC v.1944 64 bit (AMD64)]"
+  },
+  "events_processed": 7,
+  "evidence_status": "unverified",
+  "laser_metadata": {
+    "direction_unit_input": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "direction_unit_normalized": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "direction_was_renormalized": false,
+    "peak_fluence_internal": 73890.5609893065,
+    "power_measurement_location": "sample_surface"
+  },
+  "material_card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
+  "run_id": "g04_line_scan",
+  "schema_version": "1.0",
+  "seed": 20260910,
+  "source_type": "analytic_test_definition",
+  "status": "completed",
+  "unit": {
+    "E_ref_J": null,
+    "F_ref_J_m2": null,
+    "L_ref_m": null,
+    "delta_ref_m": null,
+    "labels": {
+      "depth": "m",
+      "energy": "J",
+      "fluence": "J/m^2",
+      "length": "m"
+    },
+    "physical_depth_export_allowed": true,
+    "unit_system": "SI"
+  },
+  "validation": {
+    "allowed_run_modes": [
+      "reference_case",
+      "threshold_only",
+      "synthetic_demo"
+    ],
+    "errors": [],
+    "estimated_events": 7,
+    "estimated_memory_bytes": 2399658,
+    "evidence_status": "unverified",
+    "material_id": "analytic_fixture_not_a_material",
+    "notes": [
+      "reference_case：输出物理单位，但一直显示验证状态；软件跑通不提升实验验证状态。"
+    ],
+    "ok": true,
+    "run_mode": "reference_case",
+    "unit_system": "SI",
+    "warnings": []
+  },
+  "warnings": [],
+  "written_at_utc": "2026-09-10T14:45:29.098852+00:00",
+  "written_files": [
+    "config.json",
+    "material_snapshot.json",
+    "statistics.csv",
+    "profiles.csv",
+    "diagnostics.json",
+    "snapshots/snap_0000.npz",
+    "snapshots/snap_0001.npz",
+    "snapshots/snap_0002.npz",
+    "snapshots/index.json",
+    "events.csv",
+    "final_surface.npz"
+  ]
+}

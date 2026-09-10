@@ -1,0 +1,31 @@
+{
+  "source_files": [
+    {
+      "input": "F01 seven_materials_parameter_register.xlsx",
+      "expected_sha256": "f0eb36ba926f48e3c2f180d4b8bf1142fcd63d378726746d1ba243d8a8726f9f",
+      "actual_sha256": "f0eb36ba926f48e3c2f180d4b8bf1142fcd63d378726746d1ba243d8a8726f9f",
+      "match": true
+    },
+    {
+      "input": "F02 material_card_templates.json",
+      "expected_sha256": "9cb12bf43e15e918dc4decf34f9c927500400e675442469282f71dc6587c171a",
+      "actual_sha256": "9cb12bf43e15e918dc4decf34f9c927500400e675442469282f71dc6587c171a",
+      "match": true
+    },
+    {
+      "input": "F03 paper5.0.tex",
+      "expected_sha256": "f14265daddb413f0ab43900725883d0ecaa0d79788428daeb2a85b28e63fb6a9",
+      "actual_sha256": null,
+      "match": false,
+      "note": "文件未找到：记录缺失，不阻塞人工解析主线"
+    },
+    {
+      "input": "F04 ttm_carrier_drilling_q4_axisymmetric.py",
+      "expected_sha256": "58794b1cdca8a34ef48ea531b7ae28af5ddb13f8fddddcb932b9952a0770185a",
+      "actual_sha256": null,
+      "match": false,
+      "note": "文件未找到：记录缺失，不阻塞人工解析主线"
+    }
+  ],
+  "note": "原始来源快照按字节复制；执行卡另行生成，两者分别保存。"
+}

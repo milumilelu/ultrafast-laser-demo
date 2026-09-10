@@ -1,0 +1,85 @@
+{
+  "id": "zirconia_ysz_machining_effective_n3",
+  "branch_id": "ysz_machining_effective",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "氧化锆",
+    "grade": "YSZ 论文相应加工卡（1030 nm/208 fs，33.3 kHz）",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "reference_case",
+    "threshold_only",
+    "synthetic_demo"
+  ],
+  "response": {
+    "kind": "log_fixed_effective",
+    "output_semantics": "event_depth_increment",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "surface_normal",
+    "threshold_J_m2": 12890.0,
+    "threshold_kind": "machining_effective",
+    "delta_m": 3.9e-07,
+    "incubation_enabled": false,
+    "extra_incubation_prohibited_without_refit": true
+  },
+  "history_definition": {
+    "mode": "effective_count_embedded",
+    "exposure_count_meaning": "not_per_event",
+    "effective_count": 3,
+    "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"
+  },
+  "reference_protocol": {
+    "protocol_id": "ysz_crown_machining_effective_n3",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 1.03e-06,
+        "rel_tol": 0.01
+      },
+      "pulse_duration_s": {
+        "value": 2.08e-13,
+        "rel_tol": 0.05
+      },
+      "repetition_rate_Hz": {
+        "value": 33300.0,
+        "rel_tol": 0.01
+      },
+      "spot_radius_m": {
+        "value": 1.6e-05,
+        "rel_tol": 0.05
+      }
+    },
+    "required_history": {
+      "effective_count": 3,
+      "definition": "area_equivalent_ysz_eq9"
+    },
+    "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。"
+  },
+  "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
+  "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
+  "validity_domain": {
+    "scope": "reference_protocol_only",
+    "protocol_id": "ysz_crown_machining_effective_n3",
+    "peak_fluence_J_m2": 501000.0,
+    "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": true,
+    "condition": "仅限 reference_protocol 声明的条件匹配工况"
+  },
+  "enabled_by_default": true,
+  "limitations": [
+    "有效加工阈值不是 Fth1；不得与静态分支拼接。",
+    "任意单脉冲条件、任意氧化锆牌号均不适用。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S01"
+    ],
+    "from": "F01 P04-P07；F02 zirconia_ysz_reference 的加工分支",
+    "migration_note": "保留有效脉冲数与阈值类型；补充 required_laser 后才允许参考执行。"
+  }
+}

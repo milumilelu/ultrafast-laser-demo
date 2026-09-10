@@ -1,0 +1,105 @@
+{
+  "grid": {
+    "center_x_m": 0.0,
+    "center_y_m": 0.0,
+    "dx_m": 5.000000000000001e-07,
+    "dy_m": 5.000000000000001e-07,
+    "initial_height_m": 0.0,
+    "initial_surface": "flat",
+    "nx": 161,
+    "ny": 161,
+    "origin": "cell_center"
+  },
+  "label": "analytic_single_pulse",
+  "laser": {
+    "direction_unit": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "focus_xyz_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "m2": null,
+    "parameter_sources": [
+      "analytic_test_definition"
+    ],
+    "power_measurement_location": "sample_surface",
+    "pulse_duration_s": null,
+    "pulse_energy_J": 1.1606702178681694e-05,
+    "rayleigh_range_m": null,
+    "repetition_rate_Hz": 1000.0,
+    "spot_radius_m": 1e-05,
+    "wavelength_m": null
+  },
+  "material_card_file": "tests/fixtures/analytic_fixture.json",
+  "material_id": "analytic_fixture_not_a_material",
+  "notes": "G01：单脉冲解析基准。网格 dx=dy=w/20，覆盖 ±4w。",
+  "output": {
+    "cross_section": {
+      "axis": "x",
+      "offsets_m": [
+        0.0
+      ]
+    },
+    "max_snapshot_bytes": 268435456,
+    "max_snapshots": 8,
+    "roi": [
+      {
+        "center_xy_m": [
+          0.0,
+          0.0
+        ],
+        "name": "center_10um",
+        "radius_m": 1e-05
+      }
+    ],
+    "snapshot_events": [
+      0
+    ],
+    "snapshot_policy": "events"
+  },
+  "path": {
+    "segments": [
+      {
+        "end_s": 0.001,
+        "end_xyz_m": [
+          0,
+          0,
+          0
+        ],
+        "label": "single_pulse_point",
+        "laser_on": true,
+        "pass_id": 0,
+        "segment_id": 0,
+        "speed_m_s": 0.0,
+        "start_s": 0.0,
+        "start_xyz_m": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "t0_s": 0.0,
+    "time_tolerance_s": 1e-12
+  },
+  "run_mode": "reference_case",
+  "schema_version": "1.0",
+  "seed": 20260910,
+  "solver": {
+    "acceleration": "off",
+    "budget_safety_factor": 1.5,
+    "cancel_check_interval": 256,
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "memory_budget_bytes": 2147483648,
+    "mode": "reference",
+    "multiline_incubation": false,
+    "structured_interface": false,
+    "tail_epsilon": 1e-08
+  },
+  "unit_system": "SI"
+}

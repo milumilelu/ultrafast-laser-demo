@@ -1,0 +1,68 @@
+{
+  "id": "diamond_scd_cvd_1030nm_700fs",
+  "branch_id": "diamond_scd_700fs",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "金刚石",
+    "grade": "单晶 CVD（700 fs 分支）",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "net_removal_with_optional_modification_mask",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only"
+  ],
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 129000.0,
+    "threshold_kind": "single_pulse",
+    "delta_m": null
+  },
+  "history_definition": {
+    "mode": "none",
+    "exposure_count_meaning": "not_applicable"
+  },
+  "reference_protocol": {
+    "protocol_id": "diamond_scd_1030nm_700fs_threshold",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 1.03e-06,
+        "rel_tol": 0.01
+      },
+      "pulse_duration_s": {
+        "value": 7e-13,
+        "rel_tol": 0.05
+      }
+    },
+    "required_history": {
+      "effective_count": 1,
+      "definition": "single_pulse"
+    },
+    "protocol_note": "与 400 fs 分支分开保存，禁止混用。"
+  },
+  "source_equation": "单脉冲阈值（2019）",
+  "source_figure_or_table": "F01 P48（S05）",
+  "validity_domain": {
+    "scope": "reference_protocol_only",
+    "protocol_id": "diamond_scd_1030nm_700fs_threshold",
+    "note": "仅条件对应阈值展示。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "δ 缺失，无配套去除曲线。"
+  },
+  "enabled_by_default": true,
+  "limitations": [
+    "不得与 400 fs 分支混合取平均。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S05"
+    ],
+    "from": "F01 P48；F02 diamond_scd_cvd_1030nm"
+  }
+}

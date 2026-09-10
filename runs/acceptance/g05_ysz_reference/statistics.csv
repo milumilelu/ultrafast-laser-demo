@@ -1,0 +1,13 @@
+metric,value,unit
+speed_m_s,0.2789734276387736,
+speed_mm_s,278.97342763877356,
+effective_count,3.0,
+naive_speed_m_s,0.35519999999999996,
+naive_speed_mm_s,355.19999999999993,
+naive_minus_correct_rel,0.27323954473516276,
+peak_fluence_J_m2,501000.0,
+peak_fluence_J_cm2,50.1,
+pulse_energy_J,0.00020146405368940621,
+pulse_energy_uJ,201.4640536894062,
+event_kernel_allowed,False,
+verified_by_experiment,False,

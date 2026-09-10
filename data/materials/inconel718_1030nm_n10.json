@@ -1,0 +1,100 @@
+{
+  "id": "inconel718_1030nm_n10",
+  "branch_id": "inconel718_fixed_point_n10",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "高温合金",
+    "grade": "Inconel 718",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only",
+    "synthetic_demo"
+  ],
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 1400.0,
+    "threshold_kind": "fixed_point_N10",
+    "delta_m": null
+  },
+  "history_definition": {
+    "mode": "fixed_point_count",
+    "exposure_count_meaning": "fixed_N_not_per_event",
+    "effective_count": 10,
+    "note": "阈值的 N 定义固定为 10，禁止当作单脉冲阈值。"
+  },
+  "reference_protocol": {
+    "protocol_id": "inconel718_n10_threshold_reference",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 1.03e-06,
+        "rel_tol": 0.02
+      },
+      "pulse_duration_s": {
+        "value": 2.67e-13,
+        "rel_tol": 0.1
+      }
+    },
+    "required_history": {
+      "effective_count": 10,
+      "definition": "fixed_point_N10"
+    },
+    "protocol_note": "同文加工系列约 267 fs；λ=1030 nm 为绿光/近红外分支。"
+  },
+  "source_equation": "固定点 N=10 阈值（图4）",
+  "source_figure_or_table": "F01 P22-P24（S04 图4）",
+  "validity_domain": {
+    "scope": "reference_protocol_only",
+    "protocol_id": "inconel718_n10_threshold_reference",
+    "note": "只做 N=10 阈值参考；深度与体积数据未数字化。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "δ 缺失，且文章去除效率曲线本轮未数字化反演。"
+  },
+  "enabled_by_default": true,
+  "threshold_candidates": [
+    {
+      "branch_id": "inconel718_n10_green",
+      "observable_name": "threshold_at_N10_green",
+      "wavelength_nm": 1030,
+      "pulse_duration_fs": 267,
+      "threshold_J_m2": 1400.0,
+      "source": "S04"
+    },
+    {
+      "branch_id": "inconel718_n10_uv",
+      "observable_name": "threshold_at_N10_uv",
+      "wavelength_nm": 515,
+      "pulse_duration_fs": 267,
+      "threshold_J_m2": 1000.0,
+      "source": "S04"
+    }
+  ],
+  "optional_thermal_backup": {
+    "rho_kg_m3": 8190.0,
+    "Cp_J_kgK": 435.0,
+    "k_W_mK": 11.4,
+    "note": "备用数据，不表示已具备温度或 HAZ 预测能力。",
+    "solidus_C": 1260.0,
+    "liquidus_C": 1336.0
+  },
+  "limitations": [
+    "不能把 N=10 阈值当成 Fth1。",
+    "不是任意镍基/钴基高温合金卡。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S04",
+      "S12",
+      "S13"
+    ],
+    "from": "F01 P22-P30；F02 inconel718_1030nm_n10"
+  }
+}

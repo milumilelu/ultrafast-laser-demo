@@ -1,0 +1,85 @@
+{
+  "allowed_run_modes": [
+    "reference_case",
+    "threshold_only",
+    "synthetic_demo"
+  ],
+  "applicability": {
+    "condition": "仅限 reference_protocol 声明的条件匹配工况",
+    "physical_material_prediction_allowed": true
+  },
+  "branch_id": "ysz_machining_effective",
+  "card_version": "1.0.0",
+  "enabled_by_default": true,
+  "evidence_status": "literature_reported",
+  "history_definition": {
+    "effective_count": 3,
+    "exposure_count_meaning": "not_per_event",
+    "mode": "effective_count_embedded",
+    "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"
+  },
+  "id": "zirconia_ysz_machining_effective_n3",
+  "identity": {
+    "family": "氧化锆",
+    "grade": "YSZ 论文相应加工卡（1030 nm/208 fs，33.3 kHz）",
+    "material_identity_confirmed_by_user": false
+  },
+  "limitations": [
+    "有效加工阈值不是 Fth1；不得与静态分支拼接。",
+    "任意单脉冲条件、任意氧化锆牌号均不适用。"
+  ],
+  "provenance": {
+    "from": "F01 P04-P07；F02 zirconia_ysz_reference 的加工分支",
+    "migration_note": "保留有效脉冲数与阈值类型；补充 required_laser 后才允许参考执行。",
+    "source_ids": [
+      "S01"
+    ]
+  },
+  "reference_protocol": {
+    "protocol_id": "ysz_crown_machining_effective_n3",
+    "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+    "required_history": {
+      "definition": "area_equivalent_ysz_eq9",
+      "effective_count": 3
+    },
+    "required_laser": {
+      "pulse_duration_s": {
+        "rel_tol": 0.05,
+        "value": 2.08e-13
+      },
+      "repetition_rate_Hz": {
+        "rel_tol": 0.01,
+        "value": 33300.0
+      },
+      "spot_radius_m": {
+        "rel_tol": 0.05,
+        "value": 1.6e-05
+      },
+      "wavelength_m": {
+        "rel_tol": 0.01,
+        "value": 1.03e-06
+      }
+    }
+  },
+  "response": {
+    "delta_m": 3.9e-07,
+    "depth_direction": "surface_normal",
+    "extra_incubation_prohibited_without_refit": true,
+    "fluence_basis": "incident_peak_fluence",
+    "incubation_enabled": false,
+    "kind": "log_fixed_effective",
+    "output_semantics": "event_depth_increment",
+    "threshold_J_m2": 12890.0,
+    "threshold_kind": "machining_effective"
+  },
+  "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
+  "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
+  "source_type": "research_card_migration",
+  "structure_type": "homogeneous",
+  "validity_domain": {
+    "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。",
+    "peak_fluence_J_m2": 501000.0,
+    "protocol_id": "ysz_crown_machining_effective_n3",
+    "scope": "reference_protocol_only"
+  }
+}

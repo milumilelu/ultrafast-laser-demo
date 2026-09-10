@@ -1,0 +1,27 @@
+metric,value,unit
+cell_count,14641,
+domain_area_internal,36.602500000000006,L_ref^2
+removal_volume_internal,15.7055,L_ref^3
+max_depth_internal,10.0,delta_ref
+center_depth_internal,10.0,delta_ref
+mean_depth_internal,0.42908271292944467,delta_ref
+n_abating_cells,1245,
+max_cumulative_fluence_internal,36.94528049465325,F_ref
+max_illumination_count,5,
+max_exposure_count,5,
+height_min_internal,-10.0,L_ref
+height_max_internal,0.0,L_ref
+unit_system,dimensionless,
+length_unit,L_ref,
+depth_unit,delta_ref,delta_ref
+fluence_unit,F_ref,F_ref
+removal_available,True,
+roi[center_1Lref].name,center_1Lref,
+roi[center_1Lref].available,True,
+roi[center_1Lref].rule,cell_centers_within_circle (r <= radius_m),
+roi[center_1Lref].n_cells,1,
+roi[center_1Lref].actual_area_internal,0.0025000000000000005,
+roi[center_1Lref].mean_depth_internal,10.0,
+roi[center_1Lref].max_depth_internal,10.0,
+roi[center_1Lref].removal_volume_internal,0.025000000000000005,
+roi[center_1Lref].reason,null,

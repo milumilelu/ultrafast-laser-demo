@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# 运行输出：保留 acceptance 与显式指定的实例，其余临时运行不纳入版本管理
+runs/*
+!runs/acceptance/
+!runs/.gitkeep
+
+# 界面探针的临时运行目录（tools/ui_probe.py 每次重跑都会重建）
+runs/acceptance/_ui_probe/
+runs/_ui_probe/
+
+# Streamlit 本地配置
+.streamlit/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

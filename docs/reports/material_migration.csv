@@ -1,0 +1,62 @@
+﻿record_id,material,grade,parameter,old_field_path,new_field_path,value_literature,value_SI,unit_from,unit_to,conversion,source_id,status,reason
+P01,氧化锆,APS 8 wt% YSZ,Fth1,参数证据[P01],zirconia_ysz_static_aps8ysz.response.threshold_J_m2,1.483,14830.000000000002,J/cm²,J/m²,×10000,S01,kept,单脉冲静态阈值保留原定义
+P02,氧化锆,APS 8 wt% YSZ,S(f)截距,参数证据[P02],zirconia_ysz_static_aps8ysz.response.incubation.S_intercept,0.969,0.969,1,1,无,S01,kept,S(f) 截距，频率单位 kHz
+P03,氧化锆,APS 8 wt% YSZ,S(f)斜率,参数证据[P03],zirconia_ysz_static_aps8ysz.response.incubation.S_slope_per_kHz,-0.0029,-2.8999999999999998e-06,1/kHz,1/Hz,×0.001,S01,converted,1/kHz → 保留 kHz 定义并显式标注，避免无界外推
+P04,氧化锆,YSZ论文相应加工卡,Fth_effective,参数证据[P04],zirconia_ysz_machining_effective_n3.response.threshold_J_m2,1.289,12890,J/cm²,J/m²,×10000,S01,kept,有效加工阈值，与静态分支分离
+P05,氧化锆,YSZ论文相应加工卡,delta_effective,参数证据[P05],zirconia_ysz_machining_effective_n3.response.delta_m,0.39,3.8999999999999997e-07,μm,m,×1e-06,S01,kept,0.39 μm；与 Fth_eff 配套
+P06,氧化锆,YSZ论文相应加工卡,spot_diameter,参数证据[P06],zirconia_ysz_machining_effective_n3.reference_protocol.required_laser.spot_radius_m,32,3.2e-05,μm,m,×1e-06,S01,converted,光斑直径 32 μm → 1/e² 半径 16 μm（明确高斯束约定）
+P07,氧化锆,YSZ论文相应加工卡,peak_fluence,参数证据[P07],zirconia_ysz_machining_effective_n3.validity_domain.peak_fluence_J_m2,50.1,501000,J/cm²,J/m²,×10000,S01,kept,加工例峰值能流，仅作条件一致性检查
+P08,氧化锆,致密3YZ（Precision Ceramics）,rho,参数证据[P08],zirconia_ysz_static_aps8ysz.optional_thermal_backup.rho_kg_m3,6.05,6050,g/cm³,kg/m³,×1000,S14,to_confirm,3YZ 制造商值，非 APS 8YSZ 涂层；只作备用数据
+P09,氧化锆,致密3YZ（Precision Ceramics）,k,参数证据[P09],zirconia_ysz_static_aps8ysz.optional_thermal_backup.k_W_mK,2,2,W/(m·K),W/(m·K),无,S14,to_confirm,同上，未做温度或 HAZ 预测
+P10,铝基碳化硅,SiCp/AA2024,laser_wavelength,参数证据[P10],alsic_sicp_aa2024_1030nm.validity_domain.laser.wavelength_nm,1030,1.03e-06,nm,m,×1e-09,S07,kept,仅波长条件；响应参数缺失
+P11,铝基碳化硅,SiCp/AA2024,Fth / delta / incubation,参数证据[P11],alsic_sicp_aa2024_1030nm.response.threshold_J_m2,,,待补,待补,无,S07,to_confirm,本轮未核得完整数值，保持 null
+P12,铝基碳化硅,SiCp/AA2024（另一纳秒论文样品）,SiC_volume_fraction,参数证据[P12],alsic_sicp_aa2024_1030nm.microstructure.synthetic_geometry_example.SiC_volume_fraction,45,0.45,vol%,1,×0.01,S09,converted,45 vol% 仅作另一纳秒研究的结构参考，不用于飞秒标定
+P13,铝基碳化硅,SiCp/AA2024（另一纳秒论文样品）,mean_particle_diameter,参数证据[P13],alsic_sicp_aa2024_1030nm.microstructure.synthetic_geometry_example.mean_particle_diameter_m,30,2.9999999999999997e-05,μm,m,×1e-06,S09,converted,30 μm 同上，仅几何参考
+P14,铝基碳化硅,ZL101A+65vol%SiC（不同产品）,k_lower_reference,参数证据[P14],alsic_sicp_aa2024_1030nm.optional_thermal_backup.k_W_mK,240,240,W/(m·K),W/(m·K),无,S17,to_confirm,不同产品（ZL101A+65vol%）；不得与 AA2024 混配
+P15,铝基碳化硅,ZL101A+65vol%SiC（不同产品）,Cp,参数证据[P15],alsic_sicp_aa2024_1030nm.optional_thermal_backup.Cp_J_kgK,0.803,803,J/(g·K),J/(kg·K),×1000,S17,to_confirm,供应商理论参考值
+P16,CFRP,T700 / YB01,Fth1_fitted,参数证据[P16],cfrp_t700_yb01_800nm.response.threshold_J_m2,0.84,8400,J/cm²,J/m²,×10000,S03,kept,整体等效 Fth1；不是树脂/纤维分别阈值
+P17,CFRP,T700 / YB01,S,参数证据[P17],cfrp_t700_yb01_800nm.response.incubation.S,0.8855,0.8855,1,1,无,S03,kept,幂律指数 S
+P18,CFRP,T700 / YB01,spot_radius,参数证据[P18],cfrp_t700_yb01_800nm.reference_protocol.required_laser.spot_radius_m,3,3e-06,μm,m,×1e-06,S03,kept,论文名义光斑半径 3 μm
+P19,CFRP,T700 / YB01,delta_effective,参数证据[P19],cfrp_t700_yb01_800nm.response.delta_m,,,待补,m,无,S03,to_confirm,δ 缺失，保持 null，能力计算禁用深度
+P20,CFRP,2025文献单向碳纤维/环氧,selective_texture_F_low,参数证据[P20],cfrp_t700_yb01_800nm.provenance.notes.selective_texture_F_low_J_m2,12,120000,J/cm²,J/m²,×10000,S18,to_confirm,12 J/cm² 是选择性加工工况，不是阈值
+P21,CFRP,2025文献单向碳纤维/环氧,selective_texture_F_high,参数证据[P21],cfrp_t700_yb01_800nm.provenance.notes.selective_texture_F_high_J_m2,13,130000,J/cm²,J/m²,×10000,S18,to_confirm,13 J/cm² 同上；纤维体积分数定义未确认故不录入
+P22,高温合金,Inconel 718,Fth_N10,参数证据[P22],inconel718_1030nm_n10.response.threshold_J_m2,0.14,1400.0000000000002,J/cm²,J/m²,×10000,S04,kept,N=10 固定点阈值，threshold_kind 显式登记
+P23,高温合金,Inconel 718,Fth_N10_green,参数证据[P23],inconel718_1030nm_n10.threshold_candidates[0],0.14,1400.0000000000002,J/cm²,J/m²,×10000,S04,kept,绿光分支 N=10
+P24,高温合金,Inconel 718,Fth_N10_UV,参数证据[P24],inconel718_1030nm_n10.threshold_candidates[1],0.1,1000,J/cm²,J/m²,×10000,S04,kept,UV 分支 N=10，与绿光分别编号
+P25,高温合金,Inconel 718,delta / S / Fth1,参数证据[P25],inconel718_1030nm_n10.response.delta_m,,,待补,待补,无,S04,to_confirm,δ/S/Fth1 未数字化反演，保持 null
+P26,高温合金,Inconel 718,rho,参数证据[P26],inconel718_1030nm_n10.optional_thermal_backup.rho_kg_m3,8.19,8189.999999999999,g/cm³,kg/m³,×1000,S13,kept,备用数据
+P27,高温合金,Inconel 718,k,参数证据[P27],inconel718_1030nm_n10.optional_thermal_backup.k_W_mK,11.4,11.4,W/(m·K),W/(m·K),无,S13,kept,备用数据
+P28,高温合金,Inconel 718,Cp,参数证据[P28],inconel718_1030nm_n10.optional_thermal_backup.Cp_J_kgK,435,435,J/(kg·K),J/(kg·K),无,S12,kept,备用数据
+P29,高温合金,Inconel 718,solidus,参数证据[P29],inconel718_1030nm_n10.optional_thermal_backup.solidus_C,1260,,°C,K,无,S12,converted,°C 保留原始温标并标注，不参与求解
+P30,高温合金,Inconel 718,liquidus,参数证据[P30],inconel718_1030nm_n10.optional_thermal_backup.liquidus_C,1336,,°C,K,无,S12,converted,同上
+P31,微晶玻璃,牙科玻璃陶瓷（品牌待确认）,pulse_duration_low,参数证据[P31],glass_ceramic_unbranded_1030nm.separate_reference_candidates[0].pulse_duration_fs_range[0],550,5.500000000000001e-13,fs,s,×1e-15,S10,kept,牙科玻璃陶瓷脉宽下限；牌号未确认
+P32,微晶玻璃,牙科玻璃陶瓷（品牌待确认）,pulse_duration_high,参数证据[P32],glass_ceramic_unbranded_1030nm.separate_reference_candidates[0].pulse_duration_fs_range[1],600,6.000000000000001e-13,fs,s,×1e-15,S10,kept,同上
+P33,微晶玻璃,实际牌号未定,Fth / delta / incubation,参数证据[P33],glass_ceramic_unbranded_1030nm.response.threshold_J_m2,,,待补,待补,无,S10,to_confirm,实际牌号未定，保持 null
+P34,微晶玻璃,SCHOTT ZERODUR,rho,参数证据[P34],glass_ceramic_unbranded_1030nm.separate_reference_candidates[1].rho_kg_m3,2.53,2530,g/cm³,kg/m³,×1000,S11,kept,ZERODUR 热物性，仅 thermal_only
+P35,微晶玻璃,SCHOTT ZERODUR,Cp,参数证据[P35],glass_ceramic_unbranded_1030nm.separate_reference_candidates[1].Cp_J_kgK,0.8,800,J/(g·K),J/(kg·K),×1000,S11,kept,同上
+P36,微晶玻璃,SCHOTT ZERODUR,k,参数证据[P36],glass_ceramic_unbranded_1030nm.separate_reference_candidates[1].k_W_mK,1.46,1.46,W/(m·K),W/(m·K),无,S11,kept,同上
+P37,微晶玻璃,SCHOTT ZERODUR,n_d,参数证据[P37],glass_ceramic_unbranded_1030nm.separate_reference_candidates[1].n_d,1.5424,1.5424,1,1,无,S11,to_confirm,可见光 d 线折射率，不能直接用作 1030 nm 折射率
+P38,SiC,N掺杂4H-SiC，C面,F_modification_N1,参数证据[P38],sic_4h_cface_1035nm_multishot.threshold_candidates[0],2.35,23500,J/cm²,J/m²,×10000,S02,kept,单脉冲材料改性阈值，单独编号
+P39,SiC,N掺杂4H-SiC，C面,F_structure_change_N1,参数证据[P39],sic_4h_cface_1035nm_multishot.threshold_candidates[1],4.97,49700,J/cm²,J/m²,×10000,S02,kept,单脉冲结构转变阈值，单独编号，不与改性阈值合并
+P40,SiC,N掺杂4H-SiC，C面,Fth_infinity,参数证据[P40],sic_4h_cface_1035nm_multishot.multi_response.Fth_infinity_J_m2,0.7,7000,J/cm²,J/m²,×10000,S02,kept,饱和阈值 F∞
+P41,SiC,N掺杂4H-SiC，C面,k_inc,参数证据[P41],sic_4h_cface_1035nm_multishot.multi_response.k_inc_per_pulse,0.0199,0.0199,1/pulse,1/pulse,无,S02,kept,饱和速率常数
+P42,SiC,N掺杂4H-SiC，C面,delta_effective_mean,参数证据[P42],sic_4h_cface_1035nm_multishot.multi_response.delta_eff_mean_m,22.4,2.24e-08,nm,m,×1e-09,S02,converted,22.4 nm 作为多脉冲拟合有效尺度均值，语义写为 mean_depth_per_effective_pulse
+P43,SiC,N掺杂4H-SiC，C面,reference_repetition_rate,参数证据[P43],sic_4h_cface_1035nm_multishot.reference_protocol.required_laser.repetition_rate_Hz,200,200000,kHz,Hz,×1000,S02,kept,200 kHz 工况
+P44,SiC,上传代码默认（牌号未独立核验）,rho,参数证据[P44],sic_4h_cface_1035nm_multishot.provenance.notes.user_code_defaults.rho_kg_m3,3210,3210,kg/m³,kg/m³,无,USER_CODE,to_confirm,上传代码默认值，未独立校准，不进入执行参数
+P45,SiC,上传代码默认（牌号未独立核验）,Cp,参数证据[P45],sic_4h_cface_1035nm_multishot.provenance.notes.user_code_defaults.Cp_J_kgK,690,690,J/(kg·K),J/(kg·K),无,USER_CODE,to_confirm,同上
+P46,SiC,上传代码默认（牌号未独立核验）,k,参数证据[P46],sic_4h_cface_1035nm_multishot.provenance.notes.user_code_defaults.k_W_mK,370,370,W/(m·K),W/(m·K),无,USER_CODE,to_confirm,同上
+P47,金刚石,单晶CVD,Fth_N1_400fs,参数证据[P47],diamond_scd_cvd_1030nm_400fs.response.threshold_J_m2,8.2,82000,J/cm²,J/m²,×10000,S05,kept,400 fs 分支单独建卡
+P48,金刚石,单晶CVD,Fth_N1_700fs,参数证据[P48],diamond_scd_cvd_1030nm_700fs.response.threshold_J_m2,12.9,129000,J/cm²,J/m²,×10000,S05,kept,700 fs 分支单独建卡，禁止与 400 fs 混合
+P49,金刚石,单晶CVD，N<50ppm,Fth_N1_recent,参数证据[P49],diamond_scd_cvd_1030nm_pulsewidth_unconfirmed.response.threshold_J_m2,2.32,23200,J/cm²,J/m²,×10000,S06,to_confirm,候选值：脉宽未核实，enabled_by_default=false
+P50,金刚石,单晶CVD,delta / incubation,参数证据[P50],diamond_scd_cvd_1030nm_400fs.response.delta_m,,,待补,待补,无,S05,to_confirm,δ 缺失，保持 null
+P51,金刚石,E6 CVD热管理等级（不同供货等级）,k_grade_low,参数证据[P51],diamond_scd_cvd_1030nm_400fs.optional_thermal_backup.k_grade_low_W_mK,1000,1000,W/(m·K),W/(m·K),无,S15,to_confirm,供货等级范围，不是统一值
+P52,金刚石,E6 CVD热管理等级（不同供货等级）,k_grade_high,参数证据[P52],diamond_scd_cvd_1030nm_400fs.optional_thermal_backup.k_grade_high_W_mK,2200,2200,W/(m·K),W/(m·K),无,S15,to_confirm,同上
+P53,金刚石,DDK CVD一般产品,rho,参数证据[P53],diamond_scd_cvd_1030nm_400fs.optional_thermal_backup.rho_kg_m3,3.52,3520,g/cm³,kg/m³,×1000,S16,to_confirm,型号、温度与方向仍需核验
+F02,(研究模板字段),,materials[].response,materials[].response,"response.{kind,output_semantics,fluence_basis,depth_direction,threshold_J_m2,delta_m}",,,,,,,converted,研究模板的 response 判别类型化并补充语义字段
+F02,(研究模板字段),,materials[].aggregate_response,materials[].aggregate_response,response.incubation / history_definition,,,,,,,converted,整体响应拆为孵化定义与历史定义
+F02,(研究模板字段),,materials[].multipulse_response,materials[].multipulse_response,multi_response,,,,,,,converted,多脉冲拟合语义单独登记为 mean_depth_per_effective_pulse
+F02,(研究模板字段),,materials[].readiness,materials[].readiness,capabilities（推导）,,,,,,,converted,不再以 readiness 文本判断能力，改由完整条件推导
+F02,(研究模板字段),,materials[].reference_geometry.spot_diameter_m,materials[].reference_geometry.spot_diameter_m,reference_protocol.required_laser.spot_radius_m,,,,,,,converted,直径 → 1/e² 半径，换算因子 1/2
+F02,(研究模板字段),,materials[].threshold_candidates[],materials[].threshold_candidates[],threshold_candidates[]（含 branch_id）,,,,,,,converted,每个阈值候选分配稳定分支 ID
+F02,(研究模板字段),,normalized_demo,normalized_demo,reference_scales（配置层）,,,,,,,converted,归一化参数移到运行配置，材料卡不再携带 F_ref/delta_ref
+F02,(研究模板字段),,sources[],sources[],provenance.source_ids + data/references 快照,,,,,,,kept,来源条目保留，原文件另存字节快照

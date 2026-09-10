@@ -1,0 +1,111 @@
+{
+  "capabilities": {
+    "cumulative_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "event_depth_increment": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "固定阈值对数核字段完整"
+    },
+    "synthetic_structure": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许生成显式标记的合成结构"
+    },
+    "table_import": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许导入受校验的曲线卡（批次 F / T10 交付）"
+    },
+    "threshold_only": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "提供条件对应阈值"
+    },
+    "track_or_pass_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "volume_per_energy": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    }
+  },
+  "card": {
+    "allowed_run_modes": [
+      "reference_case",
+      "threshold_only",
+      "synthetic_demo"
+    ],
+    "applicability": {
+      "allowed_if": "仅用于测试套件 G01–G04 的数值实现验证",
+      "physical_material_prediction_allowed": false
+    },
+    "capabilities_declared": [
+      "event_depth_increment",
+      "threshold_only"
+    ],
+    "card_version": "1.0.0",
+    "evidence_status": "unverified",
+    "fixture_only": true,
+    "history_definition": {
+      "exposure_count_meaning": "not_applicable",
+      "mode": "none",
+      "note": "人工解析基准关闭全部历史与孵化。"
+    },
+    "id": "analytic_fixture_not_a_material",
+    "identity": {
+      "family": "mathematical_fixture",
+      "grade": null,
+      "material_identity_confirmed_by_user": false
+    },
+    "provenance": {
+      "note": "采用 SI 便于检验单位，只进入测试套件，不出现在真实材料预测列表。",
+      "origin": "ultrafast_laser_demo_execution_spec.md 第 10 节 G01",
+      "source_type": "analytic_test_definition"
+    },
+    "response": {
+      "delta_m": 1e-07,
+      "depth_direction": "surface_normal",
+      "fluence_basis": "incident_surface_peak",
+      "kind": "log_fixed",
+      "output_semantics": "event_depth_increment",
+      "threshold_J_m2": 10000.0
+    },
+    "schema_version": "1.0",
+    "source_equation": "a(r) = delta * [ln(F0/Fth) - 2 r^2 / w^2]_+ ; V = pi w^2 delta / 4 * [ln(F0/Fth)]^2",
+    "source_figure_or_table": "执行细则 10 节 G01 表（人工构造的数学测试核，不是实际材料参数）",
+    "source_type": "analytic_test_definition",
+    "structure_type": "homogeneous",
+    "validity_domain": {
+      "note": "无限域解析解；有限网格体积收敛由 G01 网格细化记录检查。",
+      "physical_material_prediction_allowed": false,
+      "scope": "analytic_all"
+    }
+  },
+  "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
+  "schema_version": "1.0",
+  "watermark": {
+    "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
+    "card_version": "1.0.0",
+    "evidence_status": "unverified",
+    "family": "mathematical_fixture",
+    "grade": null,
+    "identity_confirmed_by_user": false,
+    "material_id": "analytic_fixture_not_a_material",
+    "physical_prediction_allowed": false,
+    "source_type": "analytic_test_definition"
+  }
+}

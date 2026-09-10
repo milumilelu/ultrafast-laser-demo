@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "case_id": "g05_sic_threshold_and_mean_rate",
+  "reference_kind": "sic_threshold_sweep",
+  "label": "g05_sic_reference",
+  "material_id": "sic_4h_cface_1035nm_multishot",
+  "material_card_file": "data/materials/sic_4h_cface_1035nm_multishot.json",
+  "laser": {
+    "wavelength_m": 1.035e-06,
+    "pulse_duration_s": 3e-13,
+    "repetition_rate_Hz": 200000.0
+  },
+  "given": {
+    "peak_fluence_J_m2": 100000.0,
+    "effective_counts": [
+      1.0,
+      2.0,
+      10.0,
+      100.0,
+      720.0,
+      1000000000.0
+    ]
+  },
+  "expected": {
+    "Fth1_J_cm2": 2.35,
+    "Fth_infinity_J_cm2": 0.7,
+    "k_per_pulse": 0.0199,
+    "delta_eff_mean_nm": 22.4
+  },
+  "labels": {
+    "reference_source": "R2 (Micromachines 13(8), 2022, 1291) 式(5)(6)(7)",
+    "run_mode": "reference_case",
+    "physical_depth_prediction": false
+  },
+  "notes": [
+    "G05：SiC 式(6) Fth(1)=2.35 J/cm^2，N -> inf 趋向 0.70 J/cm^2，k=0.0199。",
+    "式(7) A_R 为平均去除率（微槽深度/有效脉冲数），语义 mean_depth_per_effective_pulse。",
+    "protocol_cumulative_depth = A_R * N_eff 仅在该完整照射协议下成立，不自动累加到逐脉冲网格。",
+    "有效 N 由原文直接给出（任务书 3.1）；未做原图/原表数字化，不构成实验复现。"
+  ],
+  "source": {
+    "ids": [
+      "S02",
+      "R2"
+    ],
+    "note": "阈值与平均率参数取自迁移卡 multi_response，不在算例里重复硬编码。"
+  }
+}

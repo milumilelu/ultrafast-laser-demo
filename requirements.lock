@@ -1,0 +1,59 @@
+# ufdemo 已验证环境锁定（批次 E / 2026-09-10）
+# 生成方式：在专用 venv 中 `python -m pip freeze` 后整理；安装顺序无关。
+# 复现：python -m venv envs/ufdemo && envs/ufdemo/Scripts/pip install -r requirements.lock
+#       && envs/ufdemo/Scripts/pip install -e .
+#
+# 版本口径：A–C 放行时只锁核心 + dev；批次 E 追加 ui 及其传递依赖（见分段注释）。
+
+# --- 核心（A–C 必需）------------------------------------------------------
+numpy==2.3.5
+
+# --- 测试与工具（dev）------------------------------------------------------
+pytest==9.1.1
+pluggy==1.6.0
+iniconfig==2.3.0
+packaging==26.3
+Pygments==2.21.0
+colorama==0.4.6
+openpyxl==3.1.5          # 材料参数台账 .xlsx 读写（tools/migrate_materials.py）
+et_xmlfile==2.0.0
+
+# --- 界面（批次 E / T09：pip install -e ".[ui]"）---------------------------
+streamlit==1.63.0
+plotly==7.0.0
+
+# --- 界面传递依赖（streamlit / plotly 带入，随上面两项一并锁定）-------------
+altair==6.2.2
+anyio==4.15.1
+attrs==26.1.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.5.0
+h11==0.16.0
+httptools==0.8.0
+idna==3.19
+itsdangerous==2.2.0
+Jinja2==3.1.6
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+MarkupSafe==3.0.3
+narwhals==2.26.0
+pandas==3.0.5
+pillow==12.3.0
+protobuf==7.36.1
+pyarrow==25.0.1
+pydeck==0.9.3
+python-dateutil==2.9.0.post0
+python-multipart==0.0.32
+referencing==0.37.0
+requests==2.34.2
+rpds-py==2026.6.3
+six==1.17.0
+starlette==1.6.0
+toml==0.10.2
+typing_extensions==4.16.0
+tzdata==2026.3
+urllib3==2.7.0
+uvicorn==0.52.4
+watchdog==6.0.0
+websockets==16.1.1

@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "label": "analytic_line_scan",
+  "run_mode": "reference_case",
+  "unit_system": "SI",
+  "material_id": "analytic_fixture_not_a_material",
+  "material_card_file": "tests/fixtures/analytic_fixture.json",
+  "seed": 20260910,
+  "grid": {
+    "nx": 131,
+    "ny": 71,
+    "dx_m": 1e-06,
+    "dy_m": 1e-06,
+    "center_x_m": 0.0,
+    "center_y_m": 0.0,
+    "origin": "cell_center",
+    "initial_surface": "flat",
+    "initial_height_m": 0.0
+  },
+  "laser": {
+    "wavelength_m": null,
+    "pulse_duration_s": null,
+    "pulse_energy_J": 1.1606702178681694e-05,
+    "repetition_rate_Hz": 100000.0,
+    "spot_radius_m": 1e-05,
+    "focus_xyz_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "direction_unit": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "rayleigh_range_m": null,
+    "m2": null,
+    "power_measurement_location": "sample_surface",
+    "parameter_sources": [
+      "analytic_test_definition"
+    ]
+  },
+  "path": {
+    "t0_s": 0.0,
+    "time_tolerance_s": 1e-12,
+    "segments": [
+      {
+        "segment_id": 0,
+        "pass_id": 0,
+        "start_s": 0.0,
+        "end_s": 7.000000000000001e-05,
+        "start_xyz_m": [
+          -2.9999999999999997e-05,
+          0,
+          0
+        ],
+        "end_xyz_m": [
+          3.9999999999999996e-05,
+          0,
+          0
+        ],
+        "speed_m_s": 0.9999999999999998,
+        "laser_on": true,
+        "label": "line_forward"
+      }
+    ]
+  },
+  "solver": {
+    "mode": "reference",
+    "geometry_feedback": "fixed_geometry",
+    "history_enabled": false,
+    "tail_epsilon": 1e-08,
+    "memory_budget_bytes": 2147483648,
+    "budget_safety_factor": 1.5,
+    "cancel_check_interval": 256,
+    "acceleration": "off",
+    "multiline_incubation": false,
+    "structured_interface": false
+  },
+  "output": {
+    "snapshot_policy": "events",
+    "snapshot_events": [
+      0,
+      3
+    ],
+    "max_snapshots": 8,
+    "max_snapshot_bytes": 268435456,
+    "cross_section": {
+      "axis": "x",
+      "offsets_m": [
+        0.0
+      ]
+    },
+    "roi": [
+      {
+        "name": "center_10um",
+        "radius_m": 1e-05,
+        "center_xy_m": [
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "notes": "G04：v/f = 10 um 间距；段区间 [0, 7/f) 左闭右开，终点 x=+40 um 不产生脉冲。"
+}

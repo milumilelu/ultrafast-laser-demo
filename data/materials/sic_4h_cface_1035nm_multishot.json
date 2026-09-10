@@ -1,0 +1,104 @@
+{
+  "id": "sic_4h_cface_1035nm_multishot",
+  "branch_id": "sic4h_cface_multishot",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "SiC",
+    "grade": "N 掺杂 4H-SiC C 面",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous_dual_threshold",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only"
+  ],
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 23500.0,
+    "threshold_kind": "single_pulse_modification",
+    "delta_m": null
+  },
+  "multi_response": {
+    "kind": "exponential_saturation_effective_N",
+    "output_semantics": "mean_depth_per_effective_pulse",
+    "Fth1_fitted_J_m2": 23500.0,
+    "Fth_infinity_J_m2": 7000.0,
+    "k_inc_per_pulse": 0.0199,
+    "delta_eff_mean_m": 2.24e-08,
+    "formula": "Fth(N)=F_inf+(F1-F_inf)*exp(-k*(N-1)); AR=delta_eff*max(log(F0/Fth(N)),0)",
+    "note": "delta_eff 为多脉冲微槽拟合的有效深度尺度均值，不是每脉冲固定深度。"
+  },
+  "history_definition": {
+    "mode": "effective_N_saturation",
+    "exposure_count_meaning": "effective_count_not_event_index",
+    "history_activation_policy": "未标定扫描条件，默认关闭；逐事件扩展须另标 engineering_extension"
+  },
+  "reference_protocol": {
+    "protocol_id": "sic4h_cface_multishot_reference_N",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 1.035e-06,
+        "rel_tol": 0.01
+      },
+      "pulse_duration_s": {
+        "value": 3e-13,
+        "rel_tol": 0.05
+      },
+      "repetition_rate_Hz": {
+        "value": 200000.0,
+        "rel_tol": 0.02
+      }
+    },
+    "required_history": {
+      "effective_count": 720,
+      "definition": "original_paper_effective_N"
+    },
+    "protocol_note": "首个参考评估器允许直接输入原文的有效 N；完整工况映射须另核原图/原表。"
+  },
+  "source_equation": "式(5) N_eff=K*(2*w0*f)/v；式(6) Fth(N)=F_inf+(F1-F_inf)*exp(-k*(N-1))；式(7) AR=delta_eff*ln(F0/Fth(N))",
+  "source_figure_or_table": "F01 P38-P43（S02 图6、式5–式7）",
+  "validity_domain": {
+    "scope": "reference_protocol_only",
+    "protocol_id": "sic4h_cface_multishot_reference_N",
+    "note": "平均率与有效 N 语义限定；逐事件递推未验证。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "平均去除率不是逐事件增量；δ 为拟合均值，禁止当作每脉冲固定深度。"
+  },
+  "enabled_by_default": true,
+  "threshold_candidates": [
+    {
+      "branch_id": "sic4h_n1_modification",
+      "observable_name": "single_pulse_modification_threshold",
+      "wavelength_nm": 1035,
+      "pulse_duration_fs": 300,
+      "threshold_J_m2": 23500.0,
+      "source": "S02"
+    },
+    {
+      "branch_id": "sic4h_n1_structural_change",
+      "observable_name": "single_pulse_structural_transformation_threshold",
+      "wavelength_nm": 1035,
+      "pulse_duration_fs": 300,
+      "threshold_J_m2": 49700.0,
+      "source": "S02"
+    }
+  ],
+  "limitations": [
+    "改性标记不等于已去除体积。",
+    "不能将高阈值直接替换低阈值拟合后还称原文复现。",
+    "不覆盖 RB-SiC、烧结 SiC 或复合材料颗粒相。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S02"
+    ],
+    "from": "F01 P38-P43；F02 sic4h_cface_1035nm_multishot",
+    "migration_note": "两个阈值观测量分别编号；平均率语义单独登记。"
+  }
+}

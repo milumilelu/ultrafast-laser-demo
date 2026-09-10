@@ -1,0 +1,99 @@
+{
+  "id": "cfrp_t700_yb01_800nm",
+  "branch_id": "cfrp_t700_yb01",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "CFRP",
+    "grade": "T700 / YB01",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "laminated_fiber_composite",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only",
+    "synthetic_demo"
+  ],
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 8400.0,
+    "threshold_kind": "multipulse_fitted_Fth1",
+    "delta_m": null,
+    "incubation": {
+      "kind": "power_law_incubation",
+      "S": 0.8855,
+      "formula": "Fth(N)=Fth1*N^(S-1)"
+    }
+  },
+  "history_definition": {
+    "mode": "power_law_incubation",
+    "exposure_count_meaning": "local_effective_count",
+    "history_activation_policy": "由扫描多脉冲试验反演；未标定条件默认关闭"
+  },
+  "reference_protocol": {
+    "protocol_id": "cfrp_t700_yb01_threshold_only",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 8e-07,
+        "rel_tol": 0.02
+      },
+      "pulse_duration_s": {
+        "value": 9e-14,
+        "rel_tol": 0.05
+      },
+      "repetition_rate_Hz": {
+        "value": 1000.0,
+        "rel_tol": 0.02
+      },
+      "spot_radius_m": {
+        "value": 3e-06,
+        "rel_tol": 0.1
+      }
+    },
+    "required_history": {
+      "effective_count": 1,
+      "definition": "Fth1 反演基准，仅为占位定义"
+    },
+    "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。"
+  },
+  "source_equation": "Fth(N) = Fth1 * N^(S-1)",
+  "source_figure_or_table": "F01 P16-P18（S03）",
+  "validity_domain": {
+    "scope": "reference_protocol_only",
+    "protocol_id": "cfrp_t700_yb01_threshold_only",
+    "note": "仅协议限定阈值展示；绝对深度不开放。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "δ 缺失，只能做协议限定阈值展示与合成铺层。"
+  },
+  "enabled_by_default": true,
+  "phases": [
+    {
+      "name": "resin",
+      "threshold_J_m2": null,
+      "delta_m": null
+    },
+    {
+      "name": "fiber",
+      "threshold_J_m2": null,
+      "delta_m": null
+    }
+  ],
+  "limitations": [
+    "整体阈值不是两相阈值。",
+    "δ 缺失时不输出绝对深度。",
+    "不声称预测分层或热影响区。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S03",
+      "S18",
+      "S21"
+    ],
+    "from": "F01 P16-P21；F02 cfrp_t700_yb01_800nm"
+  }
+}

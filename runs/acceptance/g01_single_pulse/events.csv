@@ -1,0 +1,2 @@
+index,time_s,focus_x_m,focus_y_m,focus_z_m,direction_x,direction_y,direction_z,energy_J,segment_id,pass_id
+0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,1.1606702178681694e-05,0,0

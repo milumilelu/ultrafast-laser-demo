@@ -1,0 +1,73 @@
+{
+  "id": "zirconia_ysz_static_aps8ysz",
+  "branch_id": "ysz_static_single_pulse",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "氧化锆",
+    "grade": "APS 8 wt% YSZ（静态单脉冲试验分支）",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "literature_reported",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only"
+  ],
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 14830.0,
+    "threshold_kind": "single_pulse_static",
+    "delta_m": null,
+    "incubation": {
+      "kind": "power_law_S_of_f",
+      "S_intercept": 0.969,
+      "S_slope_per_kHz": -0.0029,
+      "validity": "f in 10-150 kHz（拟合区间）",
+      "note": "S=0.969-0.0029*f_kHz；频率单位必须 kHz，不得无界外推。"
+    }
+  },
+  "history_definition": {
+    "mode": "power_law_S_of_f",
+    "exposure_count_meaning": "reference_only",
+    "history_activation_policy": "未标定扫描条件，默认关闭"
+  },
+  "source_equation": "Fth(N) = Fth1 * N^(S-1)，S(f)=0.969-0.0029*f_kHz",
+  "source_figure_or_table": "F01 P01/P02/P03（S01）",
+  "validity_domain": {
+    "scope": "unknown",
+    "laser": {
+      "wavelength_nm": 1030,
+      "pulse_duration_fs": 208
+    },
+    "note": "静态脉冲试验，低于 200 kHz 分支；适用材料形态未确认。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "缺 δ，且工件身份未由用户确认；仅作阈值参考。"
+  },
+  "enabled_by_default": true,
+  "threshold_candidates": [
+    {
+      "branch_id": "ysz_static_Fth1",
+      "observable_name": "single_pulse_threshold",
+      "wavelength_nm": 1030,
+      "pulse_duration_fs": 208,
+      "threshold_J_m2": 14830.0,
+      "source": "S01"
+    }
+  ],
+  "limitations": [
+    "静态 Fth1 分支与加工有效分支必须分开保存，不得随意拼接。",
+    "δ 缺失：不得用阈值反推绝对深度。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S01"
+    ],
+    "from": "F01 P01-P03；F02 zirconia_ysz_reference 的静态分支",
+    "migration_note": "原 F02 未区分静态/加工分支，本次拆分并分别编号。"
+  }
+}

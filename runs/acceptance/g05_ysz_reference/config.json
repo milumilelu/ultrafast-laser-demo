@@ -1,0 +1,46 @@
+{
+  "reference_case": {
+    "case_id": "g05_ysz_effective_n_conversion",
+    "expected": {
+      "naive_speed_mm_s": 355.2,
+      "pulse_energy_J": 0.000201464053689406,
+      "pulse_energy_uJ": 201.464053689406,
+      "speed_m_s": 0.2789734276388,
+      "speed_mm_s": 278.9734276388
+    },
+    "given": {
+      "effective_count": 3.0,
+      "peak_fluence_J_m2": 501000.0,
+      "repetition_rate_Hz": 33300.0,
+      "spot_radius_m": 1.6e-05
+    },
+    "label": "g05_ysz_reference",
+    "labels": {
+      "physical_depth_prediction": false,
+      "reference_source": "R1 (JMPT 335, 2025, 118668) 式(9)",
+      "run_mode": "reference_case"
+    },
+    "laser": {
+      "pulse_duration_s": 2.08e-13,
+      "repetition_rate_Hz": 33300.0,
+      "spot_radius_m": 1.6e-05,
+      "wavelength_m": 1.03e-06
+    },
+    "material_card_file": "data/materials/zirconia_ysz_machining_effective_n3.json",
+    "material_id": "zirconia_ysz_machining_effective_n3",
+    "notes": [
+      "G05：YSZ 式(9) 有效 N 换算，w0=16 um、f=33300 Hz、N_eff=3 → v=278.9734276388 mm/s。",
+      "错误换算 2*w0*f/N 会得到 355.2 mm/s，本算例把它作为对照量一并输出，不参与任何物理结论。",
+      "峰值 50.1 J/cm^2、w=16 um 代入 E=F0*pi*w0^2/2 得 201.464053689406 uJ，属条件一致性检查，不是实测能量的精度声明。"
+    ],
+    "reference_kind": "ysz_effective_n",
+    "schema_version": "1.0",
+    "source": {
+      "ids": [
+        "S01",
+        "R1"
+      ],
+      "note": "本算例只复现文献公式换算；未做原图/原表数字化，不构成实验复现。"
+    }
+  }
+}

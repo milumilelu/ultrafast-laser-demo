@@ -1,0 +1,51 @@
+[
+  {
+    "arrays": [
+      "cumulative_fluence",
+      "depth",
+      "exposure_count",
+      "height",
+      "illumination_count",
+      "phase_id"
+    ],
+    "bytes": 316234,
+    "event_index": 0,
+    "file": "snap_0000.npz",
+    "final": false,
+    "pass_id": 0,
+    "time_s": 0.0
+  },
+  {
+    "arrays": [
+      "cumulative_fluence",
+      "depth",
+      "exposure_count",
+      "height",
+      "illumination_count",
+      "phase_id"
+    ],
+    "bytes": 316234,
+    "event_index": 3,
+    "file": "snap_0001.npz",
+    "final": false,
+    "pass_id": 0,
+    "time_s": 3e-05
+  },
+  {
+    "arrays": [
+      "cumulative_fluence",
+      "depth",
+      "exposure_count",
+      "height",
+      "illumination_count",
+      "phase_id"
+    ],
+    "bytes": 316234,
+    "event_count": 7,
+    "event_index": 6,
+    "file": "snap_0002.npz",
+    "final": true,
+    "pass_id": 0,
+    "time_s": 6e-05
+  }
+]

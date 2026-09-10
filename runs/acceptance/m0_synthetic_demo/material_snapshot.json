@@ -1,0 +1,108 @@
+{
+  "capabilities": {
+    "cumulative_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "event_depth_increment": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "固定阈值对数核字段完整"
+    },
+    "synthetic_structure": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许生成显式标记的合成结构"
+    },
+    "table_import": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "允许导入受校验的曲线卡（批次 F / T10 交付）"
+    },
+    "threshold_only": {
+      "available": true,
+      "conditional": false,
+      "missing": [],
+      "reason": "提供条件对应阈值"
+    },
+    "track_or_pass_depth": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    },
+    "volume_per_energy": {
+      "available": false,
+      "conditional": false,
+      "missing": [],
+      "reason": "非逐事件增量语义；禁止进入事件核"
+    }
+  },
+  "card": {
+    "allowed_run_modes": [
+      "synthetic_demo",
+      "threshold_only"
+    ],
+    "applicability": {
+      "physical_material_prediction_allowed": false,
+      "reason": "合成定义：只验证流程、几何与界面。"
+    },
+    "card_version": "1.0.0",
+    "enabled_by_default": true,
+    "evidence_status": "unverified",
+    "fixture_only": true,
+    "history_definition": {
+      "exposure_count_meaning": "not_applicable",
+      "mode": "none"
+    },
+    "id": "synthetic_demo_isotropic",
+    "identity": {
+      "family": "synthetic_demo",
+      "grade": "isotropic_normalized_surface",
+      "material_identity_confirmed_by_user": false
+    },
+    "limitations": [
+      "禁止导出物理 μm 深度。",
+      "禁止据此比较七种材料真实加工速度。"
+    ],
+    "provenance": {
+      "from": "细则 2.2 沙盒规则",
+      "source_ids": []
+    },
+    "response": {
+      "delta_over_delta_ref": 1.0,
+      "depth_direction": "surface_normal",
+      "fluence_basis": "normalized_incident_peak",
+      "kind": "log_fixed",
+      "output_semantics": "event_depth_increment",
+      "threshold_over_F_ref": 1.0
+    },
+    "schema_version": "1.0",
+    "source_equation": "a/F_ref 序列：a = delta_ref*[ln(F/F_ref)]_+（无量纲）",
+    "source_figure_or_table": "执行细则 4.1/4.2 合成模式规定",
+    "source_type": "synthetic_definition",
+    "structure_type": "homogeneous",
+    "validity_domain": {
+      "note": "无量纲合成定义；不赋予真实材料预测意义。",
+      "scope": "analytic_all"
+    }
+  },
+  "card_sha256": "0a9256c8c7000ba8dc62fc653514a3afa921fcf2998a571d4868767e9766cb0c",
+  "schema_version": "1.0",
+  "watermark": {
+    "card_sha256": "0a9256c8c7000ba8dc62fc653514a3afa921fcf2998a571d4868767e9766cb0c",
+    "card_version": "1.0.0",
+    "evidence_status": "unverified",
+    "family": "synthetic_demo",
+    "grade": "isotropic_normalized_surface",
+    "identity_confirmed_by_user": false,
+    "material_id": "synthetic_demo_isotropic",
+    "physical_prediction_allowed": false,
+    "source_type": "synthetic_definition"
+  }
+}

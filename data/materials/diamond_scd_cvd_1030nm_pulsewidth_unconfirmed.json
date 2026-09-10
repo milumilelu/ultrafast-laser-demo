@@ -1,0 +1,72 @@
+{
+  "id": "diamond_scd_cvd_1030nm_pulsewidth_unconfirmed",
+  "branch_id": "diamond_scd_recent_candidate",
+  "card_version": "1.0.0",
+  "identity": {
+    "family": "金刚石",
+    "grade": "单晶 CVD（脉宽未核实候选）",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "net_removal_with_optional_modification_mask",
+  "evidence_status": "unverified",
+  "source_type": "research_card_migration",
+  "allowed_run_modes": [
+    "threshold_only"
+  ],
+  "enabled_by_default": false,
+  "blocked_reason": "2026 年 2.32 J/cm² 候选值的脉宽未核实（仅知 300 kHz），不得设为默认",
+  "response": {
+    "kind": "reference_N_threshold",
+    "output_semantics": "threshold_only",
+    "fluence_basis": "unknown",
+    "depth_direction": "not_applicable",
+    "threshold_J_m2": 23200.0,
+    "threshold_kind": "single_pulse_candidate",
+    "delta_m": null
+  },
+  "history_definition": {
+    "mode": "none",
+    "exposure_count_meaning": "not_applicable"
+  },
+  "reference_protocol": {
+    "protocol_id": "diamond_scd_1030nm_candidate",
+    "required_laser": {
+      "wavelength_m": {
+        "value": 1.03e-06,
+        "rel_tol": 0.01
+      },
+      "pulse_duration_s": {
+        "value": null,
+        "rel_tol": 0.05
+      },
+      "repetition_rate_Hz": {
+        "value": 300000.0,
+        "rel_tol": 0.05
+      }
+    },
+    "required_history": {
+      "effective_count": 1,
+      "definition": "single_pulse"
+    },
+    "protocol_note": "脉宽未核实：完整条件核实前不启用。"
+  },
+  "source_equation": "单脉冲阈值候选（2026）",
+  "source_figure_or_table": "F01 P49（S06）",
+  "validity_domain": {
+    "scope": "unknown",
+    "note": "仅保留在研究记录；脉宽与能流基准未核实。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": false,
+    "reason": "候选值：关键条件未核实。"
+  },
+  "limitations": [
+    "仅作研究记录，不进入默认预测。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S06"
+    ],
+    "from": "F01 P49；F02 diamond threshold_candidates[2]（enabled_by_default=false）"
+  }
+}

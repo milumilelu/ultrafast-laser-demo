@@ -1,0 +1,523 @@
+{
+  "schema_version": "0.1-research-template",
+  "prepared_on": "2026-09-10",
+  "purpose": "七类材料经验几何求解器demo的证据与材料卡模板；不是现有TTM程序可直接加载的配置。",
+  "scope": "表面净去除、浅坑、开放沟槽和栅格面扫描；不保证深孔、裂纹、分层、再沉积、LIPSS或高保真温度。",
+  "global_rules": [
+    "缺失数值保持null；不得由材料名称自动填充。",
+    "单脉冲、N脉冲及加工有效阈值是不同类型。",
+    "引用的Fth原则上按文献入射峰值定义；启用前核对源文能流定义与求解器一致。",
+    "材料卡按波长、脉宽、材料形态、照射历史分版本。",
+    "多脉冲累计拟合与逐脉冲递推不自动等价，必须先做对应文献工况复现。",
+    "归一化演示的深度单位为delta_ref，不能标成真实μm。",
+    "复合材料相分布若由随机生成，必须标记synthetic_microstructure。",
+    "热物性是备用数据，不表示已经具备温度或HAZ预测能力。"
+  ],
+  "normalized_demo": {
+    "allowed": true,
+    "explicit_user_selection_required": true,
+    "fluence_unit": "F_ref",
+    "depth_unit": "delta_ref",
+    "F_ref": 1.0,
+    "delta_ref": 1.0,
+    "parameters_are_physical_material_values": false,
+    "warning": "只验证求解流程、几何与界面，不能据此比较七种材料真实加工速度。"
+  },
+  "materials": [
+    {
+      "id": "zirconia_ysz_reference",
+      "family": "氧化锆",
+      "grade": "论文YSZ相应加工条件，不泛化所有氧化锆",
+      "profile": "homogeneous",
+      "readiness": "reference_multishot_kernel",
+      "laser": {
+        "wavelength_nm": 1030,
+        "pulse_duration_fs": 208,
+        "repetition_rate_Hz": 33300
+      },
+      "response": {
+        "kind": "logarithmic_effective",
+        "threshold_kind": "machining_effective",
+        "Fth_incident_J_m2": 12890.0,
+        "delta_eff_m": 3.9e-07,
+        "reference_effective_pulses": 3,
+        "incubation_enabled": false,
+        "extra_incubation_prohibited_without_refit": true
+      },
+      "reference_geometry": {
+        "spot_diameter_m": 3.2e-05,
+        "peak_fluence_J_m2": 501000
+      },
+      "limitations": [
+        "参考加工条件内起步；不得作为已经验证的任意单脉冲卡。",
+        "静态Fth1=1.483属于另一个试验/拟合分支；不能与本有效核随意拼接。"
+      ],
+      "sources": [
+        "S01"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "alsic_phase_template",
+      "family": "铝基碳化硅",
+      "grade": "SiCp/AA2024候选，实际配方待确认",
+      "profile": "particle_composite",
+      "readiness": "missing_response",
+      "laser_reference": {
+        "wavelength_nm": 1030,
+        "pulse_duration_fs": 800
+      },
+      "microstructure": {
+        "actual_volume_fraction": null,
+        "actual_particle_size_m": null,
+        "synthetic_geometry_example": {
+          "SiC_volume_fraction": 0.45,
+          "mean_particle_diameter_m": 3e-05,
+          "source": "S09",
+          "from_nanosecond_study_geometry_only": true
+        }
+      },
+      "phases": [
+        {
+          "name": "Al_matrix",
+          "Fth_incident_J_m2": null,
+          "delta_eff_m": null
+        },
+        {
+          "name": "SiC_particle",
+          "Fth_incident_J_m2": null,
+          "delta_eff_m": null
+        }
+      ],
+      "interface_correction": null,
+      "sources": [
+        "S07",
+        "S08",
+        "S09"
+      ],
+      "limitations": [
+        "不平均两相阈值；不拿纳秒阈值替代飞秒值；不可将块体4H-SiC直接当成颗粒相实测响应。"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "cfrp_t700_yb01_800nm",
+      "family": "CFRP",
+      "grade": "T700 / YB01",
+      "profile": "laminated_fiber_composite",
+      "readiness": "threshold_only",
+      "laser": {
+        "wavelength_nm": 800,
+        "pulse_duration_fs": 90,
+        "repetition_rate_Hz": 1000
+      },
+      "aggregate_response": {
+        "kind": "power_law_incubation",
+        "Fth1_incident_J_m2": 8400.0,
+        "S": 0.8855,
+        "delta_eff_m": null,
+        "threshold_method": "inferred from multipulse scanning"
+      },
+      "phases": [
+        {
+          "name": "resin",
+          "Fth_incident_J_m2": null,
+          "delta_eff_m": null
+        },
+        {
+          "name": "fiber",
+          "Fth_incident_J_m2": null,
+          "delta_eff_m": null
+        }
+      ],
+      "layup_angles_deg": null,
+      "ply_thickness_m": null,
+      "fiber_volume_fraction": null,
+      "sources": [
+        "S03",
+        "S18",
+        "S21"
+      ],
+      "limitations": [
+        "整体阈值不是两相阈值；δ缺失时不输出绝对深度；不声称预测分层或HAZ。"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "inconel718_1030nm_n10",
+      "family": "高温合金",
+      "grade": "Inconel 718",
+      "profile": "homogeneous",
+      "readiness": "threshold_only",
+      "laser_reference": {
+        "wavelength_nm": 1030,
+        "pulse_duration_fs": 267,
+        "duration_note": "同文加工试验约267fs"
+      },
+      "response": {
+        "kind": "reference_N_threshold",
+        "reference_pulses": 10,
+        "Fth_incident_J_m2": 1400.0,
+        "Fth1_incident_J_m2": null,
+        "S": null,
+        "delta_eff_m": null
+      },
+      "optional_thermal": {
+        "rho_kg_m3": 8190.0,
+        "Cp_J_kgK": 435.0,
+        "k_W_mK": 11.4,
+        "temperature_note": "rho,k@20°C; Cp@21°C",
+        "sources": [
+          "S12",
+          "S13"
+        ]
+      },
+      "sources": [
+        "S04"
+      ],
+      "limitations": [
+        "不能把N10阈值当成Fth1；不是任意镍基/钴基高温合金卡。"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "glass_ceramic_template",
+      "family": "微晶玻璃",
+      "grade": null,
+      "profile": "homogeneous_effective",
+      "readiness": "missing_response",
+      "response": {
+        "Fth_incident_J_m2": null,
+        "delta_eff_m": null,
+        "incubation": null
+      },
+      "separate_reference_candidates": [
+        {
+          "grade": "dental glass-ceramic, brand unconfirmed",
+          "wavelength_nm": 1030,
+          "pulse_duration_fs_range": [
+            550,
+            600
+          ],
+          "source": "S10"
+        },
+        {
+          "grade": "SCHOTT ZERODUR",
+          "thermal_only": true,
+          "rho_kg_m3": 2530,
+          "Cp_J_kgK": 800,
+          "k_W_mK": 1.46,
+          "reference_temperature_K": 293.15,
+          "source": "S11"
+        }
+      ],
+      "sources": [
+        "S10",
+        "S11"
+      ],
+      "limitations": [
+        "禁止将石英、硼硅玻璃或镀膜损伤阈值代入。",
+        "透明材料内部改性、贝塞尔切割和裂纹扩展不在表面高度场demo范围。"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "sic4h_cface_1035nm_multishot",
+      "family": "SiC",
+      "grade": "N掺杂4H-SiC C面",
+      "profile": "homogeneous_dual_threshold",
+      "readiness": "reference_multishot_kernel",
+      "laser": {
+        "wavelength_nm": 1035,
+        "pulse_duration_fs": 300,
+        "repetition_rate_Hz": 200000
+      },
+      "single_pulse_observations": {
+        "modification_threshold_J_m2": 23500,
+        "structural_transformation_threshold_J_m2": 49700
+      },
+      "multipulse_response": {
+        "kind": "exponential_saturation_effective_N",
+        "Fth1_fitted_J_m2": 23500,
+        "Fth_infinity_J_m2": 7000,
+        "k_inc_per_pulse": 0.0199,
+        "delta_eff_mean_m": 2.24e-08,
+        "formula": "Fth(N)=F_inf+(F1-F_inf)*exp(-k_inc*(N-1)); AR=delta_eff*max(log(F0/Fth(N)),0)"
+      },
+      "sources": [
+        "S02"
+      ],
+      "limitations": [
+        "δ为多脉冲微槽拟合均值；不能把它解释为每脉冲固定深度。",
+        "原文有效N/平均去除率与逐事件递推须分别验证；不直接覆盖RB-SiC、烧结SiC或复合材料颗粒。"
+      ],
+      "material_identity_confirmed_by_user": false
+    },
+    {
+      "id": "diamond_scd_cvd_1030nm",
+      "family": "金刚石",
+      "grade": "单晶CVD",
+      "profile": "net_removal_with_optional_modification_mask",
+      "readiness": "threshold_only",
+      "threshold_candidates": [
+        {
+          "wavelength_nm": 1030,
+          "pulse_duration_fs": 400,
+          "Fth1_incident_J_m2": 82000,
+          "source": "S05"
+        },
+        {
+          "wavelength_nm": 1030,
+          "pulse_duration_fs": 700,
+          "Fth1_incident_J_m2": 129000,
+          "source": "S05"
+        },
+        {
+          "wavelength_nm": 1030,
+          "pulse_duration_fs": null,
+          "repetition_rate_Hz": 300000,
+          "Fth1_incident_J_m2": 23200,
+          "source": "S06",
+          "enabled_by_default": false
+        }
+      ],
+      "response": {
+        "delta_eff_m": null,
+        "incubation": null
+      },
+      "sources": [
+        "S05",
+        "S06"
+      ],
+      "limitations": [
+        "不混合取平均不同研究的阈值；最新2.32的脉宽未核。",
+        "改性标记不等于石墨化定量模拟；仅净去除高度场不预测隆起。",
+        "PCD、NPD和含结合剂金刚石另建卡。"
+      ],
+      "material_identity_confirmed_by_user": false
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "year": 2025,
+      "title": "Femtosecond laser ablation of zirconia-based ceramic materials: From ablation mechanism to modelling of large-scale processing",
+      "doi": "10.1016/j.jmatprotec.2024.118668",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0924013624003868",
+      "access": "出版社摘要；作者公开全文",
+      "notes": "1030 nm/208 fs；APS 8YSZ测试与3YSZ牙冠加工验证须区分。",
+      "accessed_on": "2026-09-10",
+      "fulltext_url": "https://www.researchgate.net/publication/385894537_Femtosecond_laser_ablation_of_zirconia-based_ceramic_materials_From_ablation_mechanism_to_modelling_of_large-scale_processing"
+    },
+    {
+      "id": "S02",
+      "year": 2022,
+      "title": "Experimental Investigation on Ablation of 4H-SiC by Infrared Femtosecond Laser",
+      "doi": "10.3390/mi13081291",
+      "url": "https://www.mdpi.com/2072-666X/13/8/1291",
+      "access": "公开全文",
+      "notes": "N掺杂4H-SiC C面；1035 nm/300 fs。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S03",
+      "year": 2023,
+      "title": "Investigation of Heat Accumulation in Femtosecond Laser Drilling of Carbon Fiber-Reinforced Polymer",
+      "doi": "10.3390/mi14050913",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10220601/",
+      "access": "公开全文",
+      "notes": "T700/YB01；800 nm/90 fs/1 kHz；整体等效参数，不是树脂和纤维分别的参数。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S04",
+      "year": 2023,
+      "title": "Femtosecond laser processing of advanced technical materials",
+      "doi": "10.14311/AP.2023.63.0036",
+      "url": "https://ojs.cvut.cz/ojs/index.php/ap/article/download/8360/6509",
+      "access": "公开PDF，图4已目视核验",
+      "notes": "Inconel718阈值为N=10；加工试验约267 fs。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S05",
+      "year": 2019,
+      "title": "Experimental and theoretical investigation of ultrashort pulsed laser ablation of diamond",
+      "doi": "10.2351/1.5096088",
+      "url": "https://doi.org/10.2351/1.5096088",
+      "access": "出版社摘要",
+      "notes": "1030 nm单晶CVD金刚石；400/700 fs分别报告单脉冲阈值。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S06",
+      "year": 2026,
+      "title": "Ablation characteristic of single-crystal diamond by femtosecond laser processing",
+      "doi": "10.1016/j.mssp.2026.110774",
+      "url": "https://www.sciencedirect.com/science/article/pii/S1369800126003707",
+      "access": "出版社摘要和部分章节",
+      "notes": "2026年9月卷期；1030 nm/300 kHz；当前可访问内容未核实脉宽，不作为默认卡。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S07",
+      "year": 2020,
+      "title": "Investigation on femtosecond laser ablative processing of SiCp/AA2024 composites",
+      "doi": "10.1016/j.jmapro.2019.08.021",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S1526612518312398",
+      "access": "出版社摘要",
+      "notes": "1030 nm/800 fs；本轮未取得可直接填写的完整阈值/去除尺度参数。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S08",
+      "year": 2026,
+      "title": "Interaction mechanism of femtosecond laser and aluminum-based silicon carbide metal matrix composites",
+      "doi": "10.1016/j.matchemphys.2026.132245",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0254058426002361",
+      "access": "出版社摘要",
+      "notes": "直接相关的新研究；机理研究不能替代完整经验响应标定。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S09",
+      "year": 2022,
+      "title": "Effect of laser pulse energy deposition method on nanosecond laser scanning ablation of SiCp/AA2024 composites",
+      "doi": "10.1016/j.jmapro.2022.09.006",
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S1526612522006272",
+      "access": "出版社摘要及材料章节片段",
+      "notes": "仅借45 vol%/30 μm微结构信息；纳秒去除参数不得用于飞秒卡。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S10",
+      "year": 2020,
+      "title": "Femtosecond laser micro-milling dental glass ceramics: An experimental analysis and COMSOL finite element simulation",
+      "doi": "10.1016/j.ceramint.2020.05.291",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0272884220316114",
+      "access": "出版社摘要和部分章节",
+      "notes": "牙科微晶玻璃；1030 nm/550–600 fs；未取得完整Fth/δ/S。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S11",
+      "year": null,
+      "title": "ZERODUR technical details (manufacturer specification)",
+      "doi": "",
+      "url": "https://www.schott.com/en-gb/products/zerodur-p1000269/technical-details",
+      "access": "制造商技术资料",
+      "notes": "20°C热物性；nd对应可见光d线，不能直接用作1030 nm折射率。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S12",
+      "year": 2007,
+      "title": "INCONEL alloy 718 technical bulletin, SMC-045",
+      "doi": "",
+      "url": "https://www.specialmetals.com/documents/technical-bulletins/inconel/inconel-alloy-718.pdf",
+      "access": "制造商PDF，第1页表2已目视核验",
+      "notes": "Cp=435 J/(kg·K)@21°C；熔化区间1260–1336°C。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S13",
+      "year": null,
+      "title": "Inconel 718 — Central Wire product data",
+      "doi": "",
+      "url": "https://centralwire.com/high-performance-alloys/nickel-alloys/inconel-718/",
+      "access": "制造商技术资料",
+      "notes": "20°C：密度8.19 g/cm³，导热率11.4 W/(m·K)。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S14",
+      "year": null,
+      "title": "Precision Ceramics zirconia material properties",
+      "doi": "",
+      "url": "https://precision-ceramics.com/eu/materials/zirconia/",
+      "access": "制造商技术资料",
+      "notes": "3YZ：ρ6.05 g/cm³，k2 W/(m·K)@25°C；不是APS 8YSZ涂层。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S15",
+      "year": null,
+      "title": "Element Six thermal management CVD diamond",
+      "doi": "",
+      "url": "https://www.e6.com/products/thermal-management",
+      "access": "制造商产品资料",
+      "notes": "不同供货等级k1000–2200 W/(m·K)，不是所有金刚石的统一值。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S16",
+      "year": null,
+      "title": "General Properties of CVD Diamond — Delaware Diamond Knives",
+      "doi": "",
+      "url": "https://ddk.com/cvd-diamond/general-properties-of-cvd-diamond-2/",
+      "access": "制造商产品资料",
+      "notes": "ρ3.52 g/cm³；型号、温度与方向仍需核验。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S17",
+      "year": null,
+      "title": "Aluminum Silicon Carbide Structural Parts — Stanford Advanced Materials",
+      "doi": "",
+      "url": "https://www.samaterials.com/aluminium/1882-aluminum-silicon-carbide-structural-parts.html",
+      "access": "供应商自有产品资料",
+      "notes": "ZL101A+65vol%SiC；页面称数值为理论参考，不能与AA2024实测卡混配。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S18",
+      "year": 2025,
+      "title": "Mechanism of selective texturing of CFRP by femtosecond laser",
+      "doi": "10.1016/j.compositesb.2024.112000",
+      "url": "https://www.sciencedirect.com/science/article/pii/S1359836824008138",
+      "access": "出版社摘要和部分章节",
+      "notes": "1030 nm；12–13 J/cm²为选择性加工工况，不是阈值；树脂/纤维及方向差异。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S19",
+      "year": 2026,
+      "title": "Coupling mechanism of dynamic incidence angle and multipulse accumulation in femtosecond laser ablation of complex spatial surfaces",
+      "doi": "10.1038/s41598-026-53544-x",
+      "url": "https://www.nature.com/articles/s41598-026-53544-x",
+      "access": "公开全文；2026-05-19发表",
+      "notes": "借鉴动态角度、光斑投影与偏振响应；不能宣称已验证七种材料。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S20",
+      "year": 2025,
+      "title": "Ultrashort 30 fs Laser Photoablation for High-Precision and Damage-Free Diamond Machining",
+      "doi": "10.1021/acsphotonics.5c00425",
+      "url": "https://doi.org/10.1021/acsphotonics.5c00425",
+      "access": "出版社摘要",
+      "notes": "800 nm/30 fs/1 kHz，10–50 J/cm²，100–10000脉冲；上述为加工工况，不是阈值。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "S21",
+      "year": 2023,
+      "title": "Experimental probe into the femtosecond laser ablation thresholds in carbon fiber reinforced polymer and assessment of the measurement theories",
+      "doi": "10.1002/pc.27486",
+      "url": "https://4spepublications.onlinelibrary.wiley.com/doi/full/10.1002/pc.27486",
+      "access": "出版社摘要",
+      "notes": "支持分别处理纤维、树脂阈值及扫描/偏振方向；本轮未核到完整数值。",
+      "accessed_on": "2026-09-10"
+    },
+    {
+      "id": "USER_CODE",
+      "year": null,
+      "accessed_on": "2026-09-10",
+      "title": "用户上传 ttm_carrier_drilling_q4_axisymmetric.py",
+      "doi": "",
+      "url": "",
+      "access": "当前对话源码 Config 第119–121行",
+      "notes": "历史默认SiC物性，仅保存出处；未做独立验证。"
+    }
+  ]
+}

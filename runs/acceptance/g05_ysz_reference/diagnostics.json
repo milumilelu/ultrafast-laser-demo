@@ -1,0 +1,88 @@
+{
+  "diagnostics": {
+    "event_model_touched": false,
+    "reference": {
+      "case_id": "g05_ysz_effective_n_conversion",
+      "condition_match": "matched_card_protocol",
+      "effective_count": {
+        "definition": "area_equivalent_ysz_eq9",
+        "formula": "N_eff,YSZ = (pi/4) * (2*w0*f) / v",
+        "inputs": {
+          "event_count": null,
+          "repetition_rate_Hz": 33300.0,
+          "speed_m_s": 0.2789734276387736,
+          "spot_radius_m": 1.6e-05
+        },
+        "note": "有效次数；不等于通用路径生成器的事件总数 event_count。",
+        "unit": "1",
+        "value": 3.0
+      },
+      "engineering_extension": null,
+      "event_count": null,
+      "event_kernel_allowed": false,
+      "evidence_status": "literature_reported",
+      "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
+      "labels": {
+        "card_sha256": "d2d273ea2e9970adffd40d73dc296006fd3f7cedbafd5fbd2752166e542b5fc4",
+        "card_version": "1.0.0",
+        "evidence_status": "literature_reported",
+        "material_id": "zirconia_ysz_machining_effective_n3",
+        "physical_depth_prediction": false,
+        "physical_prediction_allowed": true,
+        "reference_source": "R1 (JMPT 335, 2025, 118668) 式(9)",
+        "result_class": "reference_evaluation",
+        "run_mode": "reference_case",
+        "source_type": "research_card_migration",
+        "synthetic": false
+      },
+      "material_id": "zirconia_ysz_machining_effective_n3",
+      "notes": [
+        "本算例只做运动学/条件换算（有效 N、扫描速度、脉冲能量），不产生任何去除深度。",
+        "输出语义记为 threshold_only（不产生深度）；有效 N 换算没有对应的深度语义。",
+        "YSZ 式(9) 是面积等效有效 N；SiC 式(5) 另含扫描遍数 K，两者不可互换。",
+        "有效 N 不等于通用路径生成器产出的事件总数 event_count。"
+      ],
+      "output_semantics": "threshold_only",
+      "output_semantics_zh": "阈值/分类观测（不产生深度）",
+      "protocol_id": "ysz_crown_machining_effective_n3",
+      "reference_kind": "ysz_effective_n",
+      "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
+      "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
+      "units": {
+        "effective_count": "1",
+        "naive_speed_m_s": "m/s",
+        "naive_speed_mm_s": "mm/s",
+        "peak_fluence_J_cm2": "J/cm^2",
+        "peak_fluence_J_m2": "J/m^2",
+        "pulse_energy_J": "J",
+        "pulse_energy_uJ": "uJ",
+        "speed_m_s": "m/s",
+        "speed_mm_s": "mm/s"
+      },
+      "values": {
+        "effective_count": 3.0,
+        "effective_count_definition": "area_equivalent_ysz_eq9",
+        "naive_minus_correct_rel": 0.27323954473516276,
+        "naive_speed_m_s": 0.35519999999999996,
+        "naive_speed_mm_s": 355.19999999999993,
+        "peak_fluence_J_cm2": 50.1,
+        "peak_fluence_J_m2": 501000.0,
+        "pulse_energy_J": 0.00020146405368940621,
+        "pulse_energy_uJ": 201.4640536894062,
+        "speed_m_s": 0.2789734276387736,
+        "speed_mm_s": 278.97342763877356
+      },
+      "verified_by_experiment": false,
+      "verified_by_formula": true,
+      "warnings": []
+    }
+  },
+  "elapsed_s": 0.0,
+  "errors": [],
+  "events_processed": 0,
+  "events_total": 0,
+  "removal_available": false,
+  "run_id": "g05_ysz_reference",
+  "status": "completed",
+  "warnings": []
+}

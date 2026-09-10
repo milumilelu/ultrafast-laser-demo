@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ufdemo"
+version = "0.3.0-e1"
+description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary-research" }
+dependencies = [
+  # 实际安装后锁定（见 requirements.lock）；此处只给出下限，不写“全部最新版”
+  "numpy>=1.24,<3",
+]
+
+[project.optional-dependencies]
+table = ["scipy>=1.10"]          # 批次 F（T10）查表与 PCHIP
+ui = ["streamlit>=1.30", "plotly>=5.18"]   # 批次 E（T09）
+accel = ["numba>=0.58"]          # 批次 I（T16），可选；缺失时回退 NumPy
+dev = ["pytest>=7", "openpyxl>=3.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "g01: G01 单脉冲解析基准",
+  "g02: G02 十脉冲线性叠加",
+  "g03: G03 零输入/边界/阈值",
+  "g04: G04 路径与观测算子",
+  "g05: G05 文献语义回归（YSZ/SiC 参考评估器）",
+  "g06: G06 两相与铺层红线（批次 G，未实施）",
+  "g07: G07 斜入射与表面几何（批次 J，未实施）",
+  "g08: G08 分组模式与逐脉冲一致（批次 I，未实施）",
+  "g09: G09 查表/导出/界面（界面 E 已交付；查表 F 未实施）",
+]

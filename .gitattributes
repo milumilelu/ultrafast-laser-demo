@@ -1,0 +1,12 @@
+# 统一换行，避免 Windows/Linux 协作时的整文件 diff 噪声
+* text=auto eol=lf
+
+# 明确标记二进制，禁止行尾转换与文本 diff
+*.npz  binary
+*.xlsx binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+
+# 生成的运行结果：diff 无意义且体积可观
+runs/**/*.npz binary

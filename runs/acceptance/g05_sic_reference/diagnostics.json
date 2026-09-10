@@ -1,0 +1,143 @@
+{
+  "diagnostics": {
+    "event_model_touched": false,
+    "reference": {
+      "case_id": "g05_sic_threshold_and_mean_rate",
+      "condition_match": "matched_card_protocol",
+      "effective_count": null,
+      "engineering_extension": "原文平均去除率 → 逐事件模型属工程外推，需另记 engineering_extension 并单独验证；本模块不做该转换。",
+      "event_count": null,
+      "event_kernel_allowed": false,
+      "evidence_status": "literature_reported",
+      "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
+      "labels": {
+        "card_sha256": "e804f570ea62dbbdd62104d71e2972f53344290f5cf6244b2c63612d3729387a",
+        "card_version": "1.0.0",
+        "evidence_status": "literature_reported",
+        "material_id": "sic_4h_cface_1035nm_multishot",
+        "physical_depth_prediction": false,
+        "physical_prediction_allowed": false,
+        "reference_source": "R2 (Micromachines 13(8), 2022, 1291) 式(5)(6)(7)",
+        "result_class": "reference_evaluation",
+        "run_mode": "reference_case",
+        "source_type": "research_card_migration",
+        "synthetic": false
+      },
+      "material_id": "sic_4h_cface_1035nm_multishot",
+      "notes": [
+        "式(6) Fth(N) 与式(7) 平均率 A_R 按原文定义复现；delta_eff 为拟合有效尺度均值。",
+        "标量字段取 primary 行（优先材料卡声明的协议有效 N，此处 720.0），完整 N 扫描见 values.sweep。",
+        "protocol_cumulative_depth = A_R * N_eff 仅在该完整协议下成立，不得逐脉冲重复累加。",
+        "N=1e9 探针仅用于核对 Fth(N) -> F_inf 的极限，其累计深度无物理意义。",
+        "改性阈值（2.35 J/cm^2）与结构转变阈值（4.97 J/cm^2）是两个观测量，不可互换。"
+      ],
+      "output_semantics": "mean_depth_per_effective_pulse",
+      "output_semantics_zh": "给定历史下的平均去除率（不可直接加到表面）",
+      "protocol_id": "sic4h_cface_multishot_reference_N",
+      "reference_kind": "sic_threshold_sweep",
+      "source_equation": "式(5) N_eff=K*(2*w0*f)/v；式(6) Fth(N)=F_inf+(F1-F_inf)*exp(-k*(N-1))；式(7) AR=delta_eff*ln(F0/Fth(N))",
+      "source_figure_or_table": "F01 P38-P43（S02 图6、式5–式7）",
+      "units": {
+        "Fth1_J_cm2": "J/cm^2",
+        "Fth1_J_m2": "J/m^2",
+        "Fth_infinity_J_cm2": "J/cm^2",
+        "Fth_infinity_J_m2": "J/m^2",
+        "delta_eff_mean_m": "m",
+        "effective_count": "1",
+        "k_per_pulse": "1/pulse",
+        "mean_depth_per_effective_pulse_m": "m/effective_pulse",
+        "mean_depth_per_effective_pulse_nm": "nm/effective_pulse",
+        "peak_fluence_J_cm2": "J/cm^2",
+        "peak_fluence_J_m2": "J/m^2",
+        "protocol_cumulative_depth_m": "m",
+        "protocol_cumulative_depth_um": "um",
+        "threshold_J_cm2": "J/cm^2",
+        "threshold_J_m2": "J/m^2"
+      },
+      "values": {
+        "Fth1_J_cm2": 2.35,
+        "Fth1_J_m2": 23500.0,
+        "Fth_infinity_J_cm2": 0.7,
+        "Fth_infinity_J_m2": 7000.0,
+        "delta_eff_mean_m": 2.24e-08,
+        "effective_count": 720.0,
+        "k_per_pulse": 0.0199,
+        "mean_depth_per_effective_pulse_m": 5.956739256429533e-08,
+        "mean_depth_per_effective_pulse_nm": 59.567392564295325,
+        "peak_fluence_J_cm2": 10.0,
+        "peak_fluence_J_m2": 100000.0,
+        "protocol_cumulative_depth_m": 4.288852264629264e-05,
+        "protocol_cumulative_depth_um": 42.888522646292635,
+        "sweep": [
+          {
+            "effective_count": 1.0,
+            "mean_depth_per_effective_pulse_m": 3.243900273237071e-08,
+            "mean_depth_per_effective_pulse_nm": 32.43900273237071,
+            "protocol_cumulative_depth_m": 3.243900273237071e-08,
+            "protocol_cumulative_depth_um": 0.03243900273237071,
+            "threshold_J_cm2": 2.35,
+            "threshold_J_m2": 23500.0
+          },
+          {
+            "effective_count": 2.0,
+            "mean_depth_per_effective_pulse_m": 3.2751053057600166e-08,
+            "mean_depth_per_effective_pulse_nm": 32.75105305760017,
+            "protocol_cumulative_depth_m": 6.550210611520033e-08,
+            "protocol_cumulative_depth_um": 0.06550210611520033,
+            "threshold_J_cm2": 2.3174895518241505,
+            "threshold_J_m2": 23174.895518241505
+          },
+          {
+            "effective_count": 10.0,
+            "mean_depth_per_effective_pulse_m": 3.517893149444824e-08,
+            "mean_depth_per_effective_pulse_nm": 35.178931494448236,
+            "protocol_cumulative_depth_m": 3.517893149444824e-07,
+            "protocol_cumulative_depth_um": 0.3517893149444824,
+            "threshold_J_cm2": 2.0794367834293515,
+            "threshold_J_m2": 20794.367834293516
+          },
+          {
+            "effective_count": 100.0,
+            "mean_depth_per_effective_pulse_m": 5.320154345169414e-08,
+            "mean_depth_per_effective_pulse_nm": 53.20154345169414,
+            "protocol_cumulative_depth_m": 5.320154345169414e-06,
+            "protocol_cumulative_depth_um": 5.320154345169414,
+            "threshold_J_cm2": 0.9300808035240392,
+            "threshold_J_m2": 9300.808035240392
+          },
+          {
+            "effective_count": 720.0,
+            "mean_depth_per_effective_pulse_m": 5.956739256429533e-08,
+            "mean_depth_per_effective_pulse_nm": 59.567392564295325,
+            "protocol_cumulative_depth_m": 4.288852264629264e-05,
+            "protocol_cumulative_depth_um": 42.888522646292635,
+            "threshold_J_cm2": 0.7000010082194416,
+            "threshold_J_m2": 7000.010082194415
+          },
+          {
+            "effective_count": 1000000000.0,
+            "mean_depth_per_effective_pulse_m": 5.9567424827294224e-08,
+            "mean_depth_per_effective_pulse_nm": 59.567424827294225,
+            "protocol_cumulative_depth_m": 59.567424827294225,
+            "protocol_cumulative_depth_um": 59567424.82729422,
+            "threshold_J_cm2": 0.7,
+            "threshold_J_m2": 7000.0
+          }
+        ],
+        "threshold_J_cm2": 0.7000010082194416,
+        "threshold_J_m2": 7000.010082194415
+      },
+      "verified_by_experiment": false,
+      "verified_by_formula": true,
+      "warnings": []
+    }
+  },
+  "elapsed_s": 0.0,
+  "errors": [],
+  "events_processed": 0,
+  "events_total": 0,
+  "removal_available": false,
+  "run_id": "g05_sic_reference",
+  "status": "completed",
+  "warnings": []
+}
