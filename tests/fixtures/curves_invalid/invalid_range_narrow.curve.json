@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "curve_id": "invalid_range_narrow",
+  "material_id": "analytic_fixture_not_a_material",
+  "material_identity": {
+    "family": "mathematical_fixture",
+    "grade": null
+  },
+  "x_quantity": {
+    "name": "peak_fluence",
+    "unit": "J/cm^2",
+    "kind": "fluence"
+  },
+  "y_quantity": {
+    "name": "removal_depth_per_pulse",
+    "unit": "m",
+    "kind": "depth"
+  },
+  "output_semantics": "event_depth_increment",
+  "depth_direction": "surface_normal",
+  "fixed_conditions": {
+    "repetition_rate_Hz": {
+      "value": 1000.0,
+      "rel_tol": 0.0
+    }
+  },
+  "protocol": {
+    "protocol_id": "invalid_fixture"
+  },
+  "source_figure_or_table": "无效夹具（故意构造，仅用于校验测试）",
+  "valid_range": {
+    "x": [
+      1.0,
+      20.0
+    ],
+    "note": "故意窄于数据"
+  },
+  "points_file": "invalid_range_narrow.points.csv",
+  "duplicate_policy": "reject",
+  "evidence_status": "unverified",
+  "source_type": "analytic_test_definition"
+}

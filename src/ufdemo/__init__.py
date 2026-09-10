@@ -8,9 +8,12 @@
   **不求解网格，不进入逐事件主循环**）
 * E（T09 界面）：``ui_service``（纯逻辑，不导入 Streamlit）+ ``app.py``
   （Streamlit 渲染层）
+* F（T10 查表）：``tables``（曲线 schema、分段线性/保形 PCHIP 插值、越界处理、
+  语义路由；**不接入逐事件主循环**）
 
-尚未实现（按批次推进）：``accelerators``（I）、``geometry``（J）、查表（F）、
-合成相结构（G）。科学核心不导入 Streamlit 或 Plotly，也不通过全局 UI 状态取得输入。
+尚未实现（按批次推进）：``accelerators``（I）、``geometry``（J）、
+合成相结构（G）、逐事件核查表导入（H）。科学核心不导入 Streamlit 或 Plotly，
+也不通过全局 UI 状态取得输入。
 """
 
 from __future__ import annotations
@@ -18,10 +21,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-__all__ = ["__version__", "SCHEMA_VERSION", "project_root", "default_runs_dir"]
+__all__ = [
+    "__version__",
+    "SCHEMA_VERSION",
+    "project_root",
+    "default_material_dir",
+    "default_runs_dir",
+    "default_curves_dir",
+]
 
-# M0 放行版本为 0.1.0-m0；批次 D 之后升到 0.2.0；批次 E（界面）作为候选版本。
-__version__ = "0.3.0-e1"
+# M0 放行版本为 0.1.0-m0；批次 D 之后升到 0.2.0；批次 E 为 0.3.0-e1；
+# 批次 F（查表）作为候选版本 0.4.0-f1。
+__version__ = "0.4.0-f1"
 
 from .config import SCHEMA_VERSION  # noqa: E402  (放在 __version__ 之后以免循环)
 
@@ -45,3 +56,11 @@ def default_runs_dir() -> Path:
     if override:
         return Path(override)
     return project_root() / "runs"
+
+
+def default_curves_dir() -> Path:
+    """默认响应曲线目录（批次 F 的查表卡：``*.curve.json`` + ``*.points.csv``）。"""
+    override = os.environ.get("UFDEMO_CURVES_DIR")
+    if override:
+        return Path(override)
+    return project_root() / "data" / "curves"

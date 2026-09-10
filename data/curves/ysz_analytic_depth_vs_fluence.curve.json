@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "curve_id": "ysz_analytic_depth_vs_fluence",
+  "material_id": "analytic_fixture_not_a_material",
+  "material_identity": {
+    "family": "mathematical_fixture",
+    "grade": null,
+    "material_identity_confirmed_by_user": false
+  },
+  "x_quantity": {
+    "name": "peak_fluence",
+    "unit": "J/cm^2",
+    "label": "峰值能流（入射表面峰值）",
+    "kind": "fluence"
+  },
+  "y_quantity": {
+    "name": "removal_depth_per_pulse",
+    "unit": "m",
+    "label": "单脉冲去除深度",
+    "kind": "depth"
+  },
+  "output_semantics": "event_depth_increment",
+  "depth_direction": "surface_normal",
+  "fluence_basis": "incident_surface_peak",
+  "fixed_conditions": {
+    "wavelength_m": {
+      "value": null,
+      "rel_tol": null,
+      "note": "解析 fixture 未定义波长"
+    },
+    "pulse_duration_s": {
+      "value": null,
+      "rel_tol": null,
+      "note": "解析 fixture 未定义脉宽"
+    },
+    "repetition_rate_Hz": {
+      "value": 1000.0,
+      "rel_tol": 0.0
+    },
+    "spot_radius_m": {
+      "value": 1e-05,
+      "rel_tol": 0.0
+    },
+    "history": {
+      "value": "none",
+      "note": "人工解析基准关闭全部历史与孵化"
+    },
+    "environment": {
+      "value": "not_applicable"
+    }
+  },
+  "protocol": {
+    "protocol_id": "analytic_single_pulse_definition",
+    "required_history": {
+      "mode": "none"
+    },
+    "protocol_note": "式 a=delta*ln(F/Fth) 的单脉冲解析定义；不是材料数据。"
+  },
+  "source_figure_or_table": "执行细则 10 节 G01 解析定义（人工构造，非文献图）",
+  "valid_range": {
+    "x": [
+      1.0,
+      40.0
+    ],
+    "note": "Fth=1 J/cm^2 起；低于 Fth 的深度为 0（由阈值律支持，不是越界填零）"
+  },
+  "points_file": "ysz_analytic_depth_vs_fluence.points.csv",
+  "duplicate_policy": "reject",
+  "evidence_status": "unverified",
+  "source_type": "analytic_test_definition",
+  "source": {
+    "source_ids": []
+  },
+  "notes": [
+    "本曲线用于**数值实现验证**：节点处线性插值应精确等于解析式。",
+    "节点之间的线性插值与解析对数式不同，这是分段线性的固有近似，不是误差。"
+  ],
+  "limitations": [
+    "解析 fixture 不是材料卡数据；不得据此输出材料物理预测。",
+    "低于 Fth 的深度为 0 来自解析阈值律，不适用于没有独立阈值律的曲线。"
+  ]
+}

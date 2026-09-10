@@ -1,12 +1,13 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D/E）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D/E/F）
 
-> 版本：`0.3.0-e1`｜日期：2026-09-10｜状态：**批次 A–E 已实施并通过验收；M0 已放行，M1 条件齐备待审批**
+> 版本：`0.4.0-f1`｜日期：2026-09-10｜状态：**批次 A–F 已实施并通过验收；M0 已放行，M1 条件齐备待审批**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
-> 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）。
-> 七材料展示、查表、分相结构、加速尚未开始，详见 `docs/reports/progress.md`。
+> 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
+> + 查表（F，曲线插值与越界处理）。分相结构、逐事件核查表接入、加速尚未开始，
+> 详见 `docs/reports/progress.md`。
 
 ---
 
@@ -23,10 +24,10 @@
 | 材料卡迁移（F01/F02 → 执行卡）与能力推导 | ✅ |
 | 取消 / 失败 / 完成三态与部分结果 | ✅ |
 | **YSZ/SiC 文献参考评估器**（有效 N、阈值函数、平均率、协议累计深度） | ✅ 批次 D（T07），`python -m ufdemo reference` |
-| **Streamlit 界面**（参数表单、形貌/截面/时间轴回放、参考评估器、历史运行） | ✅ 批次 E（T09），`streamlit run app.py` |
-| 查表插值 | ❌ 批次 F（T10） |
+| **Streamlit 界面**（参数表单、形貌/截面/时间轴回放、参考评估器、查表、历史运行） | ✅ 批次 E（T09）+ F，`streamlit run app.py` |
+| **查表**（曲线 schema、分段线性 / 保形 PCHIP、越界处理、语义路由） | ✅ 批次 F（T10），`python -m ufdemo table` |
 | 分相颗粒 / 铺层 / 界面截断 | ❌ 批次 G（T11–T13） |
-| 七材料能力入口与展示 | ❌ 批次 H（T14） |
+| 七材料能力入口与展示 / 逐事件核查表接入 | ❌ 批次 H（T14） |
 | 冻结几何批量加速 / 动态角度 | ❌ 批次 I、J（T17、T18） |
 
 **明确不做**：热场、TTM 耦合、裂纹、分层、再沉积、深孔多次反射、机器学习、
@@ -52,6 +53,9 @@ pip install -e ".[dev]"
 # 含界面依赖（批次 E：streamlit + plotly）
 pip install -e ".[dev,ui]"
 
+# 含查表依赖（批次 F：scipy，用于可选 PCHIP；缺它时 PCHIP 报 NOT_IMPLEMENTED）
+pip install -e ".[dev,table]"
+
 # 方式二：不安装，靠 PYTHONPATH 运行
 pip install -r requirements.lock
 export PYTHONPATH=src           # Windows: set PYTHONPATH=src
@@ -59,9 +63,9 @@ export PYTHONPATH=src           # Windows: set PYTHONPATH=src
 
 `requirements.lock` 是本机实际安装并验证通过的版本组合（numpy 2.3.5、
 pytest 9.1.1、openpyxl 3.1.5；批次 E 追加 streamlit 1.63.0、plotly 7.0.0
-及传递依赖），不是“全部最新版”。
+及传递依赖；批次 F 追加 scipy 1.18.1），不是“全部最新版”。
 
-可选依赖：`scipy`（批次 F 查表）、`streamlit` + `plotly`（批次 E 界面）、
+可选依赖：`scipy`（批次 F 查表，**已安装**）、`streamlit` + `plotly`（批次 E 界面）、
 `numba`（批次 I 可选加速，缺失时回退 NumPy）。
 
 ---
@@ -91,7 +95,13 @@ python -m ufdemo materials
 python -m ufdemo reference examples/ysz_reference_case.json --out runs/g05_ysz_reference
 python -m ufdemo reference examples/sic_reference_case.json --out runs/g05_sic_reference
 
-# 7) 全部测试
+# 7) 查表（批次 F）：读曲线卡、插值、越界处理；不求解网格
+python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5
+python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 2.5 --method pchip
+python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 1e3 --allow-out-of-range --json
+python -m ufdemo table --all-curves
+
+# 8) 全部测试
 python -m pytest -q
 ```
 
@@ -106,13 +116,14 @@ streamlit run app.py
 （未安装可编辑包时用 `PYTHONPATH=src streamlit run app.py`。界面依赖见
 `pyproject.toml` 的 `ui` extra。）
 
-界面分四个标签页：
+界面分五个标签页：
 
 | 标签页 | 内容 |
 |---|---|
 | 参数与运行 | 模板选择、网格/光束/路径/输出表单、「提交计算」 |
 | 结果 | 形貌（热图/三维曲面）、截面、时间轴快照回放 |
 | 参考评估器 | 批次 D 的 YSZ/SiC 算例（只做公式核查，**不求解网格**） |
+| 查表 | 批次 F 的曲线卡：原始点、查值（线性/PCHIP、可勾选允许越界）、原始点与插值图（**不触发求解**） |
 | 历史运行 | 列出 `runs/` 下可读目录并读取（**不重新求解**） |
 
 ### 界面的三条硬规矩
@@ -133,7 +144,7 @@ streamlit run app.py
 ### 界面的验收记录
 
 ```bash
-python tools/ui_probe.py                 # 15 项界面操作检查，输出到 runs/_ui_probe
+python tools/ui_probe.py                 # 17 项界面操作检查，输出到 runs/_ui_probe
 python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
 ```
 
@@ -158,6 +169,42 @@ python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
 
 > `reference` 只复现文献公式与协议量，**不产生** `final_surface.npz`：
 > 参考评估器不求解网格，避免把参考量误当形貌结果。
+
+---
+
+## 3c. 查表（批次 F / T10）
+
+一条曲线 = 一个 JSON 元数据卡 + 一个 CSV 原始点文件（`data/curves/`）：
+
+```text
+data/curves/
+├── ysz_analytic_depth_vs_fluence.curve.json   # event_depth_increment → 事件核
+├── ysz_analytic_depth_vs_fluence.points.csv
+├── sic_threshold_vs_effective_n.curve.json    # threshold_only → 评估器
+├── sic_threshold_vs_effective_n.points.csv
+├── synthetic_volume_per_energy.curve.json     # volume_per_energy → 评估器
+└── synthetic_volume_per_energy.points.csv
+```
+
+```bash
+python tools/make_curves.py      # 可重生成示例曲线与 14 组无效夹具
+python tools/table_report.py     # 生成错误 CSV 与原始点/插值图
+```
+
+查表的四条硬规矩：
+
+1. **默认分段线性，可选保形 PCHIP。** PCHIP 显式 `extrapolate=False`；
+   环境缺 SciPy 时报 `NOT_IMPLEMENTED`，**绝不静默退化为线性**。
+2. **越界返回状态，不返回 0、不外推、不钳端点。** 越界抛 `TABLE_OUT_OF_RANGE`；
+   允许越界时对应项为 `None`（不是 0）——「低于量测区间」不等于「无去除」。
+3. **横坐标严格升序且无重复。** 重复 x 默认拒绝；需要合并必须声明
+   `duplicate_policy` + `duplicate_rule_note`，且原始点全部保留在 `raw_points`。
+4. **只有 `event_depth_increment` 曲线能进事件核**（且固定条件需匹配）；
+   体积/平均率/累计曲线只进评估器，**不得反推局部深度剖面**。
+
+> 本批**不接入逐事件主循环**（属批次 H / T14）；查表本身不产生任何形貌。
+> SiC 曲线由材料卡拟合参数按式(6) 重算，**不构成对原文曲线的复现**
+> （边界声明见 `docs/reports/table_lookup.md`）。
 
 ---
 
@@ -192,6 +239,13 @@ python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
 * **不提供的图层如实报不可用**：`threshold_mask` 本批次未记录，界面显示原因，
   不用「累计剂量 vs 单脉冲阈值」比较伪造标记；`threshold_only` 结果不提供深度时
   显示「不提供」而非数值 `0`。
+* **查表不是任意外推**：默认分段线性；可选 PCHIP 显式 `extrapolate=False`；
+  越界是显式状态（`TABLE_OUT_OF_RANGE`），**不返回 0、不外推、不钳端点**；
+  重复 x 默认拒绝，需合并时须附规则并保留原始点（见
+  `docs/decisions/ADR-0011-table-lookup.md`）。
+* **曲线去向按语义硬分流**：只有 `event_depth_increment` 可进逐事件核
+  （`assert_curve_can_enter_event_kernel`，另含固定条件比对）；体积/平均率/累计
+  曲线只进评估器，**不得反推局部深度**（`assert_no_local_depth_from_volume`）。
 
 ---
 
@@ -218,6 +272,11 @@ python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
    `ttm_carrier_drilling_q4_axisymmetric.py`）。已按细则记录为缺失，
    不阻塞人工解析主线；哈希核对结果见
    `docs/reports/input_hash_check.csv`。
+10. **查表曲线只覆盖固定协议下的一维响应，且不接入逐事件主循环**。
+    跨工况需另附条件匹配的曲线；接入主循环属批次 H（T14）。
+    PCHIP 在有效区间外不作为（不画虚线外推）。
+11. **查表的 SiC 曲线由材料卡拟合参数按式(6) 重算**，不是原图逐点数字化，
+    因此**不构成对原文曲线的复现**（见 `docs/reports/table_lookup.md` 边界声明）。
 
 ---
 
@@ -242,19 +301,23 @@ ultrafast-demo/
 │   ├── io.py             # 导出、重读、哈希和状态
 │   ├── references.py     # 文献参考评估器（批次 D：YSZ/SiC 有效N、阈值、平均率）
 │   ├── ui_service.py     # 界面逻辑层（批次 E；不导入 Streamlit/Plotly）
+│   ├── tables.py         # 查表：曲线 schema、插值核、越界与语义路由（批次 F）
 │   ├── geometry.py       # 批次 J 占位（斜入射/可见性）
 │   ├── accelerators.py   # 批次 I 占位（批量加速）
 │   └── __main__.py       # CLI
 ├── tools/
 │   ├── migrate_materials.py   # F01/F02 → 执行卡 + 迁移/准入报告
 │   ├── make_examples.py       # 生成 examples/*.json
-│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E）
+│   ├── make_curves.py         # 生成 data/curves 示例曲线与无效夹具（批次 F）
+│   ├── table_report.py        # 查表报告：错误 CSV + 原始点/插值图（批次 F）
+│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F 增补查表检查）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
+├── data/curves/          # 响应曲线卡（*.curve.json + *.points.csv，批次 F）
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置
-├── tests/                # pytest（含 tests/fixtures 人工解析卡、界面逻辑与冒烟测试）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0010）
+├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0011）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -267,11 +330,14 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 150 项，全部通过（A–C 63 + D 18 + E 逻辑 55 + 界面冒烟 14）
+python -m pytest -q                  # 251 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91）
 python -m pytest -q -m g05           # 只跑文献语义回归
+python -m pytest -q -m g09           # 界面与查表的 G09 相关测试
 python tools/migrate_materials.py    # 迁移 + 7 项准入探针
+python tools/make_curves.py          # 生成示例曲线与无效夹具（批次 F）
+python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插值图
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
-python tools/run_acceptance.py       # 实际执行并生成验收报告（A–E）
+python tools/run_acceptance.py       # 实际执行并生成验收报告（A–F）
 ```
 
 产物：
@@ -280,11 +346,14 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–E
 * `docs/reports/acceptance_g01_g05.csv` —— 逐项机器可读结果；
 * `docs/reports/g05_reference_semantics.md` / `.csv` —— G05 专项报告；
 * `docs/reports/reference_equations.md` —— **源公式 ↔ 实现 ↔ 验收 对应表**；
-* `docs/reports/ui_operation_check.md` / `.csv` —— **界面操作检查（G09）**；
+* `docs/reports/ui_operation_check.md` / `.csv` —— **界面操作检查（G09-UI）**；
+* `docs/reports/table_lookup.md` —— **查表汇总报告（G09-table）**；
+* `docs/reports/table_errors.csv` —— **错误 CSV**：每条违规输入与错误码；
+* `docs/reports/curve_interpolation.html` / `.csv` —— **原始点与插值图**；
 * `docs/reports/material_migration.csv` —— 字段级迁移记录；
 * `docs/reports/material_admission.csv` —— 四种必查拒绝情况；
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–E 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–F 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

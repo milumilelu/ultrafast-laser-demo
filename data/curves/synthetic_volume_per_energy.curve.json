@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "curve_id": "synthetic_volume_per_energy",
+  "material_id": "synthetic_demo_isotropic",
+  "material_identity": {
+    "family": "synthetic_demo",
+    "grade": null,
+    "material_identity_confirmed_by_user": false
+  },
+  "x_quantity": {
+    "name": "pulse_energy_over_E_ref",
+    "unit": "1",
+    "label": "单脉冲能量（以 E_ref 归一）",
+    "kind": "scalar"
+  },
+  "y_quantity": {
+    "name": "removal_volume_over_L_ref3",
+    "unit": "1",
+    "label": "终态去除体积（以 L_ref^3 归一）",
+    "kind": "volume"
+  },
+  "output_semantics": "volume_per_energy",
+  "fixed_conditions": {
+    "wavelength_m": {
+      "value": null,
+      "rel_tol": null,
+      "note": "合成演示未定义"
+    },
+    "pulse_duration_s": {
+      "value": null,
+      "rel_tol": null,
+      "note": "合成演示未定义"
+    },
+    "repetition_rate_Hz": {
+      "value": null,
+      "rel_tol": null,
+      "note": "合成演示未定义"
+    },
+    "reference_scales": {
+      "L_ref_m": 1e-05,
+      "F_ref_J_m2": 10000.0,
+      "delta_ref_m": 1e-07
+    },
+    "environment": {
+      "value": "synthetic"
+    }
+  },
+  "protocol": {
+    "protocol_id": "synthetic_volume_demo",
+    "required_history": {
+      "mode": "none"
+    },
+    "protocol_note": "合成定义，无任何实验来源。"
+  },
+  "source_figure_or_table": "无来源：合成演示定义（tools/make_curves.py 顶部常量）",
+  "valid_range": {
+    "x": [
+      0.35,
+      8.0
+    ],
+    "note": "低于阈值 0.35 无去除（合成阈值律定义）"
+  },
+  "points_file": "synthetic_volume_per_energy.points.csv",
+  "duplicate_policy": "reject",
+  "evidence_status": "unverified",
+  "source_type": "synthetic_illustrative",
+  "source": {
+    "source_ids": []
+  },
+  "notes": [
+    "刻意选择 volume_per_energy 语义：用来演示与测试「仅有终态体积时不得反推局部去除深度」这条红线。"
+  ],
+  "limitations": [
+    "全部数值为合成定义，不得解释为任何真实材料的响应。",
+    "体积曲线只进体积评估器；不得生成局部坑形。"
+  ]
+}

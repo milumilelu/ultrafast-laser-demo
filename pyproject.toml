@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ufdemo"
-version = "0.3.0-e1"
+version = "0.4.0-f1"
 description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面）"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,12 +1,18 @@
-# ufdemo 已验证环境锁定（批次 E / 2026-09-10）
+# ufdemo 已验证环境锁定（批次 F / 2026-09-10）
 # 生成方式：在专用 venv 中 `python -m pip freeze` 后整理；安装顺序无关。
 # 复现：python -m venv envs/ufdemo && envs/ufdemo/Scripts/pip install -r requirements.lock
 #       && envs/ufdemo/Scripts/pip install -e .
 #
-# 版本口径：A–C 放行时只锁核心 + dev；批次 E 追加 ui 及其传递依赖（见分段注释）。
+# 版本口径：A–C 放行时只锁核心 + dev；批次 E 追加 ui 及其传递依赖；
+#           批次 F 追加 table（scipy）及其传递依赖（见分段注释）。
 
 # --- 核心（A–C 必需）------------------------------------------------------
 numpy==2.3.5
+
+# --- 查表（批次 F / T10：pip install -e ".[table]"）------------------------
+# scipy 只用于可选的保形 PCHIP（extrapolate=False）；缺它时 lookup(method="pchip")
+# 报 NOT_IMPLEMENTED，**不静默退化为线性**。
+scipy==1.18.1
 
 # --- 测试与工具（dev）------------------------------------------------------
 pytest==9.1.1

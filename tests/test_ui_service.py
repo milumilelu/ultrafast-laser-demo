@@ -566,3 +566,75 @@ def test_summary_rows_reference_unit_keys(session, fixture_material, tmp_path):
         "unit_system",
         "run_mode",
     }
+
+
+# ---------------------------------------------------------------------------
+# 查表（批次 F）：纯读取，断言不增加 solve_count
+# ---------------------------------------------------------------------------
+
+CURVES_DIR = ROOT / "data" / "curves"
+
+
+def _first_curve_card() -> str | None:
+    cards = U.list_curve_cards(CURVES_DIR)
+    return cards[0]["name"] if cards else None
+
+
+def test_list_curve_cards_lists_examples():
+    cards = U.list_curve_cards(CURVES_DIR)
+    assert cards, "示例曲线卡应存在"
+    assert all(c["name"].endswith(".curve.json") for c in cards)
+    assert all(c["curve_id"] for c in cards)
+
+
+def test_list_curve_cards_on_missing_dir_returns_empty(tmp_path):
+    assert U.list_curve_cards(tmp_path / "nope") == []
+
+
+def test_load_curve_card_and_capability_rows(session):
+    name = _first_curve_card()
+    if name is None:
+        pytest.skip("无示例曲线卡")
+    curve = U.load_curve_card(CURVES_DIR, name)
+    rows = U.curve_capability_rows(curve)
+    assert {"项", "值"} <= set(rows[0])
+    assert any(r["项"] == "去向" for r in rows)
+
+
+def test_table_lookup_does_not_change_solve_count(session):
+    name = _first_curve_card()
+    if name is None:
+        pytest.skip("无示例曲线卡")
+    curve = U.load_curve_card(CURVES_DIR, name)
+    before = session.solve_count
+    lo, hi = curve.valid_range
+    res = U.table_lookup(session, curve, [lo, 0.5 * (lo + hi), hi])
+    assert res.ok
+    assert session.solve_count == before == 0
+
+
+def test_table_grid_does_not_change_solve_count(session):
+    name = _first_curve_card()
+    if name is None:
+        pytest.skip("无示例曲线卡")
+    curve = U.load_curve_card(CURVES_DIR, name)
+    before = session.solve_count
+    grid = U.table_grid(session, curve, n=50)
+    assert len(grid["x"]) == 50
+    assert session.solve_count == before == 0
+
+
+def test_table_lookup_out_of_range_never_returns_zero(session):
+    name = _first_curve_card()
+    if name is None:
+        pytest.skip("无示例曲线卡")
+    curve = U.load_curve_card(CURVES_DIR, name)
+    lo, hi = curve.valid_range
+    below = lo - abs(lo if lo else 1.0) - 1.0
+    with pytest.raises(UFDemoError) as ei:
+        U.table_lookup(session, curve, below)
+    assert ei.value.code == "TABLE_OUT_OF_RANGE"
+    res = U.table_lookup(session, curve, below, allow_out_of_range=True)
+    assert res.values == [None]
+    assert res.values[0] != 0.0
+    assert session.solve_count == 0

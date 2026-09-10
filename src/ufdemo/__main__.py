@@ -5,11 +5,15 @@
     python -m ufdemo validate  examples/analytic_single_pulse.json
     python -m ufdemo run       examples/analytic_single_pulse.json --out runs/analytic_001
     python -m ufdemo reference examples/sic_reference_case.json --out runs/sic_ref_001
+    python -m ufdemo table     data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5
     python -m ufdemo materials
     python -m ufdemo inspect   runs/analytic_001
 
 ``reference`` 属批次 D（T07）：只复现文献定义的公式与协议量（有效 N、阈值、
 平均率、协议累计深度），**不求解网格**，输出目录中不会出现形貌表面文件。
+
+``table`` 属批次 F（T10）：曲线 schema + 分段线性/PCHIP + 越界处理。越界返回
+``TABLE_OUT_OF_RANGE``（不填 0、不外推）；体积/平均/阈值曲线不得生成局部深度。
 
 退出码：0 成功；1 已归类的执行失败；2 用法错误。
 """
@@ -215,6 +219,50 @@ def cmd_reference(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_table(args: argparse.Namespace) -> int:
+    """查表（批次 F / T10）：只做插值取值，**不求解网格、不产生形貌**。"""
+    from . import tables as _tab
+
+    if args.all_curves:
+        curves = _tab.load_curves(Path(args.curve))
+        x_vals = args.x if args.x is not None else None
+    else:
+        curve = _tab.load_curve(args.curve)
+        curves = [curve]
+        x_vals = args.x if args.x is not None else [curve.valid_range[0], curve.valid_range[1]]
+
+    payloads = []
+    for c in curves:
+        xs = x_vals if x_vals is not None else [c.valid_range[0], c.valid_range[1]]
+        res = _tab.lookup(c, xs, method=args.method, allow_out_of_range=args.allow_out_of_range)
+        payloads.append(res)
+
+    if args.json:
+        dumped = [r.to_dict() for r in payloads]
+        print(json.dumps(dumped if args.all_curves else dumped[0], ensure_ascii=False, indent=2, default=str))
+        return EXIT_OK
+
+    for c, res in zip(curves, payloads):
+        print(f"曲线：{c.curve_id}｜材料：{c.material_id}｜证据：{c.evidence_status}")
+        print(f"  语义：{c.output_semantics} → {c.route_zh}")
+        print(f"  横轴：{c.x_quantity['name']} [{c.x_unit}]｜纵轴：{c.y_quantity['name']} [{c.y_unit}]")
+        print(f"  有效区间：{c.valid_range[0]!r} ≤ x ≤ {c.valid_range[1]!r}")
+        print(f"  原始点 {len(c.raw_points)} 条｜可用点 {len(c.points)} 条｜重复策略：{c.duplicate_report.policy}")
+        print(f"  来源：{c.source_figure_or_table}")
+        print(f"  插值方法：{res.method}")
+        for xv, val, ok in zip(res.x, res.values, res.in_range):
+            shown = "越界（不提供）" if val is None else f"{val!r} {c.y_unit}"
+            print(f"    x = {xv!r}（{'区间内' if ok else '越界'}）→ {shown}")
+        print(f"  状态：{res.status}｜{res.reason}")
+        if not c.can_enter_event_kernel:
+            print("  事件核：不允许（本曲线语义不产生逐事件局部深度）")
+        for n in c.notes:
+            print(f"  说明：{n}")
+        for n in c.limitations:
+            print(f"  限制：{n}")
+    return EXIT_OK
+
+
 def cmd_materials(args: argparse.Namespace) -> int:
     catalog = load_material_catalog(args.material_dir)
     if not catalog:
@@ -291,6 +339,22 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--json", action="store_true")
     add_material_dir(m)
     m.set_defaults(func=cmd_materials)
+
+    tb = sub.add_parser(
+        "table",
+        help="查表插值（批次 F：分段线性/PCHIP；越界返回状态，不返回 0）",
+    )
+    tb.add_argument("curve", help="曲线卡路径（*.curve.json）或曲线目录（配 --all-curves）")
+    tb.add_argument("--x", type=float, nargs="+", default=None,
+                    help="查询点（可多个）；省略时取有效区间两端")
+    tb.add_argument("--method", choices=("linear", "pchip"), default="linear",
+                    help="插值方法：linear（默认分段线性）或 pchip（需 SciPy，extrapolate=False）")
+    tb.add_argument("--allow-out-of-range", action="store_true",
+                    help="越界时不报错，改为返回状态（越界项为 null，仍不填 0）")
+    tb.add_argument("--all-curves", action="store_true",
+                    help="把第一个参数当目录，对目录下所有曲线卡查表")
+    tb.add_argument("--json", action="store_true")
+    tb.set_defaults(func=cmd_table)
 
     ins = sub.add_parser("inspect", help="重读运行结果")
     ins.add_argument("run_dir")

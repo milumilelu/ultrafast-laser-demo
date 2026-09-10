@@ -32,9 +32,10 @@ if str(SRC) not in sys.path:
 
 import plotly.graph_objects as go  # noqa: E402
 
-from ufdemo import __version__, default_material_dir, default_runs_dir, project_root  # noqa: E402
+from ufdemo import __version__, default_curves_dir, default_material_dir, default_runs_dir, project_root  # noqa: E402
 from ufdemo import ui_service as U  # noqa: E402
 from ufdemo import references as REF  # noqa: E402
+from ufdemo import tables as T  # noqa: E402
 from ufdemo.errors import UFDemoError  # noqa: E402
 from ufdemo.io import code_version  # noqa: E402
 from ufdemo.materials import load_material_card, load_material_catalog  # noqa: E402
@@ -520,6 +521,148 @@ def _history_panel(state: U.SessionState):
 
 
 # ---------------------------------------------------------------------------
+# 查表（批次 F）：读取曲线卡，插值，不求解
+# ---------------------------------------------------------------------------
+
+
+def _table_panel(state: U.SessionState):
+    st.subheader("查表（曲线插值，不触发求解）")
+    st.caption(
+        "读取固定材料/波长/脉宽/历史协议下的一维响应曲线：默认**分段线性**，"
+        "需要平滑时用**保形 PCHIP**（`extrapolate=False`）。"
+        "越界返回状态与原因，**低于量测区间不返回 0，也不外推或钳到端点**。"
+    )
+
+    cards = U.list_curve_cards(default_curves_dir())
+    if not cards:
+        st.info(
+            f"`{default_curves_dir()}` 下暂无曲线卡。可用 `python -m ufdemo.make_curves` 生成示例。"
+        )
+        return
+
+    names = [c["name"] for c in cards]
+    cur = st.session_state.get("t_curve")
+    idx = names.index(cur) if cur in names else 0
+    name = st.selectbox("曲线卡（*.curve.json）", names, index=idx, key="t_curve")
+
+    try:
+        curve = U.load_curve_card(default_curves_dir(), name)
+    except UFDemoError as err:
+        st.error(err.format_human())
+        return
+
+    # 去向与能力（如实展示）
+    st.markdown("**曲线身份与去向**")
+    U.assert_safe_wording(curve.y_quantity.get("name", ""), where="curve_y")
+    st.dataframe(U.curve_capability_rows(curve), hide_index=True, width="stretch")
+    st.caption(
+        f"x：{curve.x_quantity.get('name')}（{curve.x_unit}）｜"
+        f"y：{curve.y_quantity.get('name')}（{curve.y_unit}）｜"
+        f"来源：{curve.source_figure_or_table}｜来源类型 {curve.source_type}"
+    )
+    if curve.notes:
+        with st.expander("说明 / 限制", expanded=False):
+            for n in curve.notes:
+                st.write(f"- {n}")
+            for lim in curve.limitations:
+                st.write(f"- ⚠ {lim}")
+    if not curve.can_enter_event_kernel:
+        st.warning(
+            "该曲线**不得进入逐事件核**，也不得用于生成局部形貌；只能进评估器"
+            "（体积/平均率/累计曲线在无额外形状假设时不能唯一反推局部深度）。"
+        )
+
+    # 原始点（保留全部，含重复 x）
+    st.markdown("**原始数据点（CSV 唯一来源）**")
+    raw_rows = [{"x": p[0], "y": p[1]} for p in curve.raw_points]
+    st.dataframe(raw_rows, hide_index=True, height=180, width="stretch")
+    dr = curve.duplicate_report
+    if dr.applied:
+        st.caption(
+            f"重复 x 处理：policy={dr.policy}，已合并 {dr.merged_count} 个，"
+            f"规则：{dr.rule_note}；原始点 {dr.raw_point_count} 条全部保留。"
+        )
+
+    # 查询
+    st.markdown("**查询**")
+    c1, c2, c3 = st.columns([2, 1, 1])
+    lo, hi = curve.valid_range
+    default_xs = f"{lo!r}, {0.5 * (lo + hi)!r}, {hi!r}"
+    xs_text = c1.text_input("查询 x（逗号分隔，有效区间内）", value=default_xs, key="t_xs")
+    method = c2.selectbox("插值方法", list(T.INTERPOLATION_METHODS), index=0, key="t_method")
+    allow_oor = c3.checkbox("允许越界（越界项返回 None）", value=False, key="t_allow_oor")
+
+    if st.button("查值", key="t_lookup"):
+        try:
+            parsed = [float(s.strip()) for s in xs_text.split(",") if s.strip()]
+        except ValueError:
+            st.error("查询 x 必须是逗号分隔的数值。")
+            return
+        try:
+            res = U.table_lookup(
+                state, curve, parsed, method=method, allow_out_of_range=allow_oor
+            )
+            st.session_state["t_result"] = res.to_dict()
+        except UFDemoError as err:
+            st.session_state.pop("t_result", None)
+            st.error(err.format_human())
+            return
+
+    payload = st.session_state.get("t_result")
+    if payload and payload.get("curve_id") == curve.curve_id:
+        rows = [
+            {
+                "x": x,
+                "y（None=越界，非 0）": ("None（越界）" if v is None else repr(v)),
+                "在区间内": "是" if ok else "否",
+            }
+            for x, v, ok in zip(payload["x"], payload["values"], payload["in_range"])
+        ]
+        st.dataframe(rows, hide_index=True, width="stretch")
+        if payload["status"] == "ok":
+            st.success(f"状态：{payload['status']}｜{payload['reason']}")
+        else:
+            st.warning(f"状态：{payload['status']}｜{payload['reason']}")
+        for note in payload["notes"]:
+            st.caption(f"- {note}")
+
+    # 原始点与插值图
+    st.markdown("**原始点与插值图**")
+    fig = go.Figure()
+    grid_m = U.table_grid(state, curve, n=200, method="linear")
+    fig.add_trace(
+        go.Scatter(x=grid_m["x"], y=grid_m["y"], mode="lines", name="线性插值")
+    )
+    if T.PCHIP_AVAILABLE:
+        grid_p = U.table_grid(state, curve, n=200, method="pchip")
+        fig.add_trace(
+            go.Scatter(
+                x=grid_p["x"], y=grid_p["y"], mode="lines", name="PCHIP 插值", line=dict(dash="dot")
+            )
+        )
+    else:
+        st.caption("当前环境未安装 SciPy：不显示 PCHIP（不会自动退化为线性）。")
+    fig.add_trace(
+        go.Scatter(
+            x=grid_m["raw_x"],
+            y=grid_m["raw_y"],
+            mode="markers",
+            name="原始点",
+            marker=dict(size=8, symbol="circle-open"),
+        )
+    )
+    fig.update_layout(
+        title=f"{curve.curve_id}｜{curve.y_quantity.get('name')} vs {curve.x_quantity.get('name')}",
+        xaxis_title=f"{curve.x_quantity.get('name')}（{curve.x_unit}）",
+        yaxis_title=f"{curve.y_quantity.get('name')}（{curve.y_unit}）",
+        height=420,
+        margin=dict(l=10, r=10, t=60, b=10),
+    )
+    st.plotly_chart(fig, width="stretch", key="t_fig")
+    st.caption("插值图与查值均不调用求解器；侧边栏求解次数保持不变。")
+
+
+# ---------------------------------------------------------------------------
 # 主入口
 # ---------------------------------------------------------------------------
 
@@ -530,10 +673,12 @@ def main() -> None:
     material, run_mode = _sidebar(state)
 
     st.title("七种材料超快激光加工 Demo")
-    st.caption("M0 最小闭环 + 批次 D 参考评估器 + 批次 E 界面。"
+    st.caption("M0 最小闭环 + 批次 D 参考评估器 + 批次 E 界面 + 批次 F 查表。"
                "旧资料与 `微观仿真/` 未被修改。")
 
-    t1, t2, t3, t4 = st.tabs(["参数与运行", "结果（形貌/截面/时间轴）", "参考评估器", "历史运行"])
+    t1, t2, t3, t4, t5 = st.tabs(
+        ["参数与运行", "结果（形貌/截面/时间轴）", "参考评估器", "查表", "历史运行"]
+    )
     with t1:
         _param_panel(state, material, run_mode)
     with t2:
@@ -541,6 +686,8 @@ def main() -> None:
     with t3:
         _reference_panel()
     with t4:
+        _table_panel(state)
+    with t5:
         _history_panel(state)
 
 

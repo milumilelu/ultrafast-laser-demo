@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "curve_id": "sic_threshold_vs_effective_n",
+  "material_id": "sic_4h_cface_1035nm_multishot",
+  "material_identity": {
+    "family": "SiC",
+    "grade": "N 掺杂 4H-SiC C 面",
+    "material_identity_confirmed_by_user": false
+  },
+  "x_quantity": {
+    "name": "effective_count",
+    "unit": "1",
+    "label": "原文有效脉冲数 N_eff（不是真实脉冲事件数）",
+    "kind": "count"
+  },
+  "y_quantity": {
+    "name": "threshold_fluence",
+    "unit": "J/cm^2",
+    "label": "多脉冲阈值能流 Fth(N)",
+    "kind": "threshold"
+  },
+  "output_semantics": "threshold_only",
+  "fixed_conditions": {
+    "wavelength_m": {
+      "value": 1.035e-06,
+      "rel_tol": 0.01
+    },
+    "pulse_duration_s": {
+      "value": 3e-13,
+      "rel_tol": 0.05
+    },
+    "repetition_rate_Hz": {
+      "value": 200000.0,
+      "rel_tol": 0.02
+    },
+    "environment": {
+      "value": "air"
+    },
+    "history": {
+      "mode": "effective_N_saturation"
+    }
+  },
+  "protocol": {
+    "protocol_id": "sic4h_cface_multishot_reference_N",
+    "required_history": {
+      "effective_count": 720,
+      "definition": "original_paper_effective_N"
+    },
+    "protocol_note": "阈值曲线只在原文协议的有效 N 定义下有效。"
+  },
+  "source_figure_or_table": "F01 P38-P43（S02 式 6；本 CSV 由卡内拟合参数重算，不是原图数字化）",
+  "valid_range": {
+    "x": [
+      1.0,
+      720.0
+    ],
+    "note": "N 上限取卡内协议值 720；外推到大 N 无实测支持"
+  },
+  "points_file": "sic_threshold_vs_effective_n.points.csv",
+  "duplicate_policy": "reject",
+  "evidence_status": "literature_reported",
+  "source_type": "card_formula_recomputed",
+  "source": {
+    "source_ids": [
+      "S02"
+    ]
+  },
+  "notes": [
+    "**由材料卡的拟合参数重算**，不是从原图逐点数字化；因此本曲线只用于公式核查与插值链路检查，不构成对原文曲线的复现。",
+    "N=1 端点与卡内 threshold_J_m2=23500 J/m^2 一致。"
+  ],
+  "limitations": [
+    "阈值曲线不得当去除深度使用；本曲线 output_semantics=threshold_only。",
+    "扫描次数列表存在重复项，本批只接受直接输入原文有效 N。"
+  ]
+}

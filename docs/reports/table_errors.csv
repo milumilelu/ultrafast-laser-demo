@@ -1,0 +1,22 @@
+﻿case,kind,expected_code,actual_code,status,detail
+invalid_unsorted,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线横坐标必须严格升序
+invalid_duplicate,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线存在重复横坐标（1 组，共 1 个重复点）
+invalid_duplicate_no_rule,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,声明了重复 x 处理策略但未给出重复试验处理规则
+invalid_nonfinite,card_schema,NUMERIC_NONFINITE,NUMERIC_NONFINITE,通过,曲线点出现非有限数值
+invalid_single_point,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线至少需要 2 个点才能插值
+invalid_bad_header,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,"曲线点 CSV 表头必须是 x,y"
+invalid_nonnumeric,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线点无法解析为数值
+invalid_range_narrow,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,数据点落在声明的有效区间之外
+invalid_volume_depth_dir,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,体积曲线不得声明 depth_direction
+invalid_missing_field,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线缺少必填字段 'protocol'
+invalid_empty,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线至少需要 2 个点才能插值
+invalid_bad_semantics,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,曲线 output_semantics 未登记
+invalid_no_depth_direction,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,逐事件增量曲线必须声明 depth_direction
+invalid_no_unit,card_schema,CONFIG_INVALID,CONFIG_INVALID,通过,y_quantity.unit 必须是非空字符串（单位不可省略）
+lookup_below_range,behavior,TABLE_OUT_OF_RANGE,TABLE_OUT_OF_RANGE,通过,越界：低于有效区间下界（不得返回 0）
+lookup_above_range,behavior,TABLE_OUT_OF_RANGE,TABLE_OUT_OF_RANGE,通过,越界：高于有效区间上界
+pchip_without_scipy,behavior,NOT_IMPLEMENTED,NOT_IMPLEMENTED,通过,PCHIP 缺 SciPy 时必须显式报错，不得静默退化为线性
+local_depth_from_volume,behavior,CONFIG_INVALID,CONFIG_INVALID,通过,体积曲线不得反推局部去除深度
+event_kernel_from_threshold,behavior,RESPONSE_SEMANTICS_INVALID,RESPONSE_SEMANTICS_INVALID,通过,阈值曲线不得进入逐事件核
+condition_mismatch_on_event_curve,behavior,CONDITION_MISMATCH,CONDITION_MISMATCH,通过,固定条件不匹配时拒绝逐事件核
+unknown_interpolation_method,behavior,CONFIG_INVALID,CONFIG_INVALID,通过,未登记的插值方法拒绝
