@@ -2,6 +2,15 @@
 
 > 更新：2026-09-10｜版本：`0.5.0-g1`（M0 放行版 `0.1.0-m0`；D 为 `0.2.0-d`；E 为 `0.3.0-e1`；F 为 `0.4.0-f1`）
 > 状态取值仅限：待开发｜进行中｜待验收｜通过｜阻塞
+>
+> ⚠️ **仓库完整性告警（2026-09-11 发现）**：提交 E（`4748cb2`）与 F（`ccf0717`）
+> 的对象库**部分缺失**（E 缺 `docs/`、`tools/` 两棵顶层 tree 及若干 `runs/` 对象；
+> F 缺 `docs/reports/curve_interpolation.html` 的 blob）。**当前 HEAD（`68a7858`）
+> 与工作区完整**（`git archive HEAD` 成功、`git status` 干净），A–C 与 D 提交亦可完整导出；
+> 但**全历史无法 `git push` / 传输式克隆**（`git pack-objects` 报
+> `fatal: missing blob object`）。本仓库**未配置远端**，故目前无法通过推送恢复历史。
+> 已采取：`git config gc.auto 0`（避免自动 gc 继续裁剪）；HEAD 快照另存于
+> 仓库外 `../_repo_backup/`。修复方案待定，详见「已知限制与缺口」第 16 条。
 
 ## 批次状态
 
@@ -62,7 +71,8 @@
 | 设计决定记录 | `docs/decisions/ADR-0011-table-lookup.md` | 七项边界决定可追溯 |
 | 依赖（增量） | `pyproject.toml` 的 `table` extra 声明 scipy；`requirements.lock` 已含 scipy 1.18.1 | `pip install -e ".[table]"` |
 
-> 批次 A–C 的交付物清单见 `29cf6bb`；批次 D 见 `61a2e4e`；批次 E 见 `4748cb2`。
+> 批次 A–C 的交付物清单见 `29cf6bb`；批次 D 见 `61a2e4e`；批次 E 见 `4748cb2`（⚠️ 对象部分缺失）；
+> 批次 F 见 `ccf0717`（⚠️ 对象部分缺失）；批次 G 见 `68a7858`。
 
 ## 实测结果摘要
 
@@ -245,6 +255,33 @@
     **不是**剩余能量，也不在相之间重新分配（见 ADR-0012）。
 15. **「分相截断 × 动态角度」组合未开放**：在配置层互斥（`CONFIG_INVALID`）；
     几何意义未单独定义前不得混用。
+16. **⚠️ 仓库对象缺失（E/F 提交，2026-09-11 发现）**：
+    - 现象：`git fsck` 报 10 处 `broken link`；`git archive 4748cb2`（E）与
+      `git archive ccf0717`（F）失败；`git pack-objects` 全历史失败。
+    - 缺失对象：`4748cb2` 的顶层 tree `docs`(`a23c38e9`)、`tools`(`a33b02fa`)
+      及若干 `runs/` 子对象；`ccf0717` 的 `docs/reports/curve_interpolation.html`
+      之 blob(`fbca9592`)。经 `git cat-file --batch-all-objects` 确认**确实不在库中**
+      （非 multi-pack-index 过期所致）；两个 pack 自身 `verify-pack` 均为 `ok`。
+    - 影响：**当前 HEAD 与工作区不受影响**（`git archive HEAD` 成功、`git status` 干净），
+      A–C(`29cf6bb`)、D(`61a2e4e`)、G(`68a7858`) 均可完整导出；但 E/F 这两个历史快照
+      无法完整检出，且**无法 push / 传输式克隆**（即无法用远端备份）。
+    - 推断原因：疑似**并发 git 进程**（另一会话）在 23:20–23:26 间做了 repack/gc，
+      与本地提交交错，导致被后续提交替换掉的旧对象在某些 pack 写入中丢失
+      （`pack-9ef0e07` 的 `.idx`(21:45)/`.rev`(23:20)/`.pack`(23:26) 时间戳互不一致）。
+    - 已采取：`git config gc.auto 0`；HEAD 快照 `git archive` 另存仓库外
+      `../_repo_backup/ufdemo_HEAD_68a7858_*.tar`（2.75 MB，263 个文件）。
+    - **待定**：修复方案需人工决策（见下方「建议的修复选项」，未擅自执行任何历史改写）。
+
+## 建议的修复选项（待人工决策，未执行）
+
+| 选项 | 做法 | 保留 | 代价 |
+|---|---|---|---|
+| A 保持现状 | 不改历史；仅靠 HEAD 快照备份 | 全历史哈希、E/F 提交信息 | 不能 push/克隆；E/F 快照不可读 |
+| B 重建 E/F | 用可再生成内容重建 E/F 的 tree（丢弃其不可读快照） | A–D 与 G，提交数与信息 | E/F 哈希变更；E/F 内容退化为近似 |
+| C 重建裸历史 | 以 HEAD 工作树重新 `git init` 提交一条干净历史 | 当前全部文件内容 | 丢失 A–G 全部历史哈希（叙述仍在 ADR/报告里） |
+| D 恢复远端 | 若他处有完整副本（另一机器/云）→ 取回后 `git fetch` 补齐 | 全部 | 需确认确实存在完整副本 |
+
+> 已排除：`git gc` / `git prune` **无法**恢复缺失对象（它们不是「游离」而是「不存在」）。
 
 ## 下一批依赖（批次 H，T14）
 
