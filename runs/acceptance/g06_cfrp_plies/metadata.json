@@ -7,12 +7,12 @@
   "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
   "card_version": "1.0.0",
   "code": {
-    "commit": "7e36d67ac6572b04dd1b0062e6594a8ea59e7866",
+    "commit": "b1378d87fb51886a0929f6ceba87a17609958d96",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 18,
     "source_manifest_sha256": "fdc54e3f1bf071382b7aa8c239abf1e0f41cf0d05f61154714dad0d63baf82f1",
-    "working_tree_dirty": true
+    "working_tree_dirty": false
   },
   "config_sha256": "fb1d5adbe4e92499f760bcba15c0d47981f7e45d1c0f271d8570d466df4ae98f",
   "enabled_features": {
@@ -202,7 +202,7 @@
     "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
     "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
   ],
-  "written_at_utc": "2026-09-11T00:22:57.258724+00:00",
+  "written_at_utc": "2026-09-11T00:51:07.838849+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",
