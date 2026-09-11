@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ufdemo"
-version = "0.8.0-j1"
-description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面 + T10 查表 + T11 分相结构 + T14 受限阈值协议 + T16/T17 冻结几何批量 + T18 斜入射与可见性）"
+version = "0.9.0-k1"
+description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面 + T10 查表 + T11 分相结构 + T14 受限阈值协议 + T16/T17 冻结几何批量 + T18 斜入射与可见性 + 本地 Web 界面）"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary-research" }
@@ -36,4 +36,5 @@ markers = [
   "g07: G07 斜入射与表面几何（批次 J，已交付：投影/可见性/法向厚度转换）",
   "g08: G08 分组模式与逐脉冲一致（批次 I，已交付：冻结几何批量 + 误差/回退）",
   "g09: G09 受限阈值协议/查表/导出/界面（界面 E、查表 F、受限阈值协议 H 已交付）",
+  "slow: 需要真实 HTTP 服务/落盘的端到端测试（批次 K 契约层）",
 ]

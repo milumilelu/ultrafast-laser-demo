@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>超快激光加工 Demo — 前端演示</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ================= 顶部栏 ================= -->
+<header class="topbar">
+  <div class="brand">
+    <h1>七种材料超快激光加工 Demo</h1>
+    <span class="sub">M0 最小闭环 ＋ 参考评估器 ＋ 查表 ＋ 分相结构 —— 前端交互演示</span>
+  </div>
+  <div class="spacer"></div>
+  <span class="badge demo"><span class="dot"></span>演示页面 · 内置模拟数据，不接真实求解器</span>
+  <span class="counter-chip" id="chip-solve">求解 <b>0</b></span>
+  <span class="counter-chip" id="chip-read">读取 <b>0</b></span>
+</header>
+
+<div class="layout">
+
+  <!-- ================= 侧边栏 ================= -->
+  <aside class="sidebar">
+    <section class="card">
+      <h2>材料卡与运行模式</h2>
+      <p class="hint">材料身份 / 模式 / 单位 / 证据状态会随结果持续显示。</p>
+      <div class="field">
+        <label for="material-select">材料卡</label>
+        <select id="material-select"></select>
+      </div>
+      <div id="material-meta"></div>
+      <div class="field">
+        <label for="mode-select">运行模式</label>
+        <select id="mode-select"></select>
+      </div>
+      <div id="gate-box" class="notice info"></div>
+    </section>
+
+    <section class="card">
+      <h2>能力与限制</h2>
+      <p class="hint">缺参数如实显示不可用原因，不自动降级、不静默填值。</p>
+      <div id="cap-table"></div>
+    </section>
+
+    <section class="card">
+      <h2>求解次数（透明度）</h2>
+      <p class="hint">只有「提交计算」会调用求解器；其余操作读取已有数组。</p>
+      <div class="ledger" id="ledger"></div>
+    </section>
+  </aside>
+
+  <!-- ================= 主区 ================= -->
+  <main class="main">
+    <nav class="tabs" role="tablist">
+      <button data-tab="params" class="active">参数与运行</button>
+      <button data-tab="result">结果（形貌/截面/时间轴）</button>
+      <button data-tab="ref">参考评估器</button>
+      <button data-tab="table">查表</button>
+      <button data-tab="caps">七材料能力入口</button>
+      <button data-tab="history">历史运行</button>
+    </nav>
+
+    <!-- 参数与运行 -->
+    <section class="tabpanel active" id="tab-params">
+      <div class="card">
+        <h2>参数与运行（只有「提交计算」会求解）</h2>
+        <p class="hint">结构参数（相阈值/种子/几何）来自所选示例模板，表单只暴露网格/光束/路径/输出。</p>
+
+        <div class="control-row">
+          <div class="field" style="min-width:320px">
+            <label for="template-select">配置模板（切换模板会重置参数）</label>
+            <select id="template-select"></select>
+          </div>
+          <button class="btn" id="load-template">载入/重置为该模板</button>
+        </div>
+
+        <div class="section-title">网格</div>
+        <div class="form-grid">
+          <div class="field"><label>nx</label><input type="number" id="p-nx" min="3" max="801" step="1"></div>
+          <div class="field"><label>ny</label><input type="number" id="p-ny" min="3" max="801" step="1"></div>
+          <div class="field"><label>dx (µm)</label><input type="number" id="p-dx" min="0.01" max="100" step="0.1"></div>
+          <div class="field"><label>dy (µm)</label><input type="number" id="p-dy" min="0.01" max="100" step="0.1"></div>
+        </div>
+
+        <div class="section-title">光束</div>
+        <div class="form-grid cols-3">
+          <div class="field"><label>单脉冲能量 (µJ)</label><input type="number" id="p-E" min="0.000001" step="1"></div>
+          <div class="field"><label>光斑半径 w0 (µm)</label><input type="number" id="p-w0" min="0.01" max="500" step="0.5"></div>
+          <div class="field"><label>重复频率 (Hz)</label><input type="number" id="p-f" min="1" step="100"></div>
+        </div>
+
+        <div class="section-title">路径（首段）</div>
+        <div class="form-grid cols-3">
+          <div class="field"><label>速度 (m/s)</label><input type="number" id="p-v" min="0" max="100" step="0.1"></div>
+          <div class="field"><label>起点 x (µm)</label><input type="number" id="p-x0" step="5"></div>
+          <div class="field"><label>终点 x (µm)</label><input type="number" id="p-x1" step="5"></div>
+        </div>
+
+        <div class="section-title">求解模式（批次 I：冻结几何批量）</div>
+        <p class="hint">分组把块内事件的光束与提交合并到块级；分相、历史耦合、动态角度与斜入射下会自动回退逐脉冲参考。</p>
+        <div class="form-grid cols-3">
+          <div class="field"><label for="p-mode">求解路径</label>
+            <select id="p-mode">
+              <option value="reference">逐脉冲参考（reference）</option>
+              <option value="grouped">冻结几何分组（grouped）</option>
+            </select>
+          </div>
+          <div class="field"><label for="p-batch">批大小 B</label>
+            <input type="number" id="p-batch" min="1" max="4096" step="1" value="64">
+          </div>
+          <div class="field"><label for="p-accel">局部核后端</label>
+            <select id="p-accel">
+              <option value="off">NumPy（默认）</option>
+              <option value="numba">Numba（可选，实测无收益）</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-title">几何修正（批次 J：斜入射 / 动态角度）</div>
+        <p class="hint">只做几何修正：未提供吸收依据时<strong>不预测吸收差异</strong>。n_z≥0.5、入射角≤60° 是软件展示范围，超出即停止并给出位置，不裁剪角度继续。</p>
+        <div class="form-grid cols-3">
+          <div class="field"><label for="p-inc">入射角 (°)：相对光轴</label>
+            <input type="number" id="p-inc" min="0" max="60" step="1" value="0">
+          </div>
+          <div class="field"><label for="p-dyn-wrap">&nbsp;</label>
+            <label class="check"><input type="checkbox" id="p-dyn"> 动态角度（逐点法向 + 首次交点可见性）</label>
+          </div>
+        </div>
+
+        <div class="section-title">受限阈值协议（批次 H）</div>
+        <p class="hint">超阈判定<strong>只用本事件入射能流</strong>，不用累计剂量；只出分类掩膜，<strong>不产生深度</strong>，也不代表任何热学量。</p>
+        <div class="form-grid cols-2">
+          <div class="field"><label for="p-thr-wrap">&nbsp;</label>
+            <label class="check"><input type="checkbox" id="p-thr"> 开启协议</label>
+          </div>
+          <div class="field"><label for="p-thr-cand">阈值候选索引（多候选必须显式指定）</label>
+            <input type="number" id="p-thr-cand" min="0" step="1" value="0">
+          </div>
+        </div>
+
+        <div class="section-title">输出</div>
+        <div class="form-grid cols-2">
+          <div class="field"><label>ROI 半径 (µm)</label><input type="number" id="p-roi" min="0" step="5"></div>
+          <div class="field"><label>快照策略</label>
+            <select id="p-snap">
+              <option value="events">events（按事件）</option>
+              <option value="passes">passes（按遍）</option>
+              <option value="none">none（不保存）</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="notice warn" id="stale-warning" style="display:none"></div>
+        <div class="notice ok" id="submit-msg" style="display:none"></div>
+        <div class="btn-row">
+          <button class="btn primary" id="submit-run">提交计算</button>
+          <span class="hint" style="margin:0">提交才会递增求解次数；改参数不求解。</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结果 -->
+    <section class="tabpanel" id="tab-result">
+      <div class="card">
+        <h2>结果</h2>
+        <p class="hint">编辑态与结果态分离：图表一律读取已提交的冻结结果。</p>
+        <div id="result-body"></div>
+      </div>
+    </section>
+
+    <!-- 参考评估器 -->
+    <section class="tabpanel" id="tab-ref">
+      <div class="card">
+        <h2>文献参考评估器（批次 D）</h2>
+        <p class="hint">只复现文献定义的公式与协议量：<strong>不求解网格</strong>，不产生形貌；平均率与累计深度不得进入逐事件主循环。</p>
+        <div class="control-row">
+          <div class="field" style="min-width:280px">
+            <label for="ref-case">参考算例</label>
+            <select id="ref-case"></select>
+          </div>
+          <button class="btn" id="ref-eval">评估</button>
+        </div>
+        <div id="ref-result" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- 查表 -->
+    <section class="tabpanel" id="tab-table">
+      <div class="card">
+        <h2>查表（曲线插值，不触发求解）</h2>
+        <p class="hint">读取固定材料/波长/脉宽/历史协议下的一维响应曲线：默认<strong>分段线性</strong>；
+          越界返回状态与原因，<strong>低于量测区间不返回 0，也不外推或钳到端点</strong>。</p>
+
+        <div class="field" style="max-width:420px">
+          <label for="t-curve">曲线卡（*.curve.json）</label>
+          <select id="t-curve"></select>
+        </div>
+
+        <div class="section-title">曲线身份与去向</div>
+        <div id="t-identity"></div>
+
+        <div class="section-title">原始数据点（CSV 唯一来源）</div>
+        <div id="t-raw" style="max-height:220px;overflow-y:auto"></div>
+
+        <div class="section-title">查询</div>
+        <div class="control-row">
+          <div class="field" style="min-width:300px">
+            <label for="t-xs">查询 x（逗号分隔，有效区间内）</label>
+            <input type="text" id="t-xs">
+          </div>
+          <div class="field slim">
+            <label for="t-method">插值方法</label>
+            <select id="t-method"><option value="linear">分段线性</option></select>
+          </div>
+          <label class="check"><input type="checkbox" id="t-oor"> 允许越界（越界项返回 None）</label>
+          <button class="btn primary" id="t-lookup">查值</button>
+        </div>
+        <div id="t-result" style="margin-top:10px"></div>
+
+        <div class="section-title">原始点与插值图</div>
+        <div class="chart-wrap">
+          <p class="chart-title" id="t-chart-title"></p>
+          <canvas id="t-chart"></canvas>
+        </div>
+        <div class="watermark" id="t-chart-note"></div>
+      </div>
+    </section>
+
+    <!-- 七材料能力入口（批次 H） -->
+    <section class="tabpanel" id="tab-caps">
+      <div class="card">
+        <h2>七材料能力入口（批次 H）</h2>
+        <p class="hint">三类条目的含义不同：<strong>opened</strong> = 已绑真实能力并查得可用；
+          <strong>blocked</strong> = 已绑红线拦截（实跑须抛期望错误码）；
+          <strong>deferred</strong> = 规格要求开放而实现<strong>尚未支持</strong>的缺口，<em>不得</em>读作已开放。</p>
+        <div id="caps-summary"></div>
+        <div class="section-title">逐条核验结果（探针实跑）</div>
+        <div id="caps-table" style="max-height:520px;overflow-y:auto"></div>
+        <div id="caps-note" class="watermark"></div>
+      </div>
+    </section>
+
+    <!-- 历史运行 -->
+    <section class="tabpanel" id="tab-history">
+      <div class="card">
+        <h2>历史运行（读取已有结果，不重新求解）</h2>
+        <p class="hint">读取只递增「读取历史次数」，求解次数保持不变。</p>
+        <div class="control-row">
+          <div class="field" style="min-width:420px">
+            <label for="h-run">选择运行目录</label>
+            <select id="h-run"></select>
+          </div>
+          <button class="btn primary" id="h-load">读取结果</button>
+        </div>
+        <div class="watermark" id="h-note"></div>
+        <div id="h-msg" class="notice info" style="display:block">尚未读取。读取后结果区切换到对应冻结结果。</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/data.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,13 +1,14 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–J）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–K）
 
-> 版本：`0.8.0-j1`｜日期：2026-09-11｜状态：**批次 A–J 已实施并通过验收；M0 已放行，M1/M2/M3 条件齐备待审批**
+> 版本：`0.9.0-k1`｜日期：2026-09-11｜状态：**批次 A–K 已实施并通过验收；M0 已放行，M1/M2/M3 条件齐备待审批**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
 > + 查表（F）+ 分相结构（G）+ 受限阈值协议 / 七材料能力入口 / 水印同源（H）
-> + 冻结几何批量加速与性能基准（I）+ 斜入射 / 动态角度 / 可见性（J）。
+> + 冻结几何批量加速与性能基准（I）+ 斜入射 / 动态角度 / 可见性（J）
+> + 本地 Web 界面（K，替代 Streamlit）。
 > **A–J 全部批次已交付**，详见 `docs/reports/progress.md`。
 
 ---
@@ -428,6 +429,39 @@ mu = max(0, k·n),      n = (-h_x, -h_y, 1)/sqrt(1+h_x^2+h_y^2)
 
 ---
 
+## 3h. 本地 Web 界面（批次 K，主界面）
+
+```bash
+PYTHONPATH=src python -m ufdemo.webapp              # 默认 127.0.0.1:8787
+PYTHONPATH=src python -m ufdemo.webapp --port 9000
+python -m pytest -q tests/test_webcontract.py       # 契约层与端到端（23 项）
+node webui/test/contract_test.mjs                   # 前端契约（27 项，需后端在跑）
+```
+
+**静态前端 + 真实求解 API**：浏览器端是纯 HTML/CSS/JS（无构建步骤、无框架依赖），
+后端是 `ufdemo/webapp.py` —— 只用 Python 标准库的 `http.server`，**不引入
+FastAPI/Flask**。`POST /api/solve` 是唯一会调用求解器的端点。
+
+```bash
+PYTHONPATH=src python -m ufdemo.webapp --runs-dir runs/_web   # 隔离输出
+```
+
+六条界面规矩（与 Streamlit 侧同源，因为共用 `ui_service` 的纯逻辑层）：
+
+1. **只有「提交计算」会求解**，且只有**真实调用成功**才递增「求解次数」
+   —— 准入失败时求解器没跑，因此不计数；计数可被外部核对。
+2. 「读取结果」只递增「读取次数」，读的是**盘上已有**结果，不重算。
+3. 切图层 / 旋转视图 / 切截面 / 时间轴回放 / 查表 **都不改变任何计数**。
+4. `threshold_only` 的深度是 `null`（不是数值 `0`），界面显示「不提供」。
+5. 图层不可用时给出**原因**，且不返回全 0 假数组。
+6. 越界查表唯一错误码 `TABLE_OUT_OF_RANGE`；允许越界时返回 `null`，不外推、不钳端点。
+
+> **不要用 `file://` 直接打开 `webui/index.html`**：后端不可用时页面会明确报错并禁用
+> 提交，不会给出「看起来能用」的假象。
+> 详见 `webui/README.md` 与 `docs/decisions/ADR-0016-web-ui-replaces-streamlit.md`。
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -593,7 +627,7 @@ ultrafast-demo/
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置（含合成结构实例、查表算例与斜入射/斜平面示例）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0015）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0016）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -606,7 +640,7 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 368 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + J 斜入射 23 + 回归 5）
+python -m pytest -q                  # 394 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + J 斜入射 23 + 回归 5）
 python -m pytest -q -m g05           # 只跑文献语义回归
 python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
 python -m pytest -q -m g07           # 斜入射与表面几何（批次 J）
@@ -645,5 +679,5 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–J
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–J 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–K 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

@@ -31,9 +31,9 @@ __all__ = [
 ]
 
 # 版本轨迹：M0 放行 0.1.0-m0 → D 0.2.0-d → E 0.3.0-e1 → F 0.4.0-f1 →
-# G 0.5.0-g1 → H 0.6.0-h1 → I 0.7.0-i1 → J 0.8.0-j1。
+# G 0.5.0-g1 → H 0.6.0-h1 → I 0.7.0-i1 → J 0.8.0-j1 → K 0.9.0-k1。
 # 必须与 pyproject.toml 的 version 一致；由 tests/test_version_consistency.py 守住。
-__version__ = "0.8.0-j1"
+__version__ = "0.9.0-k1"
 
 from .config import SCHEMA_VERSION  # noqa: E402  (放在 __version__ 之后以免循环)
 
