@@ -20,6 +20,10 @@ runs/_ui_demo_probe/
 # Streamlit 本地配置
 .streamlit/
 
+# 本地启动日志（streamlit run 重定向输出）
+_streamlit.log
+*.log
+
 # 编辑器
 .vscode/
 .idea/

@@ -102,9 +102,15 @@ def _write_atomic(path: Path, data: str | bytes) -> None:
 
 
 def code_version(project_root: str | Path) -> dict[str, Any]:
-    """代码版本：优先 git 提交；非 git 环境保存源码清单哈希，不伪造提交号。"""
+    """代码版本：优先 git 提交；非 git 环境保存源码清单哈希，不伪造提交号。
+
+    另含 ``ufdemo_version``：即使脱离 git（源码清单哈希也变了），
+    也能从运行目录直接读出产生该结果的软件版本。
+    """
+    from . import __version__
+
     root = Path(project_root)
-    info: dict[str, Any] = {"git_available": False}
+    info: dict[str, Any] = {"git_available": False, "ufdemo_version": __version__}
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True, text=True, timeout=10

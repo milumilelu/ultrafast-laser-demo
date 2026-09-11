@@ -132,7 +132,9 @@ def _watermark_block(wm: dict, *, where: str) -> None:
 
 def _sidebar(state: U.SessionState):
     st.sidebar.title("超快激光加工 Demo")
-    st.sidebar.caption(f"ufdemo {__version__}（批次 A–G）")
+    # 批次字母由版本号后缀推导（0.8.0-j1 → J），避免版本升级后这里忘记同步。
+    _batch = __version__.split("-")[-1][:1].upper() if "-" in __version__ else "?"
+    st.sidebar.caption(f"ufdemo {__version__}（批次 A–{_batch}）")
 
     choices = _material_choices()
     labels = list(choices.keys())
