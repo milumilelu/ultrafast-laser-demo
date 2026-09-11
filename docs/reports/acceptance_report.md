@@ -1,10 +1,10 @@
 # 验收报告（批次 A–G：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构）
 
-- 生成时间（UTC）：2026-09-10T16:22:35.562213+00:00
-- 代码版本：commit=ccf07172f9cab218c687c406d40a286519d6befa｜工作区有改动=True｜源码清单哈希=fdc54e3f1bf07138…
+- 生成时间（UTC）：2026-09-11T00:23:06.417918+00:00
+- 代码版本：commit=7e36d67ac6572b04dd1b0062e6594a8ea59e7866｜工作区有改动=True｜源码清单哈希=fdc54e3f1bf07138…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
-- 汇总：通过 84｜失败 0｜未运行 4
+- 汇总：通过 97｜失败 0｜未运行 4
 
 > 公式核查、数值实现验证、实验复现三栏分开记录。本报告不含任何实验复现结论：
 > A–C 只做到「公式核查 + 数值实现验证」；D 的 YSZ/SiC 参考量也只做到「公式核查」；
@@ -75,10 +75,10 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-10T16:22:32.575625+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T00:22:59.450513+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260910T162232_v8a2 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T002259_wf7g |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 切换曲线卡 / 插值方法：solve_count 始终为 0 | 0（不变） | 曲线数=3｜异常组合=无 |  |  | 通过 | 数值实现验证 |
@@ -86,8 +86,21 @@
 | G09-UI | app.py（Streamlit） | 缺能力模式显示准确不可用原因（不自动降级、不静默填值） | 拒绝并给出原因 | 允许=False｜原因=材料卡未开放 reference_case 模式；允许：['threshold_only', 'synthetic_demo'] |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 合成模式禁止导出物理深度 | 以 depth_um 命名时拒绝；depth 标签非 um | 导出标签=depth/L_ref｜拒绝 depth_um=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | threshold_only/参考结果：去除量显示「不提供」而非 0 | removal_available=False | removal_available=False｜run_id=g05_ysz_reference |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 53 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 63 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 逻辑层提交 | cfrp_laminated_ply.json 提交后 status=completed | status=completed｜solve_count=1｜快照=4 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 逻辑层提交 | alsic_particle_composite.json 提交后 status=completed | status=completed｜solve_count=1｜快照=2 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 只读不重算 | 渲染/切图层/取快照后 solve_count 不变 | 1 -> 1 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 只读不重算 | 渲染/切图层/取快照后 solve_count 不变 | 1 -> 1 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 措辞守卫 | 全部图层标签不含被禁词（7 项） | 被禁词表 ('热影响区', 'HAZ', '温度场', '温度分布', '热输入', '温度')；命中 0 项 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 措辞守卫（不可用原因） | 不可用原因文案不含被禁词 | 命中 0 项 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 界面全链路（AppTest） | 首屏无异常 | 异常=0 错误=0 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 界面全链路（AppTest） | 点「提交计算」后无异常且出结果 | 异常=0 错误=0｜solve_count=1｜status=completed｜快照=4 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 界面结果区渲染 | 结果页重跑无异常 | 异常=0 错误=0 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 分相诊断面板 | 结果区出现「相结构诊断」面板 | 相结构诊断｜laminated_fiber_composite｜算法 structure_v1｜种子 20260911｜相数 2 |  |  | 通过 | 数值实现验证 |
+| G09-demo | app.py（端到端链路） | 历史读取同源 | 读回历史带出同源结构诊断且不求解 | solve_count=0 read_count=1｜结构类型=laminated_fiber_composite｜截断诊断行=6｜phase_id=有 |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/sic_threshold_vs_effective_n.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=threshold_fluence |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/synthetic_volume_per_energy.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=removal_volume,removal_volume_per_energy |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/ysz_analytic_depth_vs_fluence.curve.json | 曲线去向（语义路由） | event_kernel（event_kernel 仅限 event_depth_increment） | event_kernel｜可进事件核=True｜派生=removal_depth_per_pulse,local_depth |  |  | 通过 | 数值实现验证 |
@@ -133,6 +146,7 @@ python tools/table_report.py
 python tools/structure_report.py
 python tools/migrate_materials.py
 python tools/ui_probe.py
+python tools/ui_demo_probe.py
 python tools/run_acceptance.py
 python -m pytest -q
 streamlit run app.py

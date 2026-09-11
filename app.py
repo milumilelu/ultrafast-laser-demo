@@ -131,7 +131,7 @@ def _watermark_block(wm: dict, *, where: str) -> None:
 
 def _sidebar(state: U.SessionState):
     st.sidebar.title("超快激光加工 Demo")
-    st.sidebar.caption(f"ufdemo {__version__}（批次 A–E）")
+    st.sidebar.caption(f"ufdemo {__version__}（批次 A–G）")
 
     choices = _material_choices()
     labels = list(choices.keys())
@@ -715,8 +715,9 @@ def main() -> None:
     material, run_mode = _sidebar(state)
 
     st.title("七种材料超快激光加工 Demo")
-    st.caption("M0 最小闭环 + 批次 D 参考评估器 + 批次 E 界面 + 批次 F 查表。"
-               "旧资料与 `微观仿真/` 未被修改。")
+    st.caption("M0 最小闭环 + 批次 D 参考评估器 + 批次 E 界面 + 批次 F 查表 "
+               "+ 批次 G 分相结构（颗粒/铺层与跨相界面截断）。"
+               "合成结构不含实验复现结论；旧资料与 `微观仿真/` 未被修改。")
 
     t1, t2, t3, t4, t5 = st.tabs(
         ["参数与运行", "结果（形貌/截面/时间轴）", "参考评估器", "查表", "历史运行"]

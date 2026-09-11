@@ -255,6 +255,12 @@ docs/reports/
 > 本批**不含任何实验复现结论**。界面新增 `phase_id` 图层与结构诊断面板；
 > 未启用分相结构的运行时**如实报不可用**，不返回全 0 假数组。
 
+**演示路径**（前端 ↔ 后端已打通）：侧边栏选材料 `cfrp_t700_yb01_800nm` →
+运行模式 `synthetic_demo` → 模板页选 `cfrp_laminated_ply.json` → 点「提交计算」→
+结果页可切 `phase_id` 图层、展开「相结构诊断」看各相摘要与跨相截断诊断。
+整条链路由 `tools/ui_demo_probe.py` 用 `AppTest` 真实驱动并留证
+（`docs/reports/ui_demo_probe.md`，13/0/0）。
+
 ---
 
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
@@ -376,6 +382,7 @@ ultrafast-demo/
 │   ├── table_report.py        # 查表报告：错误 CSV + 原始点/插值图（批次 F）
 │   ├── structure_report.py    # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 │   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F/G 增补检查）
+│   ├── ui_demo_probe.py       # 端到端演示可用性检查（批次 G：前后端对接全链路）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
 ├── data/curves/          # 响应曲线卡（*.curve.json + *.points.csv，批次 F）
@@ -404,6 +411,7 @@ python tools/make_curves.py          # 生成示例曲线与无效夹具（批�
 python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插值图
 python tools/structure_report.py     # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
+python tools/ui_demo_probe.py        # 端到端演示可用性（前后端对接全链路）
 python tools/run_acceptance.py       # 实际执行并生成验收报告（A–G）
 ```
 
@@ -414,6 +422,7 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–G
 * `docs/reports/g05_reference_semantics.md` / `.csv` —— G05 专项报告；
 * `docs/reports/reference_equations.md` —— **源公式 ↔ 实现 ↔ 验收 对应表**；
 * `docs/reports/ui_operation_check.md` / `.csv` —— **界面操作检查（G09-UI）**；
+* `docs/reports/ui_demo_probe.md` / `.csv` —— **端到端演示可用性（前后端对接全链路）**；
 * `docs/reports/table_lookup.md` —— **查表汇总报告（G09-table）**；
 * `docs/reports/table_errors.csv` —— **错误 CSV**：每条违规输入与错误码；
 * `docs/reports/curve_interpolation.html` / `.csv` —— **原始点与插值图**；

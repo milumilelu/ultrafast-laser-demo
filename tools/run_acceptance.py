@@ -5,7 +5,8 @@
 执行环境、命令和结果目录。
 
 已实施批次：A–C（M0 最小闭环，G01–G04）+ D（T07 参考评估器，G05）+
-E（T09 界面，G09-UI）+ F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）。
+E（T09 界面，G09-UI）+ F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）
++ 端到端演示可用性（G09-demo）。
 未运行的项目（G07–G08、逐事件核查表接入、M1/M2/M3 相关）明确标记为「未运行」，
 不得用预期数值代替通过记录。
 
@@ -423,6 +424,19 @@ def main() -> int:
             add("G09-UI", "app.py（Streamlit）", "", r["check"], r["expected"], r["measured"], "", "",
                 r["status"] == "通过", str(ui_probe_dir), "数值实现验证", r["note"])
 
+    # ---------------- G09 / 端到端演示可用性（批次 G 增补）----------------
+    from ui_demo_probe import run_demo_checks, write_reports as write_demo_reports  # noqa: E402
+
+    demo_probe_dir = out_root / "_ui_demo_probe"
+    demo_rows = run_demo_checks(demo_probe_dir)
+    demo_csv, demo_md = write_demo_reports(demo_rows, demo_probe_dir)
+    for r in demo_rows:
+        if r["status"] == "未运行":
+            not_run("G09-demo", "app.py（端到端链路）", r["check"], r["expected"], r["note"], "数值实现验证")
+        else:
+            add("G09-demo", "app.py（端到端链路）", "", r["check"], r["expected"], r["measured"], "", "",
+                r["status"] == "通过", str(demo_probe_dir), "数值实现验证", r["note"])
+
     # ---------------- G09 / 查表（批次 F：T10）----------------
     from table_report import (  # noqa: E402
         collect_curve_rows,
@@ -581,6 +595,7 @@ def main() -> int:
         "python tools/structure_report.py",
         "python tools/migrate_materials.py",
         "python tools/ui_probe.py",
+        "python tools/ui_demo_probe.py",
         "python tools/run_acceptance.py",
         "python -m pytest -q",
         "streamlit run app.py",
@@ -708,6 +723,8 @@ def main() -> int:
     print(f"报告：{D / 'g05_reference_semantics.md'}")
     print(f"报告：{ui_csv}")
     print(f"报告：{ui_md_path}")
+    print(f"报告：{demo_csv}")
+    print(f"报告：{demo_md}")
     print(f"报告：{struct_csv}")
     print(f"报告：{g06_csv}")
     print(f"报告：{g06_md_path}")
@@ -717,8 +734,12 @@ def main() -> int:
     print(f"插图：{table_fig}")
     print(f"通过 {n_pass}｜失败 {n_fail}｜未运行 {n_nr}")
     print(f"界面检查：通过 {n_ui_pass}｜失败 {n_ui_fail}｜未运行 {n_ui_nr}")
+    n_demo_pass = sum(1 for r in demo_rows if r["status"] == "通过")
+    n_demo_fail = sum(1 for r in demo_rows if r["status"] == "失败")
+    n_demo_nr = sum(1 for r in demo_rows if r["status"] == "未运行")
+    print(f"端到端演示检查：通过 {n_demo_pass}｜失败 {n_demo_fail}｜未运行 {n_demo_nr}")
     print(f"G06 检查：通过 {len(g06_rows) - n_g06_fail}｜失败 {n_g06_fail}｜结构实例 {len(structure_rows)}")
-    return 0 if (n_fail == 0 and n_g06_fail == 0) else 1
+    return 0 if (n_fail == 0 and n_g06_fail == 0 and n_demo_fail == 0) else 1
 
 
 if __name__ == "__main__":

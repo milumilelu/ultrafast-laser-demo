@@ -52,6 +52,7 @@
 | G06 报告 | `docs/reports/g06_phase_interfaces.md` | 结构实例 + 检查明细 + §8 规则对应 + 边界声明 |
 | G06 报告生成器 | `tools/structure_report.py` | `python tools/structure_report.py`（0 失败） |
 | 界面材料相图层与结构诊断面板 | `app.py`、`ui_service.py`（`phase_id` 图层、`build_structure_diagnostics`） | 界面探针 17/0；未启用分相时如实报不可用 |
+| 端到端演示可用性检查 | `tools/ui_demo_probe.py` → `docs/reports/ui_demo_probe.md` | 13/0/0：选材料→选模板→提交→出结果→面板渲染→历史读回全链路 |
 | 设计决定记录 | `docs/decisions/ADR-0012-phase-structure-and-truncation.md` | 八项决定 + 三条红线可追溯 |
 
 ## 上一批（F）实际完成的交付物
@@ -182,8 +183,9 @@
 ### 汇总
 
 - `python -m pytest -q`：**277 passed**（A–C 63 + D 18 + E 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + 回归 5）。
-- `docs/reports/acceptance_report.md`：**通过 84｜失败 0｜未运行 4**。
+- `docs/reports/acceptance_report.md`：**通过 97｜失败 0｜未运行 4**。
 - 界面操作检查：**通过 17｜失败 0｜未运行 0**。
+- 端到端演示可用性：**通过 13｜失败 0｜未运行 0**（前后端对接全链路）。
 - 查表拒收检查：**通过 21｜失败 0**。
 - G06 分相检查：**通过 13｜失败 0**（结构实例 2 个）。
 
@@ -203,7 +205,7 @@
 - [x] 实际执行的小例子可安装、运行、导出并重新读取。
       （`examples/*.json` + `python -m ufdemo run|reference|table` + `python -m ufdemo inspect`）
 - [x] 本阶段适用 G 测试有实测记录，失败与未运行项目未标为通过。
-      （`acceptance_report.md`：通过 84｜失败 0｜未运行 4，逐一列出原因；G06 已由「未运行」转为实测）
+      （`acceptance_report.md`：通过 97｜失败 0｜未运行 4，逐一列出原因；G06 已由「未运行」转为实测）
 - [x] 原始资料和旧程序未被覆盖；迁移与代码变更可追溯。
       （F01/F02 哈希与任务书指纹一致；`input_hash_check.csv`；`material_migration.csv`；
       `微观仿真/` 未被触碰）

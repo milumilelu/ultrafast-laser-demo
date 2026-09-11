@@ -11,9 +11,11 @@ runs/*
 !runs/acceptance/
 !runs/.gitkeep
 
-# 界面探针的临时运行目录（tools/ui_probe.py 每次重跑都会重建）
+# 界面探针的临时运行目录（tools/ui_probe.py、tools/ui_demo_probe.py 每次重跑都会重建）
 runs/acceptance/_ui_probe/
+runs/acceptance/_ui_demo_probe/
 runs/_ui_probe/
+runs/_ui_demo_probe/
 
 # Streamlit 本地配置
 .streamlit/
