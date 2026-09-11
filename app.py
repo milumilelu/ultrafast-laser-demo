@@ -245,6 +245,28 @@ def _param_panel(state: U.SessionState, material, run_mode: str):
     start = c2.number_input("起点 x (µm)", -1e4, 1e4, float(G(p, "path.segments.0.start_xyz_m.0", 0.0)) * 1e6, key="f_x0")
     end = c3.number_input("终点 x (µm)", -1e4, 1e4, float(G(p, "path.segments.0.end_xyz_m.0", 0.0)) * 1e6, key="f_x1")
 
+    st.markdown("**求解模式（批次 I：冻结几何批量）**")
+    mode_opts = ("reference", "grouped")
+    cur_mode = str(G(p, "solver.mode", "reference"))
+    c1, c2, c3 = st.columns(3)
+    smode = c1.selectbox(
+        "求解路径", mode_opts,
+        index=mode_opts.index(cur_mode) if cur_mode in mode_opts else 0,
+        format_func=lambda m: "逐脉冲参考" if m == "reference" else "冻结几何分组",
+        key="f_mode",
+        help="分组把块内事件的光束/提交合并到块级；分相、历史耦合与动态角度下会自动回退参考。",
+    )
+    batch = c2.number_input("批大小 B", 1, 4096, int(G(p, "solver.batch_size", 64)), key="f_batch")
+    backend_opts = ("off", "numba")
+    cur_backend = str(G(p, "solver.acceleration", "off"))
+    backend = c3.selectbox(
+        "局部核后端", backend_opts,
+        index=backend_opts.index(cur_backend) if cur_backend in backend_opts else 0,
+        format_func=lambda b: "NumPy（默认）" if b == "off" else "Numba（可选，实测无收益）",
+        key="f_backend",
+        help="T16 实测：该逐元素对数核 NumPy 已足够，Numba 无收益且内存更高；缺 numba 时自动回退并警告。",
+    )
+
     st.markdown("**输出**")
     c1, c2 = st.columns(2)
     roi_um = c1.number_input("ROI 半径 (µm)", 0.0, 1e4, float(G(p, "output.roi.0.radius_m", 1e-5)) * 1e6, key="f_roi")
@@ -265,6 +287,9 @@ def _param_panel(state: U.SessionState, material, run_mode: str):
         "path.segments.0.end_xyz_m": [end * 1e-6, 0.0, 0.0],
         "output.snapshot_policy": snap_policy,
         "output.roi.0.radius_m": roi_um * 1e-6,
+        "solver.mode": smode,
+        "solver.batch_size": int(batch),
+        "solver.acceleration": backend,
     }
     base = U.load_template(EXAMPLES, tmpl)
     base["run_mode"] = run_mode
@@ -318,6 +343,7 @@ def _result_panel(state: U.SessionState):
 
     _watermark_block(frozen.material_watermark, where="result_header")
     _threshold_diagnostics_block(frozen)
+    _acceleration_block(frozen)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("状态", U.STATUS_ZH.get(frozen.status, frozen.status))
@@ -502,6 +528,57 @@ def _threshold_diagnostics_block(frozen: U.FrozenRun):
             "绝不使用累计剂量；它不产生去除量，不参与深度更新，也不代表任何热学量。"
         )
         st.dataframe(frozen.threshold_rows(), hide_index=True, width="stretch")
+        if d.get("note"):
+            st.caption(d["note"])
+
+
+def _acceleration_block(frozen: U.FrozenRun):
+    """批次 I：分组批量面板（参考模式也会显示，如实说明未加速的原因）。
+
+    细则 12 节要求界面显示**实际批大小、拒绝/回退次数、与参考模式差值和运行时间**；
+    并强调局部误差估计**不是**全局误差证明。
+    """
+    d = frozen.acceleration_diagnostics
+    if not d:
+        return
+    grouped = bool(d.get("grouped"))
+    title = (
+        f"求解模式｜批量（分组）｜批大小 {d.get('batch_size_configured')}"
+        if grouped
+        else f"求解模式｜逐脉冲参考｜实际后端 {d.get('effective_backend')}"
+    )
+    with st.expander(title, expanded=grouped):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("事件数", frozen.events_processed)
+        c2.metric("块数", d.get("n_blocks") if grouped else "—")
+        c3.metric("拒绝/回退块数", d.get("n_rejected_blocks") if grouped else "—")
+        c4.metric("运行耗时 (s)", f"{frozen.elapsed_s:.4f}" if frozen.elapsed_s else "—")
+
+        if grouped:
+            c5, c6, c7, c8 = st.columns(4)
+            c5.metric("光束补丁数", d.get("n_beam_patches"))
+            c6.metric("补丁复用命中", d.get("patch_cache_hits"))
+            ratio = d.get("patch_reuse_ratio")
+            c7.metric("补丁复用率", f"{ratio:.1%}" if ratio is not None else "—")
+            c8.metric("局部误差（内部单位）", f"{d.get('max_local_error_internal'):.3e}"
+                      if d.get("max_local_error_internal") is not None else "—")
+            if d.get("local_error_estimated"):
+                st.caption("本运行执行了「B 与两个 B/2」的半步试算。")
+            else:
+                st.caption(
+                    "本运行的几何与当前高度无关（fixed_geometry）：一步与两个半步恒等，"
+                    "已跳过半步试算（严格等价，非降低校验）。"
+                )
+            if d.get("snapshot_on_block_boundary"):
+                st.warning("快照在块边界记录：索引标注为块内最后一个命中事件，"
+                           "实际对应块结束时的表面状态（回放粒度近似）。")
+        else:
+            reason = d.get("fallback_reason")
+            if reason:
+                st.info(f"未启用批量模式：{reason}")
+
+        if d.get("boundary_note"):
+            st.caption(d["boundary_note"])
         if d.get("note"):
             st.caption(d["note"])
 

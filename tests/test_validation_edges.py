@@ -207,13 +207,41 @@ def test_oblique_incidence_rejected_at_config_layer():
     assert any(e["code"] == "GEOMETRY_UNSUPPORTED" for e in rep.errors)
 
 
-def test_unimplemented_acceleration_rejected_at_config_layer():
+def test_grouped_mode_red_lines_rejected_at_config_layer():
+    """批次 I（T17）：分组批量的红线在**配置层**拦截，不能只靠运行时回退。
+
+    红线三条（细则 9.1 末）：分相结构、历史耦合、「批量 + 动态角度」。
+    注意 acceleration="numba" 本身是**合法**的局部核后端（T16），不再被拒；
+    缺失 numba 时回退 NumPy 并给出警告（见 acelerators.numba_available）。
+    """
+    card = load_material_card(_base()["material_card_file"])
+
+    # 1) acceleration=numba 现在是合法后端（不再 NOT_IMPLEMENTED）
     raw = _base()
     raw["solver"]["acceleration"] = "numba"
-    cfg = make_config(raw)
-    rep = validate_run(cfg, load_material_card(raw["material_card_file"]))
+    rep = validate_run(make_config(raw), card)
+    assert rep.ok, [e["code"] for e in rep.errors]
+
+    # 2) 分组 × 分相结构 → CONFIG_INVALID
+    raw = _base()
+    raw["solver"].update(mode="grouped", structured_interface=True)
+    rep = validate_run(make_config(raw), card)
     assert not rep.ok
-    assert any(e["code"] == "NOT_IMPLEMENTED" for e in rep.errors)
+    assert any(e["code"] == "CONFIG_INVALID" for e in rep.errors)
+
+    # 3) 分组 × 历史耦合 → CONFIG_INVALID
+    raw = _base()
+    raw["solver"].update(mode="grouped", history_enabled=True)
+    rep = validate_run(make_config(raw), card)
+    assert not rep.ok
+    assert any(e["code"] == "CONFIG_INVALID" for e in rep.errors)
+
+    # 4) 分组 × 动态角度 → CONFIG_INVALID（细则 9.1 末：两增强不得同时启用）
+    raw = _base()
+    raw["solver"].update(mode="grouped", dynamic_angle=True)
+    rep = validate_run(make_config(raw), card)
+    assert not rep.ok
+    assert any(e["code"] == "CONFIG_INVALID" for e in rep.errors)
 
 
 def test_threshold_only_reports_null_not_zero():

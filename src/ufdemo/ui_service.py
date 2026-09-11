@@ -155,6 +155,59 @@ def build_threshold_diagnostics(diagnostics_inner: Mapping[str, Any] | None) -> 
         "note": thr.get("note"),
     }
 
+def build_acceleration_diagnostics(
+    diagnostics_inner: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """批次 I：把冻结几何分组的诊断整理成界面可展示的字典。
+
+    入参对应 ``result.diagnostics`` 与 ``result.metadata``（也能从运行目录
+    ``diagnostics.json`` / ``metadata.json`` 读回），因此**实时运行与历史读取同源**。
+
+    关键口径（细则 12 节 / 任务书 11.1）：
+
+    * 界面必须显示**实际批大小、拒绝/回退次数、与参考模式的差值和运行时间**；
+    * 局部误差估计**不是**全局误差证明——文案里必须写明，避免读者误读；
+    * 参考模式或回退时，如实说明"未启用批量"及原因，不假装加速过。
+    """
+    diag = dict(diagnostics_inner or {})
+    acc = dict(diag.get("acceleration") or {})
+    meta = dict(metadata or {})
+    meta_acc = dict(meta.get("acceleration") or {})
+
+    # 优先用 diagnostics 里的运行期数据；必要时用 metadata 补模式信息
+    effective_mode = acc.get("effective_mode") or meta_acc.get("effective_mode")
+    if not acc and not meta_acc:
+        return {}
+
+    return {
+        "available": True,
+        "requested_mode": meta_acc.get("requested_mode"),
+        "effective_mode": effective_mode,
+        "requested_backend": meta_acc.get("requested_backend"),
+        "effective_backend": meta_acc.get("effective_backend") or acc.get("local_kernel"),
+        "grouped": effective_mode == "grouped",
+        "fallback_reason": meta_acc.get("fallback_reason"),
+        "batch_size_configured": acc.get("batch_size_configured"),
+        "n_blocks": acc.get("n_blocks"),
+        "n_rejected_blocks": acc.get("n_rejected_blocks"),
+        "n_trials": acc.get("n_trials"),
+        "n_beam_patches": acc.get("n_beam_patches"),
+        "patch_cache_hits": acc.get("patch_cache_hits"),
+        "patch_reuse_ratio": acc.get("patch_reuse_ratio"),
+        "max_local_error_internal": acc.get("max_local_error_internal"),
+        "max_rel_l2_local": acc.get("max_rel_l2_local"),
+        "local_error_estimated": acc.get("local_error_estimated"),
+        "snapshot_on_block_boundary": bool(acc.get("snapshot_on_block_boundary")),
+        "lossy_approximation": bool(acc.get("snapshot_on_block_boundary")),
+        "note": acc.get("note") or meta_acc.get("note"),
+        "boundary_note": (
+            "局部误差估计只用于控制 batch_size，**不是全局误差证明**；"
+            "全局正确性以完整逐脉冲对照为准（见 G08 与性能报告）。"
+        ),
+    }
+
+
 STATUS_ZH = {
     "completed": "已完成",
     "failed": "失败",
@@ -223,10 +276,14 @@ class FrozenRun:
     events_processed: int = 0
     events_total: int = 0
     removal_available: bool = True
+    # 求解耗时（秒）。实时运行取自 result，历史读取取自 diagnostics.json 顶层。
+    elapsed_s: float | None = None
     # 批次 G：相结构诊断（实时运行与历史读取同源；均质运行为空）
     structure_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 批次 H：受限阈值协议诊断（未开启时为空；开启时含可观测量/基准/阈值与原因）
     threshold_diagnostics: dict[str, Any] = field(default_factory=dict)
+    # 批次 I：分组批量诊断（参考模式/回退时也给出模式与原因；含批大小、拒绝次数、局部误差）
+    acceleration_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 内存中的结果与表面（用于渲染；不写回表单）
     result: RunResult | None = None
     # 从磁盘读取的最终表面数组（历史运行；同样只读，不求解）
@@ -619,6 +676,10 @@ def submit(
             getattr(result, "diagnostics", None), (result.metadata or {}).get("structure")
         ),
         threshold_diagnostics=build_threshold_diagnostics(getattr(result, "diagnostics", None)),
+        acceleration_diagnostics=build_acceleration_diagnostics(
+            getattr(result, "diagnostics", None), getattr(result, "metadata", None)
+        ),
+        elapsed_s=getattr(result, "elapsed_s", None),
     )
 
     state.frozen = frozen
@@ -642,6 +703,18 @@ def submit(
 # ---------------------------------------------------------------------------
 # 读取已有运行：不求解，只增加 read_count
 # ---------------------------------------------------------------------------
+
+
+def _loaded_elapsed_s(loaded: Any) -> float | None:
+    """从运行目录读回求解耗时。``io`` 把它写在 ``diagnostics.json`` 顶层。"""
+    diag = getattr(loaded, "diagnostics", None) or {}
+    if not isinstance(diag, Mapping):
+        return None
+    val = diag.get("elapsed_s")
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
@@ -717,6 +790,11 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         threshold_diagnostics=build_threshold_diagnostics(
             (loaded.diagnostics or {}).get("diagnostics")
         ),
+        acceleration_diagnostics=build_acceleration_diagnostics(
+            (loaded.diagnostics or {}).get("diagnostics"),
+            loaded.metadata,
+        ),
+        elapsed_s=_loaded_elapsed_s(loaded),
     )
     state.frozen = frozen
     state.read_count += 1

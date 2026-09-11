@@ -1,9 +1,9 @@
 # 界面操作检查（批次 E / T09，G09；批次 F / T10 增补查表检查）
 
-- 生成时间（UTC）：2026-09-11T01:49:48.741861+00:00
-- 代码版本：commit=cde51d84a1e83f853da79f0eeda4d94a2951c9a3｜工作区有改动=True
+- 生成时间（UTC）：2026-09-11T05:11:17.290448+00:00
+- 代码版本：commit=fdb7e8cedc2aab12d6122b27700d2e3f1ef7dc6d｜工作区有改动=True
 - 驱动方式：`streamlit.testing.v1.AppTest` 真实执行 `app.py`
-- 汇总：通过 20｜失败 0｜未运行 0
+- 汇总：通过 22｜失败 0｜未运行 0
 - 探针输出目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe`（由 `UFDEMO_RUNS_DIR` 隔离，不污染工作区 `runs/`）
 
 ## 检查项
@@ -13,11 +13,11 @@
 | 初始渲染无异常 | 无异常 | 无异常 | 通过 | 六标签页：参数与运行 / 结果 / 参考评估器 / 查表 / 七材料能力入口 / 历史运行 |
 | 初始 solve_count | 0 | 0 | 通过 | 未提交前不得求解 |
 | 初始无冻结结果 | frozen=None | frozen=None | 通过 |  |
-| 提交计算：solve_count 恰好 +1 | 1 | 1 | 通过 | run_id=ui_run_20260911T014940_i9ni｜status=completed |
-| 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T01:49:40.057258+00:00） | 通过 | 执行细则 11.3 |
+| 提交计算：solve_count 恰好 +1 | 1 | 1 | 通过 | run_id=ui_run_20260911T051106_oyaz｜status=completed |
+| 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T05:11:06.273340+00:00） | 通过 | 执行细则 11.3 |
 | 改参数后 solve_count 不变 | 1 | 1 | 通过 |  |
 | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 | 通过 | 执行细则 11.3「只旋转视图、切换图层/截面/快照时读取已有数据」 |
-| 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T014940_i9ni | 通过 | 读取不等于用当前参数求解 |
+| 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T051106_oyaz | 通过 | 读取不等于用当前参数求解 |
 | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI | 通过 | 批次 H：导出=回放，标签不再各写一份 |
 | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None | 通过 | 参考评估器只做公式核查（批次 D 语义） |
 | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True | 通过 | 批次 F：查表是纯读取，不是求解 |
@@ -28,7 +28,9 @@
 | 缺能力模式显示准确不可用原因（不自动降级、不静默填值） | 拒绝并给出原因 | 允许=False｜原因=材料卡未开放 reference_case 模式；允许：['threshold_only', 'synthetic_demo'] | 通过 | 配置层拦截，而非仅按钮禁用 |
 | 合成模式禁止导出物理深度 | 以 depth_um 命名时拒绝；depth 标签非 um | 导出标签=depth/L_ref｜拒绝 depth_um=True | 通过 | 执行细则 4.1：合成深度与微米平面坐标不可混算 |
 | threshold_only/参考结果：去除量显示「不提供」而非 0 | removal_available=False | removal_available=False｜run_id=g05_ysz_reference | 通过 | 界面不显示数值零冒充「无去除」 |
-| 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 98 个运行目录 | 通过 | UFDEMO_RUNS_DIR 覆盖，不污染工作区 runs/ |
+| 求解模式可切为「冻结几何分组」并产出批量诊断 | solve_count+1｜acceleration_diagnostics.grouped=True｜含块数与批大小 | solve_count=0→1｜grouped=True｜批大小=5｜块=1｜拒绝/回退=0｜补丁复用率=0.0 | 通过 | 批次 I：细则 12 节要求界面显示实际批大小、拒绝/回退次数与运行时间 |
+| 参考模式：加速面板如实说明未启用批量（不假装加速过） | grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明 | grouped=False｜effective_mode=reference｜boundary_note 存在=True | 通过 | 批次 I：局部误差估计不是全局误差证明，边界必须写明 |
+| 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 122 个运行目录 | 通过 | UFDEMO_RUNS_DIR 覆盖，不污染工作区 runs/ |
 | 提交运行目录 | 存在 metadata.json | 存在 | 通过 |  |
 
 ## 判定依据

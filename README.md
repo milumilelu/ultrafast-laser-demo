@@ -1,14 +1,14 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–H）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–I）
 
-> 版本：`0.6.0-h1`｜日期：2026-09-11｜状态：**批次 A–H 已实施并通过验收；M0 已放行，M1/M2 条件齐备待审批**
+> 版本：`0.7.0-i1`｜日期：2026-09-11｜状态：**批次 A–I 已实施并通过验收；M0 已放行，M1/M2 条件齐备待审批；M3 仅差 G07（批次 J）**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
-> + 查表（F，曲线插值与越界处理）+ 分相结构（G，颗粒/铺层与跨相界面截断）
-> + 受限阈值协议 / 七材料能力入口 / 水印同源（H）。
-> 逐事件核查表**接入**（查表曲线进主循环）、加速与斜入射尚未开始，详见 `docs/reports/progress.md`。
+> + 查表（F）+ 分相结构（G）+ 受限阈值协议 / 七材料能力入口 / 水印同源（H）
+> + 冻结几何批量加速与性能基准（I）。
+> 斜入射与动态角度（批次 J）尚未开始，详见 `docs/reports/progress.md`。
 
 ---
 
@@ -29,8 +29,9 @@
 | **查表**（曲线 schema、分段线性 / 保形 PCHIP、越界处理、语义路由） | ✅ 批次 F（T10），`python -m ufdemo table` |
 | **分相结构**（`phase_at` / `next_different_interface`、颗粒 / 铺层、跨相界面截断） | ✅ 批次 G（T11–T13），`examples/alsic_particle_composite.json`、`examples/cfrp_laminated_ply.json` |
 | **受限阈值协议 + 七材料能力入口 + 水印同源**（只按本事件入射能流判超阈、红线/缺口逐条实跑核验、导出与回放共用一个水印） | ✅ 批次 H（T14），`python -m ufdemo materials` / `tools/material_report.py` |
+| **冻结几何批量加速**（块内逐事件各自算响应后相加、局部误差估计与自动回退、可选 Numba 后端） | ✅ 批次 I（T16/T17），`solver.mode=grouped`；基准见 `docs/reports/performance_baseline.md` |
 | 逐事件核查表**接入**（查表曲线进入逐事件主循环） | ❌ 本批保留不开放（细则第 7 节：只有 `event_depth_increment` 且协议适用时才可进） |
-| 冻结几何批量加速 / 动态角度 | ❌ 批次 I、J（T17、T18） |
+| 斜入射 / 可见性（G07） | ❌ 批次 J（T18、T19） |
 
 **明确不做**：热场、TTM 耦合、裂纹、分层、再沉积、深孔多次反射、机器学习、
 完整五轴 CAM。旧 TTM 工作区保持独立、未被修改。
@@ -319,6 +320,53 @@ python -m pytest -q -m g09 -k watermark
 
 ---
 
+## 3f. 冻结几何批量加速（批次 I / T16、T17）
+
+分组模式把一小段路径内的几何**冻结**，先逐事件算出各自去除量再求和，最后一次性提交：
+
+```bash
+python -m pytest -q -m g08                 # G08 分组与逐脉冲对照（26 项）
+python tools/perf_report.py                # B01–B04 性能基准（含环境与内存口径）
+python tools/perf_report.py --quick        # 缩减规模自检
+python tools/perf_report.py --from-csv     # 按已有 CSV 重写报告（免重跑）
+```
+
+配置方式（也可在界面「求解模式」一栏选择）：
+
+```json
+"solver": {
+  "mode": "grouped",            // reference（逐脉冲参考）| grouped（冻结几何分组）
+  "batch_size": 64,             // 块的脉冲数上限（事件块限额）
+  "local_rel_tol": 1e-3,        // 局部步长误差的相对容差
+  "geometry_drift_limit": 0.25, // 几何漂移上限（仅 axial_defocus 生效）
+  "acceleration": "off"         // off（NumPy）| numba（可选，实测无收益）
+}
+```
+
+分组的六条硬规矩：
+
+1. **每个脉冲单独算非线性响应后相加**（`Δh = Σ_j a(F_j)`）。
+   **禁止**先累加能流成 `ΣF_j` 再取一次对数——那会改变非线性响应。
+   G08 用可判别构造验证：`F₀=e²Fth` 的两脉冲结果是 `4δ`，错误路径是 `≈2.69δ`。
+2. **局部误差估计只用于控制批大小**：比较「整块一步」与「两个半步」的更新场，
+   超限则**不提交状态**、缩小 `batch_size` 重试，最终回到 `B=1`（参考更新）。
+   界面与诊断都会写明：**局部误差估计不是全局误差证明**。
+3. **几何与当前高度无关时跳过半步试算**（`fixed_geometry` 下能流只用初始面，
+   一步与两步数学恒等）——这是严格等价的优化，不是降低校验强度。
+4. **计数语义与逐脉冲逐位对齐**：块级 `touch_counts` 是每单元**被去除的次数**，
+   直接累加即等价于逐脉冲的 `exposure_count += 1`。
+5. **回退而非硬凑**：分组 × 分相、分组 × 历史耦合、分组 × 动态角度三条组合在**配置层**
+   拦截（`CONFIG_INVALID`）；求解器侧另留兜底并写明原因。
+6. **快照落在块边界**（粒度近似）：索引标注为块内最后一个命中事件，
+   只要发生就写入 `metadata.approximations` 与诊断，**不把近似当精确**。
+
+> **性能口径**：定点/小段扫描有明显收益（本机实测 B01 4.00×、B02 3.90×），
+> 大范围扫描收益有限（B04 1.32×）；**Numba 实测无收益**（0.999× 且内存更高），
+> 故默认用 NumPy。**不承诺任何固定加速倍数**，无收益时保留参考模式。
+> 数值只对 `performance_baseline.md` 第 1 节记录的本机环境成立。
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -361,6 +409,17 @@ python -m pytest -q -m g09 -k watermark
   `deferred` 是「规格要求开放、实现未支持」的**缺口**且附探针证明当前打不开；
   `verify_entry_enforcements` 实跑探针，拦截失效或缺口消失即**如实报失败**
   （`docs/reports/material_capability_table.csv`）。
+* **分组不改变物理**：`Δh = Σ_j a(F_j)`，**禁止**先累加能流再取一次对数；
+  逐脉冲 NumPy 路径始终是**参考实现**，分组必须与它逐位/浮点级一致
+  （`tests/test_grouped_solver.py`）。
+* **局部误差 ≠ 全局误差**：`B` 与两个 `B/2` 的试算只用于**控制步长**；
+  最终验收以**完整逐脉冲对照**为准。界面与诊断文案必须写明这条边界。
+* **批量不支持的组合在配置层拦截**：分组 × 分相、分组 × 历史耦合、
+  分组 × 动态角度 → `CONFIG_INVALID`；不靠运行期静默降级。
+* **Numba 是可选后端，默认关闭**：实测该逐元素对数核无收益；
+  缺失时**回退 NumPy 并给出警告**（结果同式、逐位一致）。
+* **不承诺加速倍数**：无收益即保留参考模式，如实记录实测值
+  （`docs/reports/performance_baseline.md`）。
 * **查表不是任意外推**：默认分段线性；可选 PCHIP 显式 `extrapolate=False`；
   越界是显式状态（`TABLE_OUT_OF_RANGE`），**不返回 0、不外推、不钳端点**；
   重复 x 默认拒绝，需合并时须附规则并保留原始点（见
@@ -404,7 +463,10 @@ python -m pytest -q -m g09 -k watermark
    历史结果通过运行目录读取，不建数据库。超阈值掩膜图层（`threshold_mask`）
    由批次 H 的**受限阈值协议**给出，但**仅在协议开启且该卡提供可用阈值时**可用，
    否则如实报不可用（协议只按本事件入射能流判超阈，不读作热学损伤标记）。
-8. **无性能基准**。本批只记录单次运行 `elapsed_s`；B01–B04 属批次 I。
+8. **无性能承诺**。批次 I 已交付 B01–B04 实测基准（`performance_baseline.md`）与
+   冻结几何分组；但**定点/小段扫描有收益、大范围扫描收益有限**，
+   **Numba 实测无收益**（故默认 NumPy），且**不承诺任何固定加速倍数**。
+   数值只对报告记录的本机环境成立。
 9. **F03 / F04 文件在当前工作区未找到**（`paper5.0.tex`、
    `ttm_carrier_drilling_q4_axisymmetric.py`）。已按细则记录为缺失，
    不阻塞人工解析主线；哈希核对结果见
@@ -444,7 +506,7 @@ ultrafast-demo/
 │   ├── structure.py      # 分相结构：相/结构接口、铺层与颗粒、种子与体积分数（批次 G）
 │   ├── thresholds.py     # 受限阈值协议：只按本事件入射能流判超阈（批次 H）
 │   ├── geometry.py       # 批次 J 占位（斜入射/可见性）
-│   ├── accelerators.py   # 批次 I 占位（批量加速）
+│   ├── accelerators.py   # 冻结几何分组批量、局部误差估计与回退（批次 I）
 │   └── __main__.py       # CLI
 ├── tools/
 │   ├── migrate_materials.py   # F01/F02 → 执行卡 + 迁移/准入报告
@@ -461,7 +523,7 @@ ultrafast-demo/
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置（含两个合成结构实例，批次 G）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0013）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0014）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -474,18 +536,20 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 319 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + 回归 5）
+python -m pytest -q                  # 345 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + 回归 5）
 python -m pytest -q -m g05           # 只跑文献语义回归
 python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
-python -m pytest -q -m g09           # 界面、查表与受限阈值协议的 G09 相关测试（含批次 H）
+python -m pytest -q -m g08           # 分组模式与逐脉冲对照（批次 I）
+python -m pytest -q -m g09           # 界面、查表、受限阈值协议的 G09 相关测试（含批次 H）
 python tools/migrate_materials.py    # 迁移 + 7 项准入探针
 python tools/make_curves.py          # 生成示例曲线与无效夹具（批次 F）
 python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插值图
 python tools/structure_report.py     # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 python tools/material_report.py      # 受限阈值协议报告 + 七材料能力表（批次 H）
+python tools/perf_report.py           # B01–B04 性能基准（批次 I）
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
 python tools/ui_demo_probe.py        # 端到端演示可用性（前后端对接全链路）
-python tools/run_acceptance.py       # 实际执行并生成验收报告（A–H）
+python tools/run_acceptance.py       # 实际执行并生成验收报告（A–I）
 ```
 
 产物：
@@ -504,10 +568,11 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–H
 * `docs/reports/material_capability_table.csv` —— **七材料能力入口表（批次 H）**：
   开放 / 红线 / 缺口逐条探针结论；
 * `docs/reports/g09_threshold_protocol.md` / `.csv` —— **受限阈值协议报告与检查明细（批次 H）**；
+* `docs/reports/performance_baseline.md` / `.csv` —— **B01–B04 性能基准与环境/内存口径（批次 I）**；
 * `docs/reports/material_migration.csv` —— 字段级迁移记录；
 * `docs/reports/material_admission.csv` —— 四种必查拒绝情况；
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–H 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–I 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

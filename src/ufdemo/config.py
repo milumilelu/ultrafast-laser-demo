@@ -159,6 +159,19 @@ def _require_str(value: Any, path: str, allowed: Sequence[str] | None = None) ->
     return value
 
 
+def _require_positive_int(value: Any, path: str) -> int:
+    """正整数校验（批量/限额类配置用）。布尔值被显式拒绝（bool 是 int 的子类）。"""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            f"{path} 必须是正整数",
+            field_path=path,
+            actual=value,
+            requirement=">= 1 的整数",
+        )
+    return int(value)
+
+
 # ---------------------------------------------------------------------------
 # 1. 单位上下文
 # ---------------------------------------------------------------------------
@@ -682,7 +695,15 @@ class SolverConfig:
     structured_interface: bool = False
     # 动态角度属批次 J（T18）；此处提前占位，用于与分相截断做互斥校验
     dynamic_angle: bool = False
+    # 局部核后端（T16）：off = NumPy 参考；numba = 可选 JIT 局部核（缺失时回退并警告）
     acceleration: str = "off"
+    # 冻结几何分组批量的步长控制（T17）。仅在 mode="grouped" 时生效。
+    batch_size: int = 64
+    min_batch_size: int = 1
+    local_rel_tol: float = 1e-3
+    local_abs_tol_internal: float = 0.0
+    geometry_drift_limit: float = 0.25
+    max_cell_block: int = 1 << 22
     extra: Mapping[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -702,6 +723,37 @@ class SolverConfig:
         if not isinstance(budget, int) or budget <= 0:
             raise UFDemoError(CONFIG_INVALID, "solver.memory_budget_bytes 必须是正整数", field_path="solver.memory_budget_bytes", actual=budget)
         accel = _require_str(raw.get("acceleration", "off"), "solver.acceleration", ("off", "numba"))
+        batch_size = _require_positive_int(raw.get("batch_size", 64), "solver.batch_size")
+        min_batch_size = _require_positive_int(raw.get("min_batch_size", 1), "solver.min_batch_size")
+        if min_batch_size > batch_size:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.min_batch_size 不得大于 batch_size",
+                field_path="solver.min_batch_size",
+                actual={"min_batch_size": min_batch_size, "batch_size": batch_size},
+                requirement="min_batch_size <= batch_size",
+            )
+        rel_tol = _require_finite_positive(raw.get("local_rel_tol", 1e-3), "solver.local_rel_tol")
+        if not (0.0 < rel_tol < 1.0):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.local_rel_tol 必须落在 (0,1)",
+                field_path="solver.local_rel_tol",
+                actual=rel_tol,
+                requirement="0 < local_rel_tol < 1（局部步长误差的相对容差）",
+                suggestion="细则 9.1 用它控制 batch_size；最终验收仍以完整逐脉冲对照为准。",
+            )
+        abs_tol = raw.get("local_abs_tol_internal", 0.0)
+        if not isinstance(abs_tol, (int, float)) or not math.isfinite(float(abs_tol)) or float(abs_tol) < 0.0:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.local_abs_tol_internal 必须是非负有限数",
+                field_path="solver.local_abs_tol_internal",
+                actual=abs_tol,
+                requirement=">= 0（内部长度单位；细则 10 节建议取 0.01*delta_test）",
+            )
+        drift_limit = _require_finite_positive(raw.get("geometry_drift_limit", 0.25), "solver.geometry_drift_limit")
+        max_cell_block = _require_positive_int(raw.get("max_cell_block", 1 << 22), "solver.max_cell_block")
         return SolverConfig(
             mode=mode,
             geometry_feedback=gf,
@@ -714,6 +766,12 @@ class SolverConfig:
             structured_interface=bool(raw.get("structured_interface", False)),
             dynamic_angle=bool(raw.get("dynamic_angle", False)),
             acceleration=accel,
+            batch_size=batch_size,
+            min_batch_size=min_batch_size,
+            local_rel_tol=rel_tol,
+            local_abs_tol_internal=float(abs_tol),
+            geometry_drift_limit=drift_limit,
+            max_cell_block=max_cell_block,
             extra=dict(raw.get("extra", {}) or {}),
         )
 
@@ -730,6 +788,12 @@ class SolverConfig:
             "structured_interface": self.structured_interface,
             "dynamic_angle": self.dynamic_angle,
             "acceleration": self.acceleration,
+            "batch_size": self.batch_size,
+            "min_batch_size": self.min_batch_size,
+            "local_rel_tol": self.local_rel_tol,
+            "local_abs_tol_internal": self.local_abs_tol_internal,
+            "geometry_drift_limit": self.geometry_drift_limit,
+            "max_cell_block": self.max_cell_block,
         }
 
 
@@ -1468,17 +1532,53 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
                 suggestion="改用正入射。斜入射、法向厚度转换与遮挡属 M3（T18），且未实现前不允许提供任意曲面开关。",
             )
         )
-    if config.solver.acceleration != "off":
-        fail(
-            UFDemoError(
-                NOT_IMPLEMENTED,
-                "批量加速模式尚未实现",
-                field_path="solver.acceleration",
-                actual=config.solver.acceleration,
-                requirement="本批（A–C / M0）只提供逐脉冲参考模式",
-                suggestion="设 solver.acceleration=off；分组模式属于批次 I（T17）。",
+    # 批次 I（T16/T17）：分组批量是**独立求解模式**，其红线在配置层拦截。
+    # 允许的组合：mode=grouped（冻结几何分组），acceleration 只决定局部核后端。
+    if config.solver.mode == "grouped":
+        if config.solver.structured_interface:
+            fail(
+                UFDemoError(
+                    CONFIG_INVALID,
+                    "分组批量不支持分相结构",
+                    field_path="solver.mode",
+                    actual={"mode": "grouped", "structured_interface": True},
+                    requirement="第一版批量仅允许同相结构（细则 9.1 末）",
+                    suggestion="改用 mode=reference，或关闭 structure_type 引发分的分相结构。",
+                )
             )
-        )
+        if config.solver.history_enabled:
+            fail(
+                UFDemoError(
+                    CONFIG_INVALID,
+                    "分组批量不支持历史耦合",
+                    field_path="solver.mode",
+                    actual={"mode": "grouped", "history_enabled": True},
+                    requirement="第一版批量不得改变事件顺序依赖（细则 9.1）",
+                    suggestion="设 solver.history_enabled=false，或改用 mode=reference。",
+                )
+            )
+        if config.solver.dynamic_angle:
+            fail(
+                UFDemoError(
+                    CONFIG_INVALID,
+                    "「批量 + 动态角度」组合未开放",
+                    field_path="solver.mode",
+                    actual={"mode": "grouped", "dynamic_angle": True},
+                    requirement="两个增强在第一版不得同时启用（细则 9.1 末）",
+                    suggestion="二选一；动态角度属批次 J（T18）。",
+                )
+            )
+    if config.solver.acceleration != "off":
+        # Numba 是可选依赖：缺失时**回退 NumPy**（任务书 8 节），
+        # 但必须显式给出警告，不静默降级为"看起来一样但没加速"。
+        from .accelerators import numba_available
+
+        if not numba_available():
+            warnings.append(
+                "请求了 solver.acceleration=numba，但当前环境缺少 numba；"
+                "已回退到 NumPy 局部核（结果同式、逐位一致，只是没有 JIT 加速）。"
+                "安装方式：pip install -e \".[accel]\"。"
+            )
     if config.solver.multiline_incubation:
         fail(
             UFDemoError(

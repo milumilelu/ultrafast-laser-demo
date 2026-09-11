@@ -277,6 +277,123 @@ class SurfaceState:
             notes=notes,
         )
 
+    # -- 批量块提交（批次 I / T17）------------------------------------------
+    def apply_block_increment(
+        self,
+        delta_h: Any,
+        *,
+        touch_counts: Any = None,
+        fluence_sum: Any = None,
+        illum_counts: Any = None,
+        exceed_counts: Any = None,
+        exceed_or: Any = None,
+        section: tuple[int, int, int, int] | None = None,
+    ) -> dict[str, Any]:
+        """一次性提交一个事件块在**冻结几何**下累计出的增量与计数。
+
+        与 :meth:`apply_increment` 的区别：这里接收的是**已经累加好的**块级
+        数组（每个脉冲的非线性响应已在 `accelerators.accumulate_block` 内
+        分别计算后求和），因此本方法**不做**相界面截断——批量第一版仅允许
+        同相、无历史路径（红线在配置层拦截）。
+
+        计数语义与逐脉冲完全一致：``touch_counts`` 是每个单元在块内被去除的
+        **次数**，不是布尔量，直接累加即可与逐脉冲路径对齐。
+        """
+        import numpy as np
+
+        if section is None:
+            iy0, iy1, ix0, ix1 = 0, self.grid.ny, 0, self.grid.nx
+        else:
+            iy0, iy1, ix0, ix1 = section
+        win = (slice(iy0, iy1), slice(ix0, ix1))
+
+        d = np.asarray(delta_h, dtype=np.float64)[win]
+        if not np.all(np.isfinite(d)):
+            raise UFDemoError(NUMERIC_NONFINITE, "块增量含非有限值", field_path="surface.apply_block_increment", actual="non-finite")
+        if np.any(d < 0.0):
+            raise UFDemoError(NUMERIC_NONFINITE, "块增量为负", field_path="surface.apply_block_increment", actual=float(np.min(d)))
+        if d.shape != (iy1 - iy0, ix1 - ix0):
+            raise UFDemoError(
+                NUMERIC_NONFINITE,
+                "块增量形状与窗口不匹配",
+                field_path="surface.apply_block_increment",
+                actual=list(d.shape),
+                requirement=f"[{iy1 - iy0}, {ix1 - ix0}]",
+            )
+
+        self.height[win] -= d
+
+        n_touched_cells = 0
+        counter_before = 0
+        counter_after = 0
+        if touch_counts is not None:
+            tc = np.asarray(touch_counts)[win]
+            exp = self.exposure_count[win]
+            counter_before = int(exp.max()) if exp.size else 0
+            if tc.any():
+                if int(exp.max()) + int(tc.max()) >= UINT32_MAX:
+                    raise UFDemoError(
+                        RESOURCE_BUDGET_EXCEEDED,
+                        "受照计数溢出 uint32（块提交）",
+                        field_path="surface.exposure_count",
+                        actual=int(exp.max()) + int(tc.max()),
+                        requirement="计数 < 2^32",
+                        suggestion="缩小 batch_size 或分段统计。",
+                    )
+                n_touched_cells = int(np.count_nonzero(tc))
+                exp += tc.astype(exp.dtype)
+            counter_after = int(exp.max()) if exp.size else 0
+            self.counters_max = max(self.counters_max, counter_after)
+
+        if fluence_sum is not None:
+            self.cumulative_fluence[win] += np.asarray(fluence_sum, dtype=np.float64)[win]
+
+        if illum_counts is not None:
+            ic = np.asarray(illum_counts)[win]
+            illum = self.illumination_count[win]
+            if ic.any():
+                if int(illum.max()) + int(ic.max()) >= UINT32_MAX:
+                    raise UFDemoError(
+                        RESOURCE_BUDGET_EXCEEDED,
+                        "照射计数溢出 uint32（块提交）",
+                        field_path="surface.illumination_count",
+                    )
+                illum += ic.astype(illum.dtype)
+
+        n_exceed_added = 0
+        if exceed_counts is not None or exceed_or is not None:
+            if self.threshold_exceedance_count is None or self.threshold_exceeded_mask is None:
+                raise UFDemoError(
+                    RESOURCE_BUDGET_EXCEEDED,
+                    "受限阈值协议未开启，无法提交超阈观测量",
+                    field_path="surface.threshold_exceedance_count",
+                    actual=None,
+                    requirement="threshold_protocol=true 时才会分配该观测量",
+                )
+            if exceed_counts is not None:
+                ec = np.asarray(exceed_counts)[win]
+                cnt = self.threshold_exceedance_count[win]
+                if ec.any():
+                    if int(cnt.max()) + int(ec.max()) >= UINT32_MAX:
+                        raise UFDemoError(
+                            RESOURCE_BUDGET_EXCEEDED,
+                            "超阈计数溢出 uint32（块提交）",
+                            field_path="surface.threshold_exceedance_count",
+                        )
+                    cnt += ec.astype(cnt.dtype)
+            if exceed_or is not None:
+                eo = np.asarray(exceed_or, dtype=bool)[win]
+                n_exceed_added = int(np.count_nonzero(eo))
+                self.threshold_exceeded_mask[win] |= eo
+
+        return {
+            "n_touched_cells": n_touched_cells,
+            "counter_before_max": counter_before,
+            "counter_after_max": counter_after,
+            "applied_volume_internal": float(np.sum(d) * self.grid.dx_m * self.grid.dy_m),
+            "n_threshold_added": n_exceed_added,
+        }
+
     def accumulate_illumination(self, section: tuple[int, int, int, int], fluence: Any, mask: Any) -> float:
         """累计入射剂量与照射诊断（细则 5.4：局部入射能流之和）。"""
         import numpy as np

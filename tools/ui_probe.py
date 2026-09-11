@@ -342,6 +342,66 @@ def run_ui_checks(
             f"先运行 python -m ufdemo reference ... 生成 {ref_dir}",
         ))
 
+    # --- 9. 批次 I：界面可切换求解模式，且批量面板如实显示批大小/拒绝次数 ----
+    at_b = fresh()
+    ok_mode = False
+    mode_note = "界面未提供求解路径开关"
+    if _has(at_b.selectbox, "f_mode"):
+        at_b.selectbox(key="f_mode").set_value("grouped").run()
+        if _has(at_b.number_input, "f_batch"):
+            at_b.number_input(key="f_batch").set_value(5).run()
+        cnt_before = at_b.session_state.ui.solve_count
+        if _has(at_b.button, "submit_run"):
+            at_b.button(key="submit_run").click().run()
+        s_b = at_b.session_state.ui
+        d_b = getattr(s_b.frozen, "acceleration_diagnostics", {}) or {}
+        ok_mode = (
+            (not at_b.exception)
+            and s_b.solve_count == cnt_before + 1
+            and bool(d_b.get("grouped"))
+            and d_b.get("n_blocks") is not None
+        )
+        mode_note = (
+            f"solve_count={cnt_before}→{s_b.solve_count}｜grouped={d_b.get('grouped')}｜"
+            f"批大小={d_b.get('batch_size_configured')}｜块={d_b.get('n_blocks')}｜"
+            f"拒绝/回退={d_b.get('n_rejected_blocks')}｜"
+            f"补丁复用率={d_b.get('patch_reuse_ratio')}"
+            + (f"｜异常 {at_b.exception}" if at_b.exception else "")
+        )
+    rows.append(_row(
+        "求解模式可切为「冻结几何分组」并产出批量诊断",
+        "solve_count+1｜acceleration_diagnostics.grouped=True｜含块数与批大小",
+        mode_note,
+        "通过" if ok_mode else "失败",
+        "批次 I：细则 12 节要求界面显示实际批大小、拒绝/回退次数与运行时间",
+    ))
+
+    # 9b. 参考模式的加速面板也必须如实说明「未加速」及原因（不得假装加速过）
+    at_r = fresh()
+    ok_ref_panel = False
+    ref_note = "界面未提供求解路径开关"
+    if _has(at_r.button, "submit_run"):
+        at_r.button(key="submit_run").click().run()
+        s_r = at_r.session_state.ui
+        d_r = getattr(s_r.frozen, "acceleration_diagnostics", {}) or {}
+        ok_ref_panel = (
+            bool(d_r)
+            and not d_r.get("grouped")
+            and d_r.get("effective_mode") == "reference"
+            and d_r.get("boundary_note") is not None
+        )
+        ref_note = (
+            f"grouped={d_r.get('grouped')}｜effective_mode={d_r.get('effective_mode')}｜"
+            f"boundary_note 存在={d_r.get('boundary_note') is not None}"
+        )
+    rows.append(_row(
+        "参考模式：加速面板如实说明未启用批量（不假装加速过）",
+        "grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明",
+        ref_note,
+        "通过" if ok_ref_panel else "失败",
+        "批次 I：局部误差估计不是全局误差证明，边界必须写明",
+    ))
+
     # 清理：本探针自己写入 work_dir 的运行目录保持原样（work_dir 属临时目录）
     rows.append(_row(
         "探针运行输出位置", f"隔离到 {work}",

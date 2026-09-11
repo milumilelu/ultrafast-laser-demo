@@ -574,18 +574,123 @@ def main() -> int:
         "", "", all(f"watermark.{k}" in _stats_rows for k in ("material_id", "run_mode", "unit_mode")),
         str(_wm_dir), "数值实现验证", "单独拿走 statistics.csv 仍能读出材料身份")
 
+    # ---------------- 批次 I（T16/T17）：G08 分组模式与逐脉冲对照 ----------------
+    import numpy as _np  # noqa: E402
+
+    from ufdemo.config import RunConfig as _RunConfig  # noqa: E402
+    from ufdemo.config import validate_run as _validate  # noqa: E402
+
+    _TP = ROOT / "examples" / "ten_pulses.json"
+    _g08_raw = json.loads(_TP.read_text(encoding="utf-8"))
+    _g08_card = load_material_card(Path(_g08_raw["material_card_file"]))
+
+    def _g08_run(mode: str, *, batch_size: int = 10, zR: float | None = None,
+                 geometry_feedback: str | None = None):
+        raw = json.loads(json.dumps(_g08_raw))
+        if zR is not None:
+            raw["laser"]["rayleigh_range_m"] = zR
+        if geometry_feedback is not None:
+            raw["solver"]["geometry_feedback"] = geometry_feedback
+        raw["solver"]["mode"] = mode
+        raw["solver"]["batch_size"] = batch_size
+        return solve(_RunConfig.from_dict(raw), _g08_card)
+
+    _ref = _g08_run("reference")
+    _grp = _g08_run("grouped", batch_size=10)
+    _d_ref = _ref.surface.initial_height - _ref.surface.height
+    _d_grp = _grp.surface.initial_height - _grp.surface.height
+    _g08_max_abs = float(_np.max(_np.abs(_d_grp - _d_ref)))
+    _g08_scale = float(_np.max(_np.abs(_d_ref)))
+    _g08_l2 = float(_np.linalg.norm((_d_grp - _d_ref).ravel())) / float(_np.linalg.norm(_d_ref.ravel()))
+
+    add("G08", "examples/ten_pulses.json", "", "深度场最大绝对差 (m)",
+        "与逐脉冲参考接近浮点一致", f"{_g08_max_abs:.3e}（尺度 {_g08_scale:.3e}）",
+        f"{_g08_max_abs:.3e}", "rel <= 1e-12", _g08_max_abs <= 1e-12 * _g08_scale,
+        str(_TP), "数值实现验证",
+        "冻结几何 + 固定阈值 + 同相：分组与参考仅差浮点舍入")
+    add("G08", "examples/ten_pulses.json", "", "归一化 L2 差（完整逐脉冲对照）",
+        "与逐脉冲参考接近浮点一致", f"{_g08_l2:.3e}", f"{_g08_l2:.3e}", "<= 1e-12",
+        _g08_l2 <= 1e-12, str(_TP), "数值实现验证",
+        "细则 10 节要求报告最大绝对差与归一化 L2 差")
+    _cnt_exp = bool(_np.array_equal(_ref.surface.exposure_count, _grp.surface.exposure_count))
+    _cnt_ill = bool(_np.array_equal(_ref.surface.illumination_count, _grp.surface.illumination_count))
+    add("G08", "examples/ten_pulses.json", "", "曝光/照射计数逐位一致",
+        "与参考逐位相等", f"曝光={_cnt_exp}｜照射={_cnt_ill}", "", "两者皆为 True",
+        _cnt_exp and _cnt_ill, str(_TP), "数值实现验证",
+        "块级 touch_counts 语义 = 每单元被去除次数，与逐脉冲逐位对齐")
+
+    # 弱几何变化：≤ 1%（细则 10 节容差）
+    _zR = 1e-5
+    _ref_w = _g08_run("reference", zR=_zR, geometry_feedback="axial_defocus")
+    _grp_w = _g08_run("grouped", batch_size=10, zR=_zR, geometry_feedback="axial_defocus")
+    _dw_ref = _ref_w.surface.initial_height - _ref_w.surface.height
+    _dw_grp = _grp_w.surface.initial_height - _grp_w.surface.height
+    _delta_test = 1e-7
+    _tol_field = 0.01 * _np.abs(_dw_ref) + 0.01 * _delta_test
+    _n_ok_field = int(_np.count_nonzero(_np.abs(_dw_grp - _dw_ref) <= _tol_field))
+    _rel_w = float(_np.max(_np.abs(_dw_grp - _dw_ref))) / float(_np.max(_np.abs(_dw_ref)))
+    _v_ref_w = float(_np.sum(_dw_ref)) * _RunConfig.from_dict(_g08_raw).grid.dx_m * _RunConfig.from_dict(_g08_raw).grid.dy_m
+    _v_grp_w = float(_np.sum(_dw_grp)) * _RunConfig.from_dict(_g08_raw).grid.dx_m * _RunConfig.from_dict(_g08_raw).grid.dy_m
+    _rel_v = abs(_v_grp_w - _v_ref_w) / abs(_v_ref_w)
+    add("G08", "axial_defocus + zR=10μm（弱几何变化）", "", "深度场逐点判据通过数",
+        "全部单元满足 abs(d_g-d_ref) <= 0.01|d_ref| + 0.01δ_test",
+        f"{_n_ok_field}/{_dw_ref.size} 通过（最大相对差 {_rel_w:.4%}）",
+        f"{_rel_w:.4e}", "rel <= 1%", _n_ok_field == _dw_ref.size,
+        str(_TP), "数值实现验证",
+        "打开允许的弱几何变化后，深度场与体积偏差均不超过 1%")
+    add("G08", "axial_defocus + zR=10μm（弱几何变化）", "", "去除体积相对差",
+        "abs(Vg-Vr) <= 0.01|Vr| + A_domain·0.01δ_test", f"{_rel_v:.4%}", f"{_rel_v:.4e}",
+        "rel <= 1%", _rel_v <= 0.01, str(_TP), "数值实现验证",
+        "体积判据含绝对项，避免近零算例掩盖较大误差")
+
+    # 回退：三条红线在配置层拦截
+    _redline_hits = {}
+    for _key in ("structured_interface", "history_enabled", "dynamic_angle"):
+        _raw = json.loads(json.dumps(_g08_raw))
+        _raw["solver"]["mode"] = "grouped"
+        _raw["solver"][_key] = True
+        _rep = _validate(_RunConfig.from_dict(_raw), _g08_card)
+        _redline_hits[_key] = (not _rep.ok) and any(e["code"] == "CONFIG_INVALID" for e in _rep.errors)
+    add("G08", "分组 × 分相/历史/动态角度", "", "配置层拦截（CONFIG_INVALID）",
+        "三种组合全部被拒", f"{_redline_hits}", "", "全部为 True", all(_redline_hits.values()),
+        str(ROOT / "src" / "ufdemo" / "config.py"), "数值实现验证",
+        "未开放组合在配置层拦截，不靠运行期静默降级（细则 9.1 末）")
+
+    # 批大小不变性
+    _inv_ok = True
+    _inv_detail = []
+    for _b in (1, 2, 5, 10):
+        _g = _g08_run("grouped", batch_size=_b)
+        _dd = float(_np.max(_np.abs((_g.surface.initial_height - _g.surface.height) - _d_ref)))
+        _inv_detail.append(f"B={_b}:{_dd:.1e}")
+        _inv_ok = _inv_ok and _dd <= 1e-12
+    add("G08", "examples/ten_pulses.json", "", "批大小不变性（B=1/2/5/10）",
+        "各档均与参考一致", "｜".join(_inv_detail), "", "rel <= 1e-12", _inv_ok,
+        str(_TP), "数值实现验证",
+        "B=1 使用参考更新；奇数块按两个尽量等长的子块处理")
+
+    # B01–B04：读性能报告（若已生成）
+    _perf_csv = D / "performance_baseline.csv"
+    if _perf_csv.exists():
+        with open(_perf_csv, encoding="utf-8-sig", newline="") as _fh:
+            _perf_rows = list(csv.DictReader(_fh))
+        for _pr in _perf_rows:
+            _note = (f"加速比={_pr.get('speedup_vs_reference')}｜"
+                     f"峰值内存={_pr.get('peak_mem_mb')} MB｜块={_pr.get('n_blocks')}｜"
+                     f"拒绝={_pr.get('n_rejected_blocks')}")
+            add(_pr["case"], f"性能基准（{_pr['purpose']}）", "", "求解耗时 / 峰值内存",
+                "见 docs/reports/performance_baseline.md", _note, "", "记录实测（非承诺）", True,
+                str(_perf_csv), "数值实现验证",
+                _pr.get("note") or "同配置对照；不承诺固定加速倍数")
+
     # ---------------- 未运行项 ----------------
     not_run("G07", "（斜入射基准）", "0° 退化；60° 足迹比 2、中心能流减半；可见性", "见执行细则 10 节",
             "批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）", "数值实现验证")
-    not_run("G08", "（分组求解）", "分组与逐脉冲偏差 <= 1%；回退正确", "见执行细则 10 节",
-            "批次 I（T17）未实施：accelerators.py 仍为占位", "数值实现验证")
     not_run("G09", "（查表接入逐事件核）", "查表值进入逐事件主循环并保持语义一致", "见执行细则 10 节",
             "批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / "
             "G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 "
             "event_depth_increment 且协议适用时才可进入，本批不启用该通道）",
             "数值实现验证")
-    not_run("B01-B04", "（性能基准）", "CPU/内存/事件数/耗时", "见任务书 12 节",
-            "批次 I（T16）未实施：本批只记录单次运行的 elapsed_s", "不适用")
 
     # ---------------- 写报告 ----------------
     csv_path = D / "acceptance_g01_g05.csv"

@@ -1,0 +1,6 @@
+﻿case,purpose,events,mode,batch_size,backend,jit_time_s,solve_s,peak_mem_mb,reference_solve_s,speedup_vs_reference,n_blocks,n_rejected_blocks,local_error_estimated,n_beam_patches,patch_cache_hits,rel_center_depth,rel_max_depth,rel_volume,note
+B01,正确性和基础开销（256×256、1000 脉冲、定点）,1000,grouped,64,numpy,,0.362287,7.153,1.450725,4.004,16,0,False,16,984,7.050756873535376e-15,7.050756873535376e-15,4.017619327732532e-16,定点脉冲：分组可复用光束补丁
+B02,局部更新 / Numba 收益（512×512、10000 脉冲、定点）,10000,grouped,128,numpy,,17.921246,27.76,69.960788,3.904,79,0,False,79,9921,1.3250568048753578e-13,1.3250568048753578e-13,7.23167911680893e-15,
+B02-numba,同配置仅换局部核后端（off → numba）,10000,grouped,128,numba,0.8868986999877961,17.938406,50.709,17.921246,0.999,79,0,False,79,9921,0.0,0.0,0.0,对照是 off 与 numba 两种后端，不是不同分辨率
+B03,事件流与长序列内存（512×512、100000 脉冲、有限快照）,100000,grouped,256,numpy,,180.255994,29.312,,,391,0,False,391,99609,,,,逐脉冲参考规模过大未测；本行只报告分组模式的内存与耗时
+B04,分组加速与参考误差（5 行 × 40 点 × 3 遍蛇形）,600,grouped,32,numpy,,0.234668,12.165,0.310471,1.323,19,0,False,600,0,0.0,0.0,0.0,焦点移动：补丁不可复用，只靠块内冻结几何

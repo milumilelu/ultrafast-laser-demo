@@ -1,4 +1,13 @@
 {
+  "acceleration": {
+    "effective_backend": "off",
+    "effective_mode": "reference",
+    "fallback_reason": null,
+    "local_kernel": "off",
+    "note": "逐脉冲参考实现；未启用任何加速后端。",
+    "requested_backend": "off",
+    "requested_mode": "reference"
+  },
   "approximations": [],
   "axis_order": [
     "y",
@@ -7,11 +16,11 @@
   "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
   "card_version": "1.0.0",
   "code": {
-    "commit": "cde51d84a1e83f853da79f0eeda4d94a2951c9a3",
+    "commit": "fdb7e8cedc2aab12d6122b27700d2e3f1ef7dc6d",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 19,
-    "source_manifest_sha256": "cffb7edbec62575d8ba75a123ab458fb1bc42f618cf5e344b6278d44efb78d62",
+    "source_manifest_sha256": "8608aa04f7c5f14245839eb075022946156282387285ffb20e0cae94ec9df08c",
     "working_tree_dirty": true
   },
   "config_sha256": "8e610d924c2d3187f51988fb70ffc44862359c08ebce2daf9328d4d02e9ca15e",
@@ -134,7 +143,7 @@
     "unit_system": "SI",
     "warnings": []
   },
-  "written_at_utc": "2026-09-11T01:49:31.333869+00:00",
+  "written_at_utc": "2026-09-11T05:10:58.445956+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",
