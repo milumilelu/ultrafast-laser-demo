@@ -1,4 +1,16 @@
 metric,value,unit
+watermark.material_id,alsic_sicp_aa2024_1030nm,
+watermark.family,铝基碳化硅,
+watermark.grade,SiCp/AA2024 候选（配方待确认）,
+watermark.evidence_status,literature_reported,
+watermark.source_type,research_card_migration,
+watermark.card_version,1.0.0,
+watermark.card_sha256,ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e,
+watermark.physical_prediction_allowed,False,
+watermark.identity_confirmed_by_user,False,
+watermark.run_mode,synthetic_demo,
+watermark.unit_mode,dimensionless,
+watermark.physical_depth_export_allowed,False,
 cell_count,25921,
 domain_area_internal,259.2099999999999,L_ref^2
 removal_volume_internal,10.099508141497799,L_ref^3

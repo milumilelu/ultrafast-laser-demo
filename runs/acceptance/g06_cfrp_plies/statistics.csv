@@ -1,4 +1,16 @@
 metric,value,unit
+watermark.material_id,cfrp_t700_yb01_800nm,
+watermark.family,CFRP,
+watermark.grade,T700 / YB01,
+watermark.evidence_status,literature_reported,
+watermark.source_type,research_card_migration,
+watermark.card_version,1.0.0,
+watermark.card_sha256,4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa,
+watermark.physical_prediction_allowed,False,
+watermark.identity_confirmed_by_user,False,
+watermark.run_mode,synthetic_demo,
+watermark.unit_mode,dimensionless,
+watermark.physical_depth_export_allowed,False,
 cell_count,19881,
 domain_area_internal,198.80999999999997,L_ref^2
 removal_volume_internal,9.604408185049268,L_ref^3

@@ -74,7 +74,7 @@ def run_ui_checks(
         "初始渲染无异常", "无异常",
         "异常：" + str(at.exception) if at.exception else "无异常",
         "失败" if at.exception else "通过",
-        "五标签页：参数与运行 / 结果 / 参考评估器 / 查表 / 历史运行",
+        "六标签页：参数与运行 / 结果 / 参考评估器 / 查表 / 七材料能力入口 / 历史运行",
     ))
     s = at.session_state.ui
     rows.append(_row("初始 solve_count", 0, s.solve_count,
@@ -156,6 +156,36 @@ def run_ui_checks(
         "读取不等于用当前参数求解",
     ))
 
+    # 5b. 回放水印与导出同源（批次 H / 细则 11.3）
+    import json as _json
+
+    from ufdemo.io import load_run as _load_run
+
+    if ok_read and getattr(at2.session_state.ui, "frozen", None) is not None:
+        _fz = at2.session_state.ui.frozen
+        _wm_path = Path(_fz.run_dir) / "watermark.json"
+        _exported = _json.loads(_wm_path.read_text(encoding="utf-8")) if _wm_path.exists() else {}
+        _keys = ("material_id", "run_mode", "unit_mode")
+        _ok_wm = bool(_exported) and all(
+            _fz.material_watermark.get(k) == _exported.get(k) for k in _keys
+        )
+        rows.append(_row(
+            "回放水印与导出 watermark.json 逐字段一致",
+            "material_id/run_mode/unit_mode 全部一致",
+            f"导出存在={_wm_path.exists()}｜"
+            + "｜".join(f"{k}={_fz.material_watermark.get(k)}" for k in _keys),
+            "通过" if _ok_wm else "失败",
+            "批次 H：导出=回放，标签不再各写一份",
+        ))
+    else:
+        rows.append(_row(
+            "回放水印与导出 watermark.json 逐字段一致",
+            "material_id/run_mode/unit_mode 全部一致",
+            "（未读到历史运行，无法核对）",
+            "未运行",
+            "需要 runs/ 下有可读的运行目录",
+        ))
+
     # --- 6. 参考评估器：不求解网格 ----------------------------------------
     at3 = fresh()
     at3.button(key="ref_eval").click().run()
@@ -217,6 +247,32 @@ def run_ui_checks(
     # --- 7. 站点级不变量（纯逻辑，界面同源）-------------------------------
     from ufdemo import ui_service as U
     from ufdemo.materials import load_material_card
+
+    # 7a. 七材料能力入口表（批次 H）：逐条实跑核验，且不得声称"缺口已开放"
+    from ufdemo import default_material_dir
+
+    entry_rows = U.material_entry_rows(default_material_dir())
+    entry_sum = U.material_entry_summary(entry_rows)
+    deferred_names = [(d["family"], d["item"]) for d in entry_sum["deferred_items"]]
+    ok_entries = entry_sum["all_verified"] and entry_sum["all_probes_hold"]
+    rows.append(_row(
+        "七材料能力入口：全部条目探针实跑通过",
+        "未核验=0｜探针全通过｜开放/红线/缺口均绑定依据",
+        f"开放={entry_sum['n_opened']}｜红线={entry_sum['n_blocked']}｜"
+        f"缺口={entry_sum['n_deferred']}{deferred_names}｜未核验={entry_sum['n_unverified']}",
+        "通过" if ok_entries else "失败",
+        "批次 H：拦截与缺口都必须有可执行证据，不得只在文档中声称",
+    ))
+    diamond_open = {
+        r["item"] for r in entry_rows if r["family"] == "金刚石" and r["kind"] == "opened"
+    }
+    rows.append(_row(
+        "金刚石「合成形貌」记为缺口而非开放",
+        "opened 中不含「合成形貌」",
+        f"opened={sorted(diamond_open)}",
+        "通过" if "合成形貌" not in diamond_open else "失败",
+        "规格要求开放但实现未支持，必须如实标为缺口并证明当前打不开",
+    ))
 
     safe = True
     bad = []

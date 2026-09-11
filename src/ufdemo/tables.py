@@ -1117,6 +1117,24 @@ def derivable_quantities(curve: ResponseCurve) -> list[str]:
     return ["protocol_value"]
 
 
+def curve_watermark(curve: ResponseCurve) -> str:
+    """曲线的一行式标签：身份 + 证据 + 语义 + 去向（供插图与报告复用）。
+
+    标签必须描述**该图实际是什么量**：``output_semantics`` 与去向一起给出，
+    避免读者把「平均率」当成「逐事件增量」。
+    """
+    ident = curve.material_identity or {}
+    fam = ident.get("family")
+    grade = ident.get("grade")
+    parts = [str(curve.material_id)]
+    if fam or grade:
+        parts.append(f"{fam}／{grade}")
+    parts.append(f"证据 {curve.evidence_status}")
+    parts.append(f"语义 {curve.output_semantics}")
+    parts.append(curve.route_zh)
+    return "｜".join(parts)
+
+
 def match_fixed_conditions(
     curve: ResponseCurve,
     laser: Mapping[str, Any],

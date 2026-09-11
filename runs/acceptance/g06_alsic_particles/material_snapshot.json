@@ -128,14 +128,28 @@
   "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
   "schema_version": "1.0",
   "watermark": {
+    "acceleration": "off",
     "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
     "card_version": "1.0.0",
+    "depth_label": "L_ref",
     "evidence_status": "literature_reported",
     "family": "铝基碳化硅",
+    "fluence_label": "F_ref",
+    "geometry_feedback": "fixed_geometry",
     "grade": "SiCp/AA2024 候选（配方待确认）",
     "identity_confirmed_by_user": false,
+    "length_label": "L_ref",
     "material_id": "alsic_sicp_aa2024_1030nm",
+    "physical_depth_export_allowed": false,
     "physical_prediction_allowed": false,
-    "source_type": "research_card_migration"
+    "run_mode": "synthetic_demo",
+    "source_type": "research_card_migration",
+    "unit_mode": "dimensionless",
+    "unit_system": "dimensionless",
+    "warnings": [
+      "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+      "跨相截断频繁：21/21 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
+      "有 18 个事件出现相标签切换，累计 300 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+    ]
   }
 }

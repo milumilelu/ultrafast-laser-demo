@@ -41,7 +41,9 @@ LAYER_LABELS: dict[str, str] = {
     "depth": "去除深度",
     "cumulative_fluence": "累计入射剂量",
     "illumination_count": "有效照射计数",
-    "threshold_mask": "超阈值/改性标记（受限阈值协议量）",
+    # 批次 H：受限阈值协议量。只描述**该图实际是什么量**（本事件入射能流的超阈分类），
+    # 不含任何热学措辞。
+    "threshold_mask": "超阈值/改性标记（仅按本事件入射能流判定）",
     "warning_mask": "域外/截断等警告标记",
     # 批次 G：分相结构的"相编号"图。只显示**当前暴露相**的编号，
     # 是几何/身份标签，不是任何损伤或热学量。
@@ -63,8 +65,9 @@ FORBIDDEN_TERMS: tuple[str, ...] = (
 # 物理含义不同（累计入射剂量 ≠ 单脉冲峰值能流）。
 UNAVAILABLE_LAYERS: dict[str, str] = {
     "threshold_mask": (
-        "本批次未记录逐事件超阈值掩膜；阈值观测量属批次 H 的受限阈值协议。"
-        "不得用累计剂量与单脉冲阈值比较来伪造该标记，也不得把它读作热学损伤标记。"
+        "该运行没有逐事件超阈值掩膜（受限阈值协议未开启，或该材料卡未提供可用阈值）。"
+        "协议只对**本事件入射能流**判超阈，不得用累计剂量与单脉冲阈值比较来伪造该标记，"
+        "也不得把它读作热学损伤标记。"
     ),
 }
 
@@ -116,6 +119,42 @@ def build_structure_diagnostics(
         "truncation_note": sm.get("truncation_note"),
     }
 
+
+def build_threshold_diagnostics(diagnostics_inner: Mapping[str, Any] | None) -> dict[str, Any]:
+    """批次 H：把求解器写出的受限阈值协议诊断整理成界面可展示的字典。
+
+    入参对应 ``result.diagnostics``（也能从运行目录 ``diagnostics.json`` 读回），
+    因此**实时运行与历史读取走同一条路径**，不会出现"读回的历史运行看不到阈值信息"。
+
+    协议未开启/不可用时返回空字典——界面不显示阈值面板，也不提供 ``threshold_mask``
+    图层，而不是拿全 0 数组冒充可用。``used_for_depth`` 恒为 False：超阈值是分类标记，
+    不是去除量。
+    """
+    diag = dict(diagnostics_inner or {})
+    thr = dict(diag.get("threshold") or {})
+    if not thr or not thr.get("protocol_available"):
+        return {}
+    return {
+        "available": True,
+        "enabled": bool(thr.get("protocol_enabled")),
+        "observable": thr.get("observable"),
+        "fluence_basis": thr.get("fluence_basis"),
+        "threshold_internal": thr.get("threshold_internal"),
+        "threshold_label": thr.get("threshold_label"),
+        "threshold_kind": thr.get("threshold_kind"),
+        "source_kind": thr.get("source_kind"),
+        "source_index": thr.get("source_index"),
+        "n_candidates": thr.get("n_candidates"),
+        "evidence_status": thr.get("evidence_status"),
+        "n_above_threshold_cells": thr.get("n_above_threshold_cells"),
+        "n_exceeded_cell_events": thr.get("n_exceeded_cell_events"),
+        "exceeded_cells_final": thr.get("exceeded_cells_final"),
+        "exceeded_area_internal": thr.get("exceeded_area_internal"),
+        "used_for_depth": False,
+        "restricted": True,
+        "note": thr.get("note"),
+    }
+
 STATUS_ZH = {
     "completed": "已完成",
     "failed": "失败",
@@ -139,22 +178,14 @@ def unit_context_of(params: Mapping[str, Any]) -> UnitContext:
 
 
 def watermark_of(material: MaterialSpec, unit: UnitContext, *, run_mode: str) -> dict[str, Any]:
-    """每个结果必须持续显示的标签（细则 11.3、任务书 13 节）。"""
-    wm = material.watermark()
-    wm.update(
-        {
-            "run_mode": run_mode,
-            "unit_system": unit.mode,
-            "length_label": unit.length_label,
-            "fluence_label": unit.fluence_label,
-            "depth_label": unit.depth_label,
-            "physical_depth_export_allowed": unit.allows_physical_depth_export,
-            "geometry_feedback": None,  # 由调用方补
-            "acceleration": None,
-            "warnings": [],
-        }
-    )
-    return wm
+    """每个结果必须持续显示的标签（细则 11.3、任务书 13 节）。
+
+    与 ``solver``/``io`` 共用同一构造器，保证「界面显示的标签」与「导出文件里的标签」
+    逐字段一致（不再各写一份）。
+    """
+    from .materials import build_watermark
+
+    return build_watermark(material, unit, run_mode=run_mode)
 
 
 def format_watermark(wm: Mapping[str, Any]) -> str:
@@ -194,6 +225,8 @@ class FrozenRun:
     removal_available: bool = True
     # 批次 G：相结构诊断（实时运行与历史读取同源；均质运行为空）
     structure_diagnostics: dict[str, Any] = field(default_factory=dict)
+    # 批次 H：受限阈值协议诊断（未开启时为空；开启时含可观测量/基准/阈值与原因）
+    threshold_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 内存中的结果与表面（用于渲染；不写回表单）
     result: RunResult | None = None
     # 从磁盘读取的最终表面数组（历史运行；同样只读，不求解）
@@ -242,7 +275,18 @@ class FrozenRun:
         }
         if self.removal_available:
             out["depth"] = s.depth
+        # 受限阈值协议量：仅在协议开启（数组已分配）时暴露，不返回全 0 假数组
+        thr_count = getattr(s, "threshold_exceedance_count", None)
+        if thr_count is not None:
+            out["threshold_exceedance_count"] = thr_count
+        thr_mask = getattr(s, "threshold_exceeded_mask", None)
+        if thr_mask is not None:
+            out["threshold_exceeded_mask"] = thr_mask
         return out
+
+    def _threshold_layer_available(self, snapshot_index: int | None = None) -> bool:
+        """该运行是否真的记录了逐事件超阈掩膜（协议开启且数组存在）。"""
+        return "threshold_exceeded_mask" in self.arrays_from(snapshot_index)
 
     def available_layers(self, snapshot_index: int | None = None) -> dict[str, str | None]:
         """返回 ``{layer: 不可用原因或 None}``，供界面如实展示可用性。"""
@@ -251,8 +295,16 @@ class FrozenRun:
         for name in LAYER_LABELS:
             if name == "depth" and not self.removal_available:
                 out[name] = "该运行不提供去除深度"
+            elif name == "threshold_mask" and "threshold_exceeded_mask" not in arrs:
+                # 协议开启但本结果仍无掩膜：据实说明；协议未开启则用统一口径。
+                if self.threshold_diagnostics:
+                    out[name] = "该运行已开启阈值协议，但本次结果未保存逐事件超阈掩膜"
+                else:
+                    out[name] = UNAVAILABLE_LAYERS["threshold_mask"]
             elif name == "phase_id" and not self.structure_diagnostics:
                 out[name] = "该运行未启用分相结构（均质单相，没有相编号可显示）"
+            elif name == "threshold_mask":
+                out[name] = None
             elif name in UNAVAILABLE_LAYERS:
                 out[name] = UNAVAILABLE_LAYERS[name]
             elif name in arrs:
@@ -293,6 +345,9 @@ class FrozenRun:
                 requirement=f"取值属于 {sorted(LAYER_LABELS)}",
             )
         if name in UNAVAILABLE_LAYERS:
+            # 受限阈值协议（批次 H）开启后该图层可用；其余口径不变。
+            if name == "threshold_mask" and self._threshold_layer_available(snapshot_index):
+                return self.arrays_from(snapshot_index)["threshold_exceeded_mask"]
             return None
         if name == "phase_id" and not self.structure_diagnostics:
             # 均质运行没有相结构：不拿全零数组冒充"相标签图"
@@ -345,6 +400,31 @@ class FrozenRun:
                 }
             )
         return rows
+
+    def threshold_rows(self) -> list[dict[str, Any]]:
+        """批次 H：受限阈值协议的可展示字段（协议未开启/不可用时返回空）。
+
+        一律**如实**：``used_for_depth`` 恒为 False（分类标记不是去除量），
+        ``fluence_basis`` 必须显示出来，避免读者把阈值图读成别的量。
+        """
+        d = self.threshold_diagnostics
+        if not d:
+            return []
+        return [
+            {"metric": "观测量", "value": d.get("observable")},
+            {"metric": "能流基准", "value": d.get("fluence_basis")},
+            {"metric": "阈值（内部单位）", "value": d.get("threshold_internal")},
+            {"metric": "阈值标签", "value": d.get("threshold_label")},
+            {"metric": "阈值口径", "value": d.get("threshold_kind")},
+            {"metric": "来源类别", "value": d.get("source_kind")},
+            {"metric": "候选索引", "value": d.get("source_index")},
+            {"metric": "候选数", "value": d.get("n_candidates")},
+            {"metric": "证据状态", "value": d.get("evidence_status")},
+            {"metric": "累计超阈单元·事件数", "value": d.get("n_exceeded_cell_events")},
+            {"metric": "最终超阈单元数", "value": d.get("exceeded_cells_final")},
+            {"metric": "最终超阈面积（内部单位²）", "value": d.get("exceeded_area_internal")},
+            {"metric": "是否参与深度更新", "value": d.get("used_for_depth")},
+        ]
 
     def truncation_rows(self) -> list[dict[str, Any]]:
         """批次 G：跨相截断诊断（名称固定为「未应用候选去除体积」）。"""
@@ -509,9 +589,12 @@ def submit(
     saved = save_run(result, run_dir, project_root=project_root, code_info=code_info)
 
     unit = cfg.unit
-    wm = watermark_of(material, unit, run_mode=cfg.run_mode)
-    wm["geometry_feedback"] = cfg.solver.geometry_feedback
-    wm["acceleration"] = cfg.solver.acceleration
+    # 与导出同源：优先取求解结果里那份水印；缺失时才按卡重建
+    wm = dict((result.metadata or {}).get("watermark") or {})
+    if not wm:
+        wm = watermark_of(material, unit, run_mode=cfg.run_mode)
+        wm["geometry_feedback"] = cfg.solver.geometry_feedback
+        wm["acceleration"] = cfg.solver.acceleration
     wm["warnings"] = list(result.warnings)
 
     frozen = FrozenRun(
@@ -535,6 +618,7 @@ def submit(
         structure_diagnostics=build_structure_diagnostics(
             getattr(result, "diagnostics", None), (result.metadata or {}).get("structure")
         ),
+        threshold_diagnostics=build_threshold_diagnostics(getattr(result, "diagnostics", None)),
     )
 
     state.frozen = frozen
@@ -566,7 +650,10 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
     cfg = dict(loaded.config or {})
     mat_snap = dict(loaded.material_snapshot or {})
     mat_snap = dict(mat_snap.get("card", mat_snap))
-    wm = {
+    # 回放同源：优先用导出时写下的 watermark（watermark.json / metadata），
+    # 仅对旧运行（无该文件）才按卡与元数据重建，保证"导出=回放"。
+    wm = dict(getattr(loaded, "watermark", None) or {})
+    reconstructed = {
         "material_id": mat_snap.get("id") or cfg.get("material_id"),
         "family": (mat_snap.get("identity") or {}).get("family"),
         "grade": (mat_snap.get("identity") or {}).get("grade"),
@@ -577,8 +664,9 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         "physical_prediction_allowed": bool(
             (mat_snap.get("applicability") or {}).get("physical_material_prediction_allowed", False)
         ),
-        "run_mode": cfg.get("run_mode"),
-        "unit_system": (loaded.metadata.get("unit") or {}).get("unit_system"),
+        "run_mode": cfg.get("run_mode") or loaded.metadata.get("run_mode"),
+        "unit_system": (loaded.metadata.get("unit") or {}).get("unit_system")
+        or loaded.metadata.get("unit_mode"),
         "length_label": ((loaded.metadata.get("unit") or {}).get("labels") or {}).get("length"),
         "fluence_label": ((loaded.metadata.get("unit") or {}).get("labels") or {}).get("fluence"),
         "depth_label": ((loaded.metadata.get("unit") or {}).get("labels") or {}).get("depth"),
@@ -589,6 +677,8 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         "acceleration": (loaded.metadata.get("enabled_features") or {}).get("acceleration"),
         "warnings": list(loaded.warnings),
     }
+    for k, v in reconstructed.items():
+        wm.setdefault(k, v)
 
     frozen = FrozenRun(
         run_id=loaded.run_id,
@@ -623,6 +713,9 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         structure_diagnostics=build_structure_diagnostics(
             (loaded.diagnostics or {}).get("diagnostics"),
             (loaded.metadata or {}).get("structure"),
+        ),
+        threshold_diagnostics=build_threshold_diagnostics(
+            (loaded.diagnostics or {}).get("diagnostics")
         ),
     )
     state.frozen = frozen
@@ -969,6 +1062,35 @@ def curve_capability_rows(curve) -> list[dict[str, Any]]:
         {"项": "证据状态", "值": curve.evidence_status},
     ]
     return rows
+
+
+def material_entry_rows(material_dir: str | Path) -> list[dict[str, Any]]:
+    """七材料能力入口表（纯逻辑，不导入 Streamlit；供界面与 G09 报告共用）。"""
+    from .materials import load_material_catalog, material_entry_rows as _entry_rows
+
+    catalog = load_material_catalog(material_dir)
+    return _entry_rows(catalog, material_dir)
+
+
+def material_entry_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """入口表汇总：开放 / 红线 / 缺口 计数，并列出缺口条目。"""
+    rows = list(rows)
+    opened = [r for r in rows if r.get("kind") == "opened"]
+    blocked = [r for r in rows if r.get("kind") == "blocked"]
+    deferred = [r for r in rows if r.get("kind") == "deferred"]
+    filled = [r for r in rows if r.get("verified") is not None]
+    return {
+        "n_opened": len(opened),
+        "n_blocked": len(blocked),
+        "n_deferred": len(deferred),
+        "n_unverified": len(rows) - len(filled),
+        "all_verified": len(filled) == len(rows),
+        "all_probes_hold": all(r.get("verified") is True for r in rows),
+        "deferred_items": [
+            {"family": r.get("family"), "item": r.get("item"), "reason": r.get("binding")}
+            for r in deferred
+        ],
+    }
 
 
 def list_runs(base_dir: str | Path, *, max_depth: int = 2) -> list[dict[str, Any]]:

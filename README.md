@@ -1,13 +1,14 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–G）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–H）
 
-> 版本：`0.5.0-g1`｜日期：2026-09-10｜状态：**批次 A–G 已实施并通过验收；M0 已放行，M1 条件齐备待审批**
+> 版本：`0.6.0-h1`｜日期：2026-09-11｜状态：**批次 A–H 已实施并通过验收；M0 已放行，M1/M2 条件齐备待审批**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
-> + 查表（F，曲线插值与越界处理）+ 分相结构（G，颗粒/铺层与跨相界面截断）。
-> 逐事件核查表接入、加速与斜入射尚未开始，详见 `docs/reports/progress.md`。
+> + 查表（F，曲线插值与越界处理）+ 分相结构（G，颗粒/铺层与跨相界面截断）
+> + 受限阈值协议 / 七材料能力入口 / 水印同源（H）。
+> 逐事件核查表**接入**（查表曲线进主循环）、加速与斜入射尚未开始，详见 `docs/reports/progress.md`。
 
 ---
 
@@ -27,7 +28,8 @@
 | **Streamlit 界面**（参数表单、形貌/截面/时间轴回放、参考评估器、查表、历史运行） | ✅ 批次 E（T09）+ F，`streamlit run app.py` |
 | **查表**（曲线 schema、分段线性 / 保形 PCHIP、越界处理、语义路由） | ✅ 批次 F（T10），`python -m ufdemo table` |
 | **分相结构**（`phase_at` / `next_different_interface`、颗粒 / 铺层、跨相界面截断） | ✅ 批次 G（T11–T13），`examples/alsic_particle_composite.json`、`examples/cfrp_laminated_ply.json` |
-| 七材料能力入口与展示 / 逐事件核查表接入 | ❌ 批次 H（T14） |
+| **受限阈值协议 + 七材料能力入口 + 水印同源**（只按本事件入射能流判超阈、红线/缺口逐条实跑核验、导出与回放共用一个水印） | ✅ 批次 H（T14），`python -m ufdemo materials` / `tools/material_report.py` |
+| 逐事件核查表**接入**（查表曲线进入逐事件主循环） | ❌ 本批保留不开放（细则第 7 节：只有 `event_depth_increment` 且协议适用时才可进） |
 | 冻结几何批量加速 / 动态角度 | ❌ 批次 I、J（T17、T18） |
 
 **明确不做**：热场、TTM 耦合、裂纹、分层、再沉积、深孔多次反射、机器学习、
@@ -116,7 +118,7 @@ streamlit run app.py
 （未安装可编辑包时用 `PYTHONPATH=src streamlit run app.py`。界面依赖见
 `pyproject.toml` 的 `ui` extra。）
 
-界面分五个标签页：
+界面分六个标签页：
 
 | 标签页 | 内容 |
 |---|---|
@@ -124,6 +126,7 @@ streamlit run app.py
 | 结果 | 形貌（热图/三维曲面）、截面、时间轴快照回放 |
 | 参考评估器 | 批次 D 的 YSZ/SiC 算例（只做公式核查，**不求解网格**） |
 | 查表 | 批次 F 的曲线卡：原始点、查值（线性/PCHIP、可勾选允许越界）、原始点与插值图（**不触发求解**） |
+| 七材料能力入口 | 批次 H：七族的开放内容 / 红线 / 缺口，逐条实跑探针并显示核验结论 |
 | 历史运行 | 列出 `runs/` 下可读目录并读取（**不重新求解**） |
 
 ### 界面的三条硬规矩
@@ -144,7 +147,7 @@ streamlit run app.py
 ### 界面的验收记录
 
 ```bash
-python tools/ui_probe.py                 # 17 项界面操作检查，输出到 runs/_ui_probe
+python tools/ui_probe.py                 # 20 项界面操作检查，输出到 runs/_ui_probe
 python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
 ```
 
@@ -202,7 +205,9 @@ python tools/table_report.py     # 生成错误 CSV 与原始点/插值图
 4. **只有 `event_depth_increment` 曲线能进事件核**（且固定条件需匹配）；
    体积/平均率/累计曲线只进评估器，**不得反推局部深度剖面**。
 
-> 本批**不接入逐事件主循环**（属批次 H / T14）；查表本身不产生任何形貌。
+> 查表**不接入逐事件主循环**：批次 H 已交付受限阈值协议与七材料能力入口，但查表曲线
+> 进主循环仍**保留不开放**（细则第 7 节：只有 `event_depth_increment` 且协议适用才可进）；
+> 查表本身不产生任何形貌。
 > SiC 曲线由材料卡拟合参数按式(6) 重算，**不构成对原文曲线的复现**
 > （边界声明见 `docs/reports/table_lookup.md`）。
 
@@ -263,6 +268,57 @@ docs/reports/
 
 ---
 
+## 3e. 受限阈值协议与七材料能力入口（批次 H / T14）
+
+### 受限阈值协议
+
+逐事件超阈值掩膜按**受限口径**记录：**只按本事件入射能流**判超阈，**不产生深度**。
+
+```bash
+python -m pytest -q -m g09
+python tools/material_report.py      # 生成 G09 阈值协议 CSV/报告 + 七材料能力表
+```
+
+协议的五条硬规矩：
+
+1. **唯一注册基准 = 本事件入射能流**（`per_event_incident`）。累计/平均能流基准
+   在配置层被拒（`CONFIG_INVALID`）——累计入射剂量与单脉冲能流量纲虽同、物理含义不同。
+2. **禁用不造假。** 未开启协议时 `threshold_mask` 报不可用（`available=False`），
+   **不返回全 0 假数组**；界面显示原因，不拿无关量凑数。
+3. **多候选须显式索引。** 材料卡给多个阈值候选时，未给 `candidate_index` 即不可用。
+4. **多脉冲口径不得当单脉冲阈值。** `multi_response` 口径下的材料（如高温合金）
+   在多脉冲运行中不放行；单脉冲口径（如 CFRP `Fth(1)`）可用。
+5. **可判别构造**：两发 `0.6 Fth`（累计 `1.2 Fth`）掩膜为空、高度逐位不变；
+   单发 `1.2 Fth` 才点亮超阈单元——用于证明协议确实只按本事件判、不累加。
+
+### 七材料能力入口
+
+`python -m ufdemo materials` 与界面「七材料能力入口」页展示七族的
+**开放内容 / 红线 / 缺口**，每条都由探针**实跑**核验，而非只写文档：
+
+| 类别 | 含义 |
+|---|---|
+| 开放 `opened` | 绑定真实能力/运行模式，且该能力查得可用 |
+| 红线 `blocked` | 绑定 enforcement + 探针键 + **期望错误码**，实跑须抛出该码 |
+| 缺口 `deferred` | 规格要求开放、但实现未支持 → 附探针**证明现在确实打不开** |
+
+> 目前七族合计 **27 条**（开放 15 / 红线 11 / 缺口 1），探针 27/27 成立。
+> 唯一的缺口是金刚石「合成形貌」：卡内 `structure_type =
+> net_removal_with_optional_modification_mask` 既不在能力白名单、也未被结构构建器支持，
+> **如实记为缺口**（探针证明当前打不开），**不冒充已开放**；待人工决策是否补实现。
+
+### 水印同源
+
+`materials.build_watermark(material, unit, run_mode)` 是水印的**唯一权威来源**：
+solver 写入、`io` 落盘（`watermark.json` + `statistics.csv` 的 `watermark.*` 自描述行）、
+界面展示与历史回放都读它，避免「导出说一个模式、界面显示另一个模式」。
+
+```bash
+python -m pytest -q -m g09 -k watermark
+```
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -291,9 +347,20 @@ docs/reports/
   它同时是 `solve_count` 的唯一递增点（见 `docs/decisions/ADR-0010-ui-layer.md`）。
 * **界面措辞**：`FORBIDDEN_TERMS` 按严格子串口径复查界面与导出文案；
   `LAYER_LABELS` 只描述「该图实际是什么量」，澄清信息放在不可用原因文本里。
-* **不提供的图层如实报不可用**：`threshold_mask` 本批次未记录，界面显示原因，
-  不用「累计剂量 vs 单脉冲阈值」比较伪造标记；`threshold_only` 结果不提供深度时
+* **不提供的图层如实报不可用**：`threshold_mask` 仅在**受限阈值协议开启**且该卡
+  提供可用阈值时给出，否则显示原因、**不返回全 0 假数组**；协议**只对**本事件入射能流
+  判超阈，不用「累计剂量 vs 单脉冲阈值」比较伪造标记；`threshold_only` 结果不提供深度时
   显示「不提供」而非数值 `0`。
+* **阈值基准唯一**：`thresholds.py` 只注册 `per_event_incident` 一个基准；累计/平均
+  能流基准在配置层被拒（`CONFIG_INVALID`）；多候选须显式 `candidate_index`；
+  `multi_response` 口径不得当单脉冲阈值使用。
+* **水印单一权威来源**：`materials.build_watermark(material, unit, run_mode)` 一处生成；
+  solver 写入、`io` 落盘（`watermark.json` + `statistics.csv` 的 `watermark.*` 行）、
+  界面与历史回放都读它——**导出与回放逐字段一致**。
+* **七材料入口不冒充**：`opened` 绑真实能力、`blocked` 绑 enforcement + 期望错误码、
+  `deferred` 是「规格要求开放、实现未支持」的**缺口**且附探针证明当前打不开；
+  `verify_entry_enforcements` 实跑探针，拦截失效或缺口消失即**如实报失败**
+  （`docs/reports/material_capability_table.csv`）。
 * **查表不是任意外推**：默认分段线性；可选 PCHIP 显式 `extrapolate=False`；
   越界是显式状态（`TABLE_OUT_OF_RANGE`），**不返回 0、不外推、不钳端点**；
   重复 x 默认拒绝，需合并时须附规则并保留原始点（见
@@ -334,15 +401,18 @@ docs/reports/
 6. **参考评估器不建实验回归用例**。YSZ 图 14、SiC 图 6 的原图/原表尚未数字化，
    G05 只做到公式核查；SiC 扫描次数列表存在重复项，本批只接受直接输入论文有效 N。
 7. **界面为单机 Streamlit，无并发会话与持久化状态**。会话状态在进程内；
-   历史结果通过运行目录读取，不建数据库。界面**不提供**超阈值掩膜图层
-   （本批次未记录），阈值观测量属批次 H 的受限阈值协议。
+   历史结果通过运行目录读取，不建数据库。超阈值掩膜图层（`threshold_mask`）
+   由批次 H 的**受限阈值协议**给出，但**仅在协议开启且该卡提供可用阈值时**可用，
+   否则如实报不可用（协议只按本事件入射能流判超阈，不读作热学损伤标记）。
 8. **无性能基准**。本批只记录单次运行 `elapsed_s`；B01–B04 属批次 I。
 9. **F03 / F04 文件在当前工作区未找到**（`paper5.0.tex`、
    `ttm_carrier_drilling_q4_axisymmetric.py`）。已按细则记录为缺失，
    不阻塞人工解析主线；哈希核对结果见
    `docs/reports/input_hash_check.csv`。
 10. **查表曲线只覆盖固定协议下的一维响应，且不接入逐事件主循环**。
-    跨工况需另附条件匹配的曲线；接入主循环属批次 H（T14）。
+    跨工况需另附条件匹配的曲线。批次 H 已交付受限阈值协议与七材料能力入口，
+    但**查表曲线接入主循环仍不开放**（细则第 7 节：只有 `event_depth_increment`
+    且协议适用时才可进，本批不启用该通道）。
     PCHIP 在有效区间外不作为（不画虚线外推）。
 11. **查表的 SiC 曲线由材料卡拟合参数按式(6) 重算**，不是原图逐点数字化，
     因此**不构成对原文曲线的复现**（见 `docs/reports/table_lookup.md` 边界声明）。
@@ -372,6 +442,7 @@ ultrafast-demo/
 │   ├── ui_service.py     # 界面逻辑层（批次 E；不导入 Streamlit/Plotly）
 │   ├── tables.py         # 查表：曲线 schema、插值核、越界与语义路由（批次 F）
 │   ├── structure.py      # 分相结构：相/结构接口、铺层与颗粒、种子与体积分数（批次 G）
+│   ├── thresholds.py     # 受限阈值协议：只按本事件入射能流判超阈（批次 H）
 │   ├── geometry.py       # 批次 J 占位（斜入射/可见性）
 │   ├── accelerators.py   # 批次 I 占位（批量加速）
 │   └── __main__.py       # CLI
@@ -381,7 +452,8 @@ ultrafast-demo/
 │   ├── make_curves.py         # 生成 data/curves 示例曲线与无效夹具（批次 F）
 │   ├── table_report.py        # 查表报告：错误 CSV + 原始点/插值图（批次 F）
 │   ├── structure_report.py    # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
-│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F/G 增补检查）
+│   ├── material_report.py     # 受限阈值协议报告 + 七材料能力表（批次 H）
+│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F/G/H 增补检查）
 │   ├── ui_demo_probe.py       # 端到端演示可用性检查（批次 G：前后端对接全链路）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
@@ -389,7 +461,7 @@ ultrafast-demo/
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置（含两个合成结构实例，批次 G）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0012）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0013）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -402,17 +474,18 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 277 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + 回归 5）
+python -m pytest -q                  # 319 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + 回归 5）
 python -m pytest -q -m g05           # 只跑文献语义回归
 python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
-python -m pytest -q -m g09           # 界面与查表的 G09 相关测试
+python -m pytest -q -m g09           # 界面、查表与受限阈值协议的 G09 相关测试（含批次 H）
 python tools/migrate_materials.py    # 迁移 + 7 项准入探针
 python tools/make_curves.py          # 生成示例曲线与无效夹具（批次 F）
 python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插值图
 python tools/structure_report.py     # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
+python tools/material_report.py      # 受限阈值协议报告 + 七材料能力表（批次 H）
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
 python tools/ui_demo_probe.py        # 端到端演示可用性（前后端对接全链路）
-python tools/run_acceptance.py       # 实际执行并生成验收报告（A–G）
+python tools/run_acceptance.py       # 实际执行并生成验收报告（A–H）
 ```
 
 产物：
@@ -428,10 +501,13 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–G
 * `docs/reports/curve_interpolation.html` / `.csv` —— **原始点与插值图**；
 * `docs/reports/structure_instances.csv` —— **分相结构实例统计（批次 G）**；
 * `docs/reports/g06_phase_interfaces.md` / `.csv` —— **G06 分相报告与检查明细（批次 G）**；
+* `docs/reports/material_capability_table.csv` —— **七材料能力入口表（批次 H）**：
+  开放 / 红线 / 缺口逐条探针结论；
+* `docs/reports/g09_threshold_protocol.md` / `.csv` —— **受限阈值协议报告与检查明细（批次 H）**；
 * `docs/reports/material_migration.csv` —— 字段级迁移记录；
 * `docs/reports/material_admission.csv` —— 四种必查拒绝情况；
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–G 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–H 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

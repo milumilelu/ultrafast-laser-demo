@@ -7,12 +7,12 @@
   "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
   "card_version": "1.0.0",
   "code": {
-    "commit": "b1378d87fb51886a0929f6ceba87a17609958d96",
+    "commit": "cde51d84a1e83f853da79f0eeda4d94a2951c9a3",
     "git_available": true,
     "python": "3.13.14",
-    "source_file_count": 18,
-    "source_manifest_sha256": "fdc54e3f1bf071382b7aa8c239abf1e0f41cf0d05f61154714dad0d63baf82f1",
-    "working_tree_dirty": false
+    "source_file_count": 19,
+    "source_manifest_sha256": "cffb7edbec62575d8ba75a123ab458fb1bc42f618cf5e344b6278d44efb78d62",
+    "working_tree_dirty": true
   },
   "config_sha256": "fb1d5adbe4e92499f760bcba15c0d47981f7e45d1c0f271d8570d466df4ae98f",
   "enabled_features": {
@@ -23,7 +23,8 @@
     "removal_available": true,
     "snapshot_policy": "events",
     "structured_interface": true,
-    "threshold_only": false
+    "threshold_only": false,
+    "threshold_protocol": false
   },
   "environment": {
     "executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
@@ -51,6 +52,7 @@
   },
   "material_card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
   "run_id": "g06_cfrp_plies",
+  "run_mode": "synthetic_demo",
   "schema_version": "1.0",
   "seed": 20260911,
   "source_type": "research_card_migration",
@@ -162,6 +164,28 @@
     "warnings": [],
     "z_top": 0.0
   },
+  "threshold_protocol": {
+    "available": false,
+    "condition": {},
+    "evidence_status": "literature_reported",
+    "fluence_basis": "per_event_incident",
+    "n_candidates": 0,
+    "notes": [
+      "受限协议：只对**本事件入射能流**判超阈，不使用累计剂量；该观测为分类标记，不产生去除量，也不代表任何热学量。",
+      "卡内声明口径 'multipulse_fitted_Fth1' 未登记为单脉冲口径，请注意其条件。",
+      "材料卡本身提供可用阈值；本次运行只是未开启记录，可开启后重跑。"
+    ],
+    "observable": "fluence_above_threshold",
+    "output_semantics": "threshold_only",
+    "reason": "阈值协议未开启（threshold_protocol.enabled=false）：本次运行不记录超阈标记，界面据实报不可用，而不是返回全 0 假数组。",
+    "restricted": true,
+    "source_index": null,
+    "source_kind": "response",
+    "threshold_internal": 8400.0,
+    "threshold_kind": "multipulse_fitted_Fth1",
+    "threshold_label": "卡内 response 阈值",
+    "used_for_depth": false
+  },
   "unit": {
     "E_ref_J": 1.0000000000000002e-06,
     "F_ref_J_m2": 10000.0,
@@ -176,6 +200,7 @@
     "physical_depth_export_allowed": false,
     "unit_system": "dimensionless"
   },
+  "unit_mode": "dimensionless",
   "validation": {
     "allowed_run_modes": [
       "threshold_only",
@@ -183,7 +208,7 @@
     ],
     "errors": [],
     "estimated_events": 16,
-    "estimated_memory_bytes": 4294296,
+    "estimated_memory_bytes": 4443403,
     "evidence_status": "literature_reported",
     "material_id": "cfrp_t700_yb01_800nm",
     "notes": [
@@ -202,10 +227,36 @@
     "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
     "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
   ],
-  "written_at_utc": "2026-09-11T00:51:07.838849+00:00",
+  "watermark": {
+    "acceleration": "off",
+    "card_sha256": "4bb7c6f71dc2c6e0edd042acd740a8e803505f9d92e5354b339d92f0307695fa",
+    "card_version": "1.0.0",
+    "depth_label": "L_ref",
+    "evidence_status": "literature_reported",
+    "family": "CFRP",
+    "fluence_label": "F_ref",
+    "geometry_feedback": "fixed_geometry",
+    "grade": "T700 / YB01",
+    "identity_confirmed_by_user": false,
+    "length_label": "L_ref",
+    "material_id": "cfrp_t700_yb01_800nm",
+    "physical_depth_export_allowed": false,
+    "physical_prediction_allowed": false,
+    "run_mode": "synthetic_demo",
+    "source_type": "research_card_migration",
+    "unit_mode": "dimensionless",
+    "unit_system": "dimensionless",
+    "warnings": [
+      "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+      "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
+      "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
+    ]
+  },
+  "written_at_utc": "2026-09-11T01:49:37.690759+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",
+    "watermark.json",
     "statistics.csv",
     "profiles.csv",
     "diagnostics.json",

@@ -7,11 +7,11 @@
   "card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
   "card_version": "1.0.0",
   "code": {
-    "commit": "b1378d87fb51886a0929f6ceba87a17609958d96",
+    "commit": "cde51d84a1e83f853da79f0eeda4d94a2951c9a3",
     "git_available": true,
     "python": "3.13.14",
-    "source_file_count": 18,
-    "source_manifest_sha256": "fdc54e3f1bf071382b7aa8c239abf1e0f41cf0d05f61154714dad0d63baf82f1",
+    "source_file_count": 19,
+    "source_manifest_sha256": "cffb7edbec62575d8ba75a123ab458fb1bc42f618cf5e344b6278d44efb78d62",
     "working_tree_dirty": true
   },
   "config_sha256": "4a20fd94acbb0f54eb738b66c4081fde3d1584e4cecd0923a1b1c3a92209ebb4",
@@ -23,7 +23,8 @@
     "removal_available": true,
     "snapshot_policy": "events",
     "structured_interface": false,
-    "threshold_only": false
+    "threshold_only": false,
+    "threshold_protocol": false
   },
   "environment": {
     "executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
@@ -51,10 +52,32 @@
   },
   "material_card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
   "run_id": "m0_synthetic_demo",
+  "run_mode": "synthetic_demo",
   "schema_version": "1.0",
   "seed": 1,
   "source_type": "synthetic_definition",
   "status": "completed",
+  "threshold_protocol": {
+    "available": false,
+    "condition": {},
+    "evidence_status": "unverified",
+    "fluence_basis": "per_event_incident",
+    "n_candidates": 0,
+    "notes": [
+      "受限协议：只对**本事件入射能流**判超阈，不使用累计剂量；该观测为分类标记，不产生去除量，也不代表任何热学量。",
+      "材料卡本身提供可用阈值；本次运行只是未开启记录，可开启后重跑。"
+    ],
+    "observable": "fluence_above_threshold",
+    "output_semantics": "threshold_only",
+    "reason": "阈值协议未开启（threshold_protocol.enabled=false）：本次运行不记录超阈标记，界面据实报不可用，而不是返回全 0 假数组。",
+    "restricted": true,
+    "source_index": null,
+    "source_kind": "response",
+    "threshold_internal": 1.0,
+    "threshold_kind": null,
+    "threshold_label": "卡内 response 阈值",
+    "used_for_depth": false
+  },
   "unit": {
     "E_ref_J": 1.0000000000000002e-06,
     "F_ref_J_m2": 10000.0,
@@ -69,6 +92,7 @@
     "physical_depth_export_allowed": false,
     "unit_system": "dimensionless"
   },
+  "unit_mode": "dimensionless",
   "validation": {
     "allowed_run_modes": [
       "synthetic_demo",
@@ -76,7 +100,7 @@
     ],
     "errors": [],
     "estimated_events": 5,
-    "estimated_memory_bytes": 2547534,
+    "estimated_memory_bytes": 2657341,
     "evidence_status": "unverified",
     "material_id": "synthetic_demo_isotropic",
     "notes": [
@@ -88,10 +112,32 @@
     "warnings": []
   },
   "warnings": [],
-  "written_at_utc": "2026-09-11T00:51:04.875511+00:00",
+  "watermark": {
+    "acceleration": "off",
+    "card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
+    "card_version": "1.0.0",
+    "depth_label": "L_ref",
+    "evidence_status": "unverified",
+    "family": "synthetic_demo",
+    "fluence_label": "F_ref",
+    "geometry_feedback": "fixed_geometry",
+    "grade": "isotropic_normalized_surface",
+    "identity_confirmed_by_user": false,
+    "length_label": "L_ref",
+    "material_id": "synthetic_demo_isotropic",
+    "physical_depth_export_allowed": false,
+    "physical_prediction_allowed": false,
+    "run_mode": "synthetic_demo",
+    "source_type": "synthetic_definition",
+    "unit_mode": "dimensionless",
+    "unit_system": "dimensionless",
+    "warnings": []
+  },
+  "written_at_utc": "2026-09-11T01:49:33.944692+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",
+    "watermark.json",
     "statistics.csv",
     "profiles.csv",
     "diagnostics.json",

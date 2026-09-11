@@ -1,10 +1,10 @@
-# 验收报告（批次 A–G：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构）
+# 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）
 
-- 生成时间（UTC）：2026-09-11T00:51:16.837757+00:00
-- 代码版本：commit=b1378d87fb51886a0929f6ceba87a17609958d96｜工作区有改动=False｜源码清单哈希=fdc54e3f1bf07138…
+- 生成时间（UTC）：2026-09-11T01:49:48.653839+00:00
+- 代码版本：commit=cde51d84a1e83f853da79f0eeda4d94a2951c9a3｜工作区有改动=True｜源码清单哈希=cffb7edbec62575d…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
-- 汇总：通过 97｜失败 0｜未运行 4
+- 汇总：通过 114｜失败 0｜未运行 4
 
 > 公式核查、数值实现验证、实验复现三栏分开记录。本报告不含任何实验复现结论：
 > A–C 只做到「公式核查 + 数值实现验证」；D 的 YSZ/SiC 参考量也只做到「公式核查」；
@@ -13,6 +13,9 @@
 > **不构成对原文曲线的复现**。原图/原表数字化与工况对应完成前不建立实验回归用例。
 > G 的分相结构为「数值实现验证」（同相合并/界面不跳过/种子复现/截断命名），
 > 相响应为内联合成定义、跨相截断为有损近似，**不含任何实验复现结论**。
+> H 的受限阈值协议为「数值实现验证」（只按本事件能流判超阈/多脉冲口径拦截/不产生深度），
+> 七材料能力入口为「数值实现验证」（红线与缺口均逐条实跑探针），标签贯穿导出与回放，
+> **软件跑通不等于材料验证**。
 
 ## 逐项结果
 
@@ -55,7 +58,7 @@
 | G05 | examples/sic_reference_case.json | SiC k (1/pulse) | 0.0199 | 0.0199 | 0.0 | == 0.0199（卡内值） | 通过 | 公式核查 |
 | G05 | examples/sic_reference_case.json | 平均率 / 协议累计深度 独立输出 | 两项分别给出，累计=平均×N_eff | 平均 59.5674 nm/有效脉冲；N=720 累计 42.8885 um |  | rel <= 1e-12 | 通过 | 数值实现验证 |
 | G05 | （语义闸门） | 平均率/累计量能否进入事件核 | 拒绝（RESPONSE_SEMANTICS_INVALID） | 已拒绝 |  |  | 通过 | 数值实现验证 |
-| G05 | （参考运行目录） | 是否写出形貌表面文件 | 不写（参考评估器不求解网格） | 文件：config.json, diagnostics.json, material_snapshot.json, metadata.json, profiles.csv, snapshots, statistics.csv |  |  | 通过 | 数值实现验证 |
+| G05 | （参考运行目录） | 是否写出形貌表面文件 | 不写（参考评估器不求解网格） | 文件：config.json, diagnostics.json, material_snapshot.json, metadata.json, profiles.csv, snapshots, statistics.csv, watermark.json |  |  | 通过 | 数值实现验证 |
 | G06 | examples/alsic_particle_composite.json | 结构实例求解状态 | completed（合成结构，内部单位） | 颗粒增强铝基（合成）｜结构类型 particle_composite｜种子 20260910｜事件 21 |  |  | 通过 | 数值实现验证 |
 | G06 | examples/cfrp_laminated_ply.json | 结构实例求解状态 | completed（合成结构，内部单位） | CFRP 铺层 [0/90/0/90]（合成）｜结构类型 laminated_fiber_composite｜种子 20260911｜事件 16 |  |  | 通过 | 数值实现验证 |
 | G06 | examples/（两个合成结构算例） | 同相合并等价 | 合并前后几何逐位一致 | 合并 3→2 层，几何逐位一致 |  |  | 通过 | 数值实现验证 |
@@ -75,18 +78,21 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T00:51:10.011001+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T01:49:40.057258+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T005110_3r11 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T014940_i9ni |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 切换曲线卡 / 插值方法：solve_count 始终为 0 | 0（不变） | 曲线数=3｜异常组合=无 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 七材料能力入口：全部条目探针实跑通过 | 未核验=0｜探针全通过｜开放/红线/缺口均绑定依据 | 开放=15｜红线=11｜缺口=1[('金刚石', '合成形貌')]｜未核验=0 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 金刚石「合成形貌」记为缺口而非开放 | opened 中不含「合成形貌」 | opened=['导入入口', '条件对应阈值'] |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 图层标签不含被禁措辞（严格子串：热影响区/HAZ/温度…） | 全部通过 | 全部通过 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 缺能力模式显示准确不可用原因（不自动降级、不静默填值） | 拒绝并给出原因 | 允许=False｜原因=材料卡未开放 reference_case 模式；允许：['threshold_only', 'synthetic_demo'] |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 合成模式禁止导出物理深度 | 以 depth_um 命名时拒绝；depth 标签非 um | 导出标签=depth/L_ref｜拒绝 depth_um=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | threshold_only/参考结果：去除量显示「不提供」而非 0 | removal_available=False | removal_available=False｜run_id=g05_ysz_reference |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 65 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 98 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
@@ -115,16 +121,30 @@
 | G09-table | ysz_analytic_depth_vs_fluence | 越界查询返回值 | None（不是 0，也不外推） | 越界=[None]｜状态=below_range |  | 值必须为 None | 通过 | 数值实现验证 |
 | G09-table | ysz_analytic_depth_vs_fluence | 端点包含性 | 含端点（闭区间） | [1.0, 40.0] 查值状态=ok |  | status==ok | 通过 | 数值实现验证 |
 | G09-table | curves/* | 查表是否产生形貌表面文件 | 不产生（查表不是求解） | 无 final_surface.npz（查表只读曲线） |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 配置层拒绝累计/平均能流基准 | CONFIG_INVALID | 4 个累计/平均基准 + 整份 RunConfig 均 CONFIG_INVALID |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 唯一注册基准 = 本事件入射能流 | ('per_event_incident',) | 唯一注册基准=('per_event_incident',) |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 禁用时报不可用、不返回全 0 假数组 | available=False｜分类=None | 未开启→available=False｜分类返回 None（非全 0 数组） |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 多候选须显式 candidate_index | 未给索引→不可用 | 2 个候选：未给索引→不可用｜idx0=2.35e+04｜idx1=4.97e+04 |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 多脉冲口径不得当单脉冲阈值 | N=10 拦｜N=1 放行 | 高温合金 N=10→不可用｜CFRP Fth1→可用 |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 缺阈值如实报不可用 | available=False｜threshold=None | 微晶玻璃（无阈值）→available=False｜threshold=None |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 只按本事件能流判超阈（可判别构造） | 累计超阈但掩膜为空 | 两发 0.6Fth（累计 1.2Fth）掩膜=空｜单发 1.2Fth 点亮 25 单元｜高度逐位不变 |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 求解器启用/禁用两态一致 | 启用记数落盘｜禁用不造假 | 启用：超阈单元·事件=185｜末态单元=37｜禁用：掩膜=None 且快照不写数组 |  |  | 通过 | 数值实现验证 |
+| G09-threshold | tools/material_report.py | 七材料能力入口：逐条探针实跑 | 全部成立 | 探针 27/27 成立｜开放 15｜红线 11｜缺口 1 |  |  | 通过 | 数值实现验证 |
+| G09-entries | data/materials/*.json | 七材料入口探针全部成立 | 全部 ok=True | 探针 27/27｜开放 15｜红线 11｜缺口 1 |  | 全部 ok=True | 通过 | 数值实现验证 |
+| G09-entries | data/materials/diamond_*.json | 金刚石「合成形貌」记为缺口（非开放） | opened 中不含该项｜缺口探针证明当前打不开 | 缺口 1 项｜[('金刚石', '合成形貌')] |  | 缺口探针 ok=True | 通过 | 数值实现验证 |
+| G09-watermark | runs/g01_single_pulse | watermark.json 存在且非空 | 存在且含 material_id/run_mode/unit_mode | 存在=True｜keys=19 |  |  | 通过 | 数值实现验证 |
+| G09-watermark | runs/g01_single_pulse | metadata 含 run_mode/unit_mode/watermark | 三者齐备 | run_mode=reference_case｜unit_mode=SI｜watermark_keys=19 |  |  | 通过 | 数值实现验证 |
+| G09-watermark | runs/g01_single_pulse | statistics.csv 含 watermark.* 自描述行 | watermark.material_id/run_mode/unit_mode 均存在 | watermark.* 行数=12 |  |  | 通过 | 数值实现验证 |
 | G07 | （斜入射基准） | 0° 退化；60° 足迹比 2、中心能流减半；可见性 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
 | G08 | （分组求解） | 分组与逐脉冲偏差 <= 1%；回退正确 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
-| G09 | （逐事件核查表接入） | 越界拒绝；标签；重读一致；逐事件核接入 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
+| G09 | （查表接入逐事件核） | 查表值进入逐事件主循环并保持语义一致 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
 | B01-B04 | （性能基准） | CPU/内存/事件数/耗时 | 见任务书 12 节 | 未运行 |  |  | 未运行 | 不适用 |
 
 ## 未运行项与原因
 
 - **G07**（数值实现验证）：批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）
 - **G08**（数值实现验证）：批次 I（T17）未实施：accelerators.py 仍为占位
-- **G09**（数值实现验证）：查表（T10，批次 F）已交付：曲线卡/越界/路由检查见上方 G09-table 行；但**逐事件主循环接入**属批次 H（T14）未实施；界面（T09）操作检查见上方 G09-UI 行
+- **G09**（数值实现验证）：批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 event_depth_increment 且协议适用时才可进入，本批不启用该通道）
 - **B01-B04**（不适用）：批次 I（T16）未实施：本批只记录单次运行的 elapsed_s
 
 ## 复现命令
@@ -144,6 +164,7 @@ python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 
 python tools/make_curves.py
 python tools/table_report.py
 python tools/structure_report.py
+python tools/material_report.py
 python tools/migrate_materials.py
 python tools/ui_probe.py
 python tools/ui_demo_probe.py

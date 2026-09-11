@@ -1,0 +1,28 @@
+﻿family,entry_ids,entry_cards_present,kind,item,binding,code,verified,detail,note
+氧化锆,zirconia_ysz_machining_effective_n3;zirconia_ysz_static_aps8ysz,True,opened,YSZ 特定加工核（逐事件，条件受限）,capability:event_depth_increment,-,True,能力 event_depth_increment 可用卡：['zirconia_ysz_machining_effective_n3'],加工有效阈值只在文献加工分支条件匹配的岗位上可用（conditional）。
+氧化锆,zirconia_ysz_machining_effective_n3;zirconia_ysz_static_aps8ysz,True,opened,YSZ 参考算例与公式核查,run_mode:reference_case,-,True,允许 reference_case 的卡：['zirconia_ysz_machining_effective_n3'],参考评估器只复现公式与协议量，不求解网格。
+氧化锆,zirconia_ysz_machining_effective_n3;zirconia_ysz_static_aps8ysz,True,opened,条件对应阈值展示,capability:threshold_only,-,True,"能力 threshold_only 可用卡：['zirconia_ysz_machining_effective_n3', 'zirconia_ysz_static_aps8ysz']",
+氧化锆,zirconia_ysz_machining_effective_n3;zirconia_ysz_static_aps8ysz,True,blocked,合并静态/加工分支,materials.resolve_material,MATERIAL_CAPABILITY_MISSING,True,模糊/前缀名不被解析；两分支语义与阈值分别保留。,模糊/前缀名不被解析；两分支语义与阈值分别保留。
+氧化锆,zirconia_ysz_machining_effective_n3;zirconia_ysz_static_aps8ysz,True,blocked,默认额外孵化,response.FixedThresholdLogLaw.increment,RESPONSE_SEMANTICS_INVALID,True,带局部历史的核显式报错；卡内声明 extra_incubation_prohibited_without_refit。,带局部历史的核显式报错；卡内声明 extra_incubation_prohibited_without_refit。
+铝基碳化硅,alsic_sicp_aa2024_1030nm,True,opened,无量纲合成颗粒,capability:synthetic_structure,-,True,能力 synthetic_structure 可用卡：['alsic_sicp_aa2024_1030nm'],颗粒几何与分相响应内联合成定义；资料浏览只读卡内来源与证据状态。
+铝基碳化硅,alsic_sicp_aa2024_1030nm,True,blocked,借用单晶 SiC 当颗粒相标定,structure.build_phase,MATERIAL_CAPABILITY_MISSING,True,相引用其它材料卡（material_id）时直接拒绝。,相引用其它材料卡（material_id）时直接拒绝。
+CFRP,cfrp_t700_yb01_800nm,True,opened,协议限定整体阈值,capability:threshold_only,-,True,能力 threshold_only 可用卡：['cfrp_t700_yb01_800nm'],整体等效阈值（Fth1）只在协议条件下展示，不拆给分相。
+CFRP,cfrp_t700_yb01_800nm,True,opened,合成铺层,capability:synthetic_structure,-,True,能力 synthetic_structure 可用卡：['cfrp_t700_yb01_800nm'],
+CFRP,cfrp_t700_yb01_800nm,True,blocked,整体阈值拆给树脂/纤维,structure.assert_phase_threshold_not_split,MATERIAL_CAPABILITY_MISSING,True,相阈值等于父卡整体阈值时拒绝。,相阈值等于父卡整体阈值时拒绝。
+CFRP,cfrp_t700_yb01_800nm,True,blocked,缺 δ 生成物理深度,response.build_pulse_law,RESPONSE_SEMANTICS_INVALID,True,δ 为 null 时构造脉冲律失败，不得由阈值反推深度。,δ 为 null 时构造脉冲律失败，不得由阈值反推深度。
+高温合金,inconel718_1030nm_n10,True,opened,In718 的 N=10 阈值参考,capability:threshold_only,-,True,能力 threshold_only 可用卡：['inconel718_1030nm_n10'],必须同时显示 N 的定义；不得当作单脉冲阈值。
+高温合金,inconel718_1030nm_n10,True,opened,合成形貌,capability:synthetic_structure,-,True,能力 synthetic_structure 可用卡：['inconel718_1030nm_n10'],
+高温合金,inconel718_1030nm_n10,True,blocked,当作单脉冲阈值或任意历史阈值,thresholds._declare_multipulse,UNAVAILABLE,True,多脉冲（N≥2）定点口径的候选与卡内阈值一律判不可用。,多脉冲（N≥2）定点口径的候选与卡内阈值一律判不可用。
+微晶玻璃,glass_ceramic_unbranded_1030nm,True,opened,合成均质表面,capability:synthetic_structure,-,True,能力 synthetic_structure 可用卡：['glass_ceramic_unbranded_1030nm'],
+微晶玻璃,glass_ceramic_unbranded_1030nm,True,opened,导入入口,capability:table_import,-,True,能力 table_import 可用卡：['glass_ceramic_unbranded_1030nm'],
+微晶玻璃,glass_ceramic_unbranded_1030nm,True,blocked,将不同玻璃陶瓷牌号合并,materials.resolve_material,MATERIAL_CAPABILITY_MISSING,True,牌号级模糊名不解析；牌号未确认时不允许物理材料预测。,牌号级模糊名不解析；牌号未确认时不允许物理材料预测。
+SiC,sic_4h_cface_1035nm_multishot,True,opened,两类阈值（改性 / 结构变化）,capability:threshold_only,-,True,能力 threshold_only 可用卡：['sic_4h_cface_1035nm_multishot'],多候选必须显式选择 candidate_index，不静默取默认。
+SiC,sic_4h_cface_1035nm_multishot,True,opened,有效 N 参考评估器,capability:reference_evaluator,-,True,能力 reference_evaluator 可用卡：['sic_4h_cface_1035nm_multishot'],
+SiC,sic_4h_cface_1035nm_multishot,True,opened,平均去除率（仅评估器）,capability:mean_depth_per_effective_pulse,-,True,能力 mean_depth_per_effective_pulse 可用卡：['sic_4h_cface_1035nm_multishot'],
+SiC,sic_4h_cface_1035nm_multishot,True,blocked,平均率直接逐事件累加,tables.assert_no_local_depth_from_volume,CONFIG_INVALID,True,非 event_depth_increment 曲线不得生成局部深度；逐事件能力不开放。,非 event_depth_increment 曲线不得生成局部深度；逐事件能力不开放。
+SiC,sic_4h_cface_1035nm_multishot,True,blocked,改性量当去除量,thresholds.assert_not_removal,RESPONSE_SEMANTICS_INVALID,True,阈值协议 used_for_depth 恒为 False；篡改后被断言拦下。,阈值协议 used_for_depth 恒为 False；篡改后被断言拦下。
+金刚石,diamond_scd_cvd_1030nm_400fs;diamond_scd_cvd_1030nm_700fs;diamond_scd_cvd_1030nm_pulsewidth_unconfirmed,True,opened,条件对应阈值,capability:threshold_only,-,True,"能力 threshold_only 可用卡：['diamond_scd_cvd_1030nm_400fs', 'diamond_scd_cvd_1030nm_700fs', 'diamond_scd_cvd_1030nm_pulsewidth_unconfirmed']",400 fs 与 700 fs 分卡保存，各自的协议条件不同。
+金刚石,diamond_scd_cvd_1030nm_400fs;diamond_scd_cvd_1030nm_700fs;diamond_scd_cvd_1030nm_pulsewidth_unconfirmed,True,opened,导入入口,capability:table_import,-,True,"能力 table_import 可用卡：['diamond_scd_cvd_1030nm_400fs', 'diamond_scd_cvd_1030nm_700fs', 'diamond_scd_cvd_1030nm_pulsewidth_unconfirmed']",
+金刚石,diamond_scd_cvd_1030nm_400fs;diamond_scd_cvd_1030nm_700fs;diamond_scd_cvd_1030nm_pulsewidth_unconfirmed,True,deferred,合成形貌,缺口：卡内 structure_type = net_removal_with_optional_modification_mask 未被结构构建器（structure.STRUCTURE_TYPES）支持，且无逐事件去除核，故当前无法生成合成形貌。细则第 7 节要求开放；缺口需在 M2 放行前决策（扩展结构类型／改经共享无量纲卡 _synthetic_demo_isotropic.json／修订规格）。,缺口（规格要求开放、实现未支持）,True,三张金刚石卡均无 synthetic_structure 能力，且该结构类型被 load_structure 拒绝（CONFIG_INVALID）。,三张金刚石卡均无 synthetic_structure 能力，且该结构类型被 load_structure 拒绝（CONFIG_INVALID）。
+金刚石,diamond_scd_cvd_1030nm_400fs;diamond_scd_cvd_1030nm_700fs;diamond_scd_cvd_1030nm_pulsewidth_unconfirmed,True,blocked,混合 400/700 fs,config.check_reference_conditions,CONDITION_MISMATCH,True,脉宽不匹配时拒绝参考定量执行。,脉宽不匹配时拒绝参考定量执行。
+金刚石,diamond_scd_cvd_1030nm_400fs;diamond_scd_cvd_1030nm_700fs;diamond_scd_cvd_1030nm_pulsewidth_unconfirmed,True,blocked,未确认脉宽候选值默认启用,config.check_reference_conditions,CONDITION_MISMATCH,True,enabled_by_default=false 的候选值在参考模式被拒绝。,enabled_by_default=false 的候选值在参考模式被拒绝。

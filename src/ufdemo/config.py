@@ -858,6 +858,97 @@ class StructureConfig:
 
 
 # ---------------------------------------------------------------------------
+# 2d. ThresholdProtocolConfig（批次 H / T14）
+# ---------------------------------------------------------------------------
+
+# 受限阈值协议允许的能流基准（与 ``thresholds.THRESHOLD_FLUENCE_BASES`` 同值。
+# 此处复制常量是为了让配置层能独立拒绝，不必反向依赖 thresholds 模块。）
+THRESHOLD_FLUENCE_BASES: tuple[str, ...] = ("per_event_incident",)
+
+# 明确拒绝的基准名 -> 可读原因（累计量不得与单脉冲阈值比较）
+_REJECTED_THRESHOLD_BASES: dict[str, str] = {
+    "cumulative_fluence": "累计入射剂量≠单脉冲峰值能流；两者量纲相同但不可比较",
+    "cumulative_dose": "累计入射剂量≠单脉冲峰值能流；两者量纲相同但不可比较",
+    "mean_fluence": "平均值不能用于逐事件超阈判定",
+    "total_fluence": "累计量不能用于逐事件超阈判定",
+}
+
+
+@dataclass
+class ThresholdProtocolConfig:
+    """受限阈值协议的显式选择（批次 H / T14）。
+
+    默认 ``enabled=False``：不记录超阈标记，界面如实报不可用。开启后：
+
+    * ``fluence_basis`` 只能是 ``per_event_incident``——**在配置层**拒绝累计/平均基准，
+      不靠界面禁用；
+    * 卡内有多个条件对应阈值（如 SiC 的改性/去除两类阈值）时**必须**给出
+      ``candidate_index``，否则运行前报错，避免静默把改性阈值当去除阈值。
+    """
+
+    enabled: bool = False
+    observable_name: str = "fluence_above_threshold"
+    fluence_basis: str = "per_event_incident"
+    candidate_index: int | None = None
+    record_mask: bool = True
+
+    @staticmethod
+    def from_dict(raw: Mapping[str, Any] | None) -> "ThresholdProtocolConfig":
+        raw = raw or {}
+        if not isinstance(raw, Mapping):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "threshold_protocol 必须是 JSON 对象",
+                field_path="threshold_protocol",
+                actual=type(raw).__name__,
+            )
+        enabled = bool(raw.get("enabled", False))
+        basis = str(raw.get("fluence_basis", "per_event_incident"))
+        if basis in _REJECTED_THRESHOLD_BASES:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                f"threshold_protocol.fluence_basis={basis!r} 不可用",
+                field_path="threshold_protocol.fluence_basis",
+                actual=basis,
+                requirement=f"取值属于 {list(THRESHOLD_FLUENCE_BASES)}",
+                suggestion=_REJECTED_THRESHOLD_BASES[basis] + "。请改用 per_event_incident。",
+            )
+        if basis not in THRESHOLD_FLUENCE_BASES:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                f"threshold_protocol.fluence_basis={basis!r} 未登记",
+                field_path="threshold_protocol.fluence_basis",
+                actual=basis,
+                requirement=f"取值属于 {list(THRESHOLD_FLUENCE_BASES)}",
+            )
+        ci = raw.get("candidate_index")
+        if ci is not None and (not isinstance(ci, int) or isinstance(ci, bool) or ci < 0):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "threshold_protocol.candidate_index 必须是非负整数",
+                field_path="threshold_protocol.candidate_index",
+                actual=ci,
+                suggestion="多候选阈值需显式选择；不选则运行前报错而不是静默取默认。",
+            )
+        return ThresholdProtocolConfig(
+            enabled=enabled,
+            observable_name=str(raw.get("observable_name", "fluence_above_threshold")),
+            fluence_basis=basis,
+            candidate_index=ci,
+            record_mask=bool(raw.get("record_mask", True)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "observable_name": self.observable_name,
+            "fluence_basis": self.fluence_basis,
+            "candidate_index": self.candidate_index,
+            "record_mask": self.record_mask,
+        }
+
+
+# ---------------------------------------------------------------------------
 # 3. RunConfig
 # ---------------------------------------------------------------------------
 
@@ -874,6 +965,7 @@ class RunConfig:
     solver: SolverConfig
     output: OutputConfig
     structure: StructureConfig = field(default_factory=StructureConfig)
+    threshold: "ThresholdProtocolConfig" = field(default_factory=lambda: ThresholdProtocolConfig())
     seed: int = 0
     material_card_file: str | None = None
     label: str = ""
@@ -909,6 +1001,7 @@ class RunConfig:
         solver = SolverConfig.from_dict(raw.get("solver") or {})
         output = OutputConfig.from_dict(raw.get("output"))
         structure = StructureConfig.from_dict(raw.get("structure"))
+        threshold = ThresholdProtocolConfig.from_dict(raw.get("threshold_protocol"))
         seed = raw.get("seed", 0)
         if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
             raise UFDemoError(CONFIG_INVALID, "seed 必须是非负整数", field_path="seed", actual=seed)
@@ -923,6 +1016,7 @@ class RunConfig:
             solver=solver,
             output=output,
             structure=structure,
+            threshold=threshold,
             seed=seed,
             material_card_file=card_file,
             label=str(raw.get("label", "")),
@@ -948,6 +1042,7 @@ class RunConfig:
             "solver": self.solver.to_dict(),
             "output": self.output.to_dict(),
             "structure": self.structure.to_dict(),
+            "threshold_protocol": self.threshold.to_dict(),
         }
 
     @property
@@ -1041,6 +1136,9 @@ def estimate_memory_bytes(grid: GridConfig, n_events: int, solver: SolverConfig)
         "exposure_count": n * u32,
         "illumination_count": n * u32,
         "warning_mask": n * u8,
+        # 批次 H：受限阈值协议的两个观测量（开启时才分配，此处按最坏情况计入）
+        "threshold_exceedance_count": n * u32,
+        "threshold_exceeded_mask": n * u8,
     }
     # 临时 patch：按 tail_epsilon 的裁剪半径上界（3.035w）估计局部窗口
     # 这里用全网格上界的保守估计，实际由 beam_patch 决定

@@ -82,6 +82,8 @@ class SurfaceState:
     cumulative_fluence: Any
     illumination_count: Any
     warning_mask: Any
+    threshold_exceedance_count: Any = None
+    threshold_exceeded_mask: Any = None
     warnings: list[str] = field(default_factory=list)
     counters_max: int = 0
     history_enabled: bool = False
@@ -89,7 +91,13 @@ class SurfaceState:
 
     # -- 构造 ---------------------------------------------------------------
     @staticmethod
-    def initialize(grid: GridConfig, laser: LaserConfig, *, history_enabled: bool = False) -> "SurfaceState":
+    def initialize(
+        grid: GridConfig,
+        laser: LaserConfig,
+        *,
+        history_enabled: bool = False,
+        threshold_protocol: bool = False,
+    ) -> "SurfaceState":
         import numpy as np
 
         x = grid.axis("x")
@@ -107,6 +115,14 @@ class SurfaceState:
             cumulative_fluence=np.zeros((grid.ny, grid.nx), dtype=np.float64),
             illumination_count=np.zeros((grid.ny, grid.nx), dtype=np.uint32),
             warning_mask=np.zeros((grid.ny, grid.nx), dtype=bool),
+            # 批次 H：受限阈值协议的观测量。**只在协议开启时分配**——未开启时保持
+            # None，落盘与界面都如实报「不提供」，不返回全 0 假数组。
+            threshold_exceedance_count=(
+                np.zeros((grid.ny, grid.nx), dtype=np.uint32) if threshold_protocol else None
+            ),
+            threshold_exceeded_mask=(
+                np.zeros((grid.ny, grid.nx), dtype=bool) if threshold_protocol else None
+            ),
             history_enabled=history_enabled,
         )
 
@@ -276,6 +292,56 @@ class SurfaceState:
             illum[m] += 1
         return float(np.sum(f[m]) * self.grid.dx_m * self.grid.dy_m) if m.any() else 0.0
 
+    def accumulate_threshold(self, section: tuple[int, int, int, int], exceed: Any) -> int:
+        """累计受限阈值协议的观测量（批次 H / T14）。
+
+        ``exceed`` 必须是**本事件入射能流**的超阈布尔掩膜（由
+        ``thresholds.classify_exceedance`` 产生）。本方法只记录分类观测量：
+
+        * 不改高度场、不产生去除量——改性标记≠已去除体积；
+        * 协议未开启（数组为 None）时直接报错，避免"悄悄丢弃"。
+
+        返回本次新增的超阈单元数。
+        """
+        import numpy as np
+
+        if self.threshold_exceedance_count is None or self.threshold_exceeded_mask is None:
+            raise UFDemoError(
+                RESOURCE_BUDGET_EXCEEDED,
+                "受限阈值协议未开启，无法累计超阈观测量",
+                field_path="surface.threshold_exceedance_count",
+                actual=None,
+                requirement="solver 传入 threshold_protocol=true 时才会分配该观测量",
+                suggestion="在配置里开启 threshold_protocol.enabled；不开启时界面如实报不可用。",
+            )
+        if exceed is None:
+            return 0
+        iy0, iy1, ix0, ix1 = section
+        e = np.asarray(exceed, dtype=bool)
+        if e.shape != (iy1 - iy0, ix1 - ix0):
+            raise UFDemoError(
+                NUMERIC_NONFINITE,
+                "超阈掩膜形状与窗口不匹配",
+                field_path="surface.accumulate_threshold",
+                actual=list(e.shape),
+                requirement=f"[{iy1 - iy0}, {ix1 - ix0}]",
+            )
+        if not e.any():
+            return 0
+        win = self.threshold_exceedance_count[iy0:iy1, ix0:ix1]
+        if int(win[e].max()) >= UINT32_MAX:
+            raise UFDemoError(
+                RESOURCE_BUDGET_EXCEEDED,
+                "超阈计数溢出 uint32",
+                field_path="surface.threshold_exceedance_count",
+                actual=UINT32_MAX,
+                requirement="计数 < 2^32",
+                suggestion="改用 uint64 或分段统计。",
+            )
+        win[e] += 1
+        self.threshold_exceeded_mask[iy0:iy1, ix0:ix1] |= e
+        return int(np.count_nonzero(e))
+
     # -- 只读视图 -----------------------------------------------------------
     @property
     def depth(self):
@@ -290,7 +356,7 @@ class SurfaceState:
     def to_snapshot(self, *, event_index: int, time_s: float) -> dict[str, Any]:
         import numpy as np
 
-        return {
+        snap = {
             "event_index": event_index,
             "time_s": time_s,
             "height": self.height.astype(np.float64),
@@ -301,3 +367,9 @@ class SurfaceState:
             "exposure_count": self.exposure_count.astype(np.uint32),
             "warning_mask": self.warning_mask.astype(np.uint8),
         }
+        # 受限阈值观测量只在协议开启时存在；未开启不写入假数组
+        if self.threshold_exceedance_count is not None:
+            snap["threshold_exceedance_count"] = self.threshold_exceedance_count.astype(np.uint32)
+        if self.threshold_exceeded_mask is not None:
+            snap["threshold_exceeded_mask"] = self.threshold_exceeded_mask.astype(np.uint8)
+        return snap

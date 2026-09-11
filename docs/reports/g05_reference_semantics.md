@@ -1,7 +1,7 @@
 # G05：文献语义回归报告（批次 D / T07）
 
-- 生成时间（UTC）：2026-09-11T00:51:16.860614+00:00
-- 代码版本：commit=b1378d87fb51886a0929f6ceba87a17609958d96｜工作区有改动=False
+- 生成时间（UTC）：2026-09-11T01:49:48.697842+00:00
+- 代码版本：commit=cde51d84a1e83f853da79f0eeda4d94a2951c9a3｜工作区有改动=True
 - 汇总：通过 9｜失败 0
 
 源公式与实现的逐条对应见 `docs/reports/reference_equations.md`。
@@ -16,7 +16,7 @@
 | examples/sic_reference_case.json | SiC k (1/pulse) | 0.0199 | 0.0199 | 0.0 | == 0.0199（卡内值） | 通过 | 公式核查 | `C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\g05_sic_reference` |
 | examples/sic_reference_case.json | 平均率 / 协议累计深度 独立输出 | 两项分别给出，累计=平均×N_eff | 平均 59.5674 nm/有效脉冲；N=720 累计 42.8885 um |  | rel <= 1e-12 | 通过 | 数值实现验证 | `C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\g05_sic_reference` |
 | （语义闸门） | 平均率/累计量能否进入事件核 | 拒绝（RESPONSE_SEMANTICS_INVALID） | 已拒绝 |  |  | 通过 | 数值实现验证 | `C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\g05_sic_reference` |
-| （参考运行目录） | 是否写出形貌表面文件 | 不写（参考评估器不求解网格） | 文件：config.json, diagnostics.json, material_snapshot.json, metadata.json, profiles.csv, snapshots, statistics.csv |  |  | 通过 | 数值实现验证 | `C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\g05_ysz_reference` |
+| （参考运行目录） | 是否写出形貌表面文件 | 不写（参考评估器不求解网格） | 文件：config.json, diagnostics.json, material_snapshot.json, metadata.json, profiles.csv, snapshots, statistics.csv, watermark.json |  |  | 通过 | 数值实现验证 | `C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\g05_ysz_reference` |
 
 ## 边界声明
 

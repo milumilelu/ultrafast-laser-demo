@@ -19,11 +19,12 @@ from .beam import BeamOptions, beam_patch
 from .config import LaserConfig, PathConfig, RunConfig, SolverConfig, validate_run
 from .errors import NUMERIC_NONFINITE, RESPONSE_SEMANTICS_INVALID, RESOURCE_BUDGET_EXCEEDED, UFDemoError
 from .metrics import RoiSpec, cross_section, domain_statistics, removal_volume, roi_statistics
-from .materials import CAP_EVENT_INCREMENT, MaterialSpec, resolve_material
+from .materials import CAP_EVENT_INCREMENT, MaterialSpec, build_watermark, resolve_material
 from .paths import PulseEvent, iter_events
 from .response import FixedThresholdLogLaw, HistoryState, build_pulse_law
 from .structure import load_structure
 from .surface import SurfaceState
+from .thresholds import build_threshold_protocol, classify_exceedance
 
 
 @dataclass
@@ -150,6 +151,14 @@ class RunResult:
         }
 
 
+def _watermark(material: MaterialSpec, config: RunConfig) -> dict[str, Any]:
+    """完整水印（材料身份 + 模式 + 单位 + 实际求解器开关），导出与回放同源。"""
+    wm = build_watermark(material, config.unit, run_mode=config.run_mode)
+    wm["geometry_feedback"] = config.solver.geometry_feedback
+    wm["acceleration"] = config.solver.acceleration
+    return wm
+
+
 def solve(
     config: RunConfig,
     material: MaterialSpec | None = None,
@@ -194,6 +203,8 @@ def solve(
     metadata = {
         "schema_version": config.schema_version,
         "run_id": None,  # 由 io.new_run_dir 填
+        "run_mode": config.run_mode,
+        "unit_mode": config.unit.mode,
         "unit": config.unit.to_dict(),
         "axis_order": list(config.grid.AXIS_ORDER),
         "enabled_features": {
@@ -210,6 +221,7 @@ def solve(
         "source_type": material.source_type,
         "card_version": material.card_version,
         "card_sha256": material.card_sha256,
+        "watermark": _watermark(material, config),
         "seed": config.seed,
         "laser_metadata": {
             "direction_unit_input": list(config.laser.direction_unit_input) if config.laser.direction_unit_input else None,
@@ -228,7 +240,7 @@ def solve(
         "schema_version": material.schema_version,
         "card": material.to_dict(),
         "card_sha256": material.card_sha256,
-        "watermark": material.watermark(),
+        "watermark": _watermark(material, config),
         "capabilities": {k: v.to_dict() for k, v in material.capabilities.items()},
     }
 
@@ -254,6 +266,19 @@ def solve(
         result.elapsed_s = time.perf_counter() - t_start
         return result
 
+    # --- 受限阈值协议（批次 H / T14）--------------------------------------
+    # 无论开启与否都先做配置层校验；未开启时据实报不可用（不返回全 0 假数组）。
+    threshold_protocol = build_threshold_protocol(
+        material,
+        enabled=config.threshold.enabled,
+        candidate_index=config.threshold.candidate_index,
+        observable_name=config.threshold.observable_name,
+        fluence_basis=config.threshold.fluence_basis,
+    )
+    threshold_active = bool(threshold_protocol.available)
+    metadata["enabled_features"]["threshold_protocol"] = threshold_active
+    metadata["threshold_protocol"] = threshold_protocol.to_dict()
+
     # --- 初始化表面与相结构（批次 G）--------------------------------------
     structure = load_structure(config, material)
     structured = bool(structure is not None and not getattr(structure, "is_uniform", True))
@@ -267,7 +292,12 @@ def solve(
         structure_summary["volume_fraction"] = sample_volume_fraction(structure)
         result.metadata["structure"] = structure_summary
 
-    surface = SurfaceState.initialize(config.grid, config.laser, history_enabled=False)
+    surface = SurfaceState.initialize(
+        config.grid,
+        config.laser,
+        history_enabled=False,
+        threshold_protocol=threshold_active,
+    )
     if structured:
         surface.initialize_phases(structure)
     result.surface = surface
@@ -321,7 +351,30 @@ def solve(
             "不得解释为热损失或被吸收能量；这只检查光学输入账本。"
         ),
     }
-    result.diagnostics["threshold"] = {"n_above_threshold_cells": 0}
+    result.diagnostics["threshold"] = {
+        "n_above_threshold_cells": 0,
+        "n_exceeded_cell_events": 0,
+        "exceeded_cells_final": 0,
+        "exceeded_area_internal": 0.0,
+        "protocol_available": threshold_protocol.available,
+        "protocol_enabled": bool(config.threshold.enabled),
+        "protocol_reason": threshold_protocol.reason,
+        "observable": threshold_protocol.observable_name,
+        "fluence_basis": threshold_protocol.fluence_basis,
+        "threshold_internal": threshold_protocol.threshold_internal,
+        "threshold_label": threshold_protocol.threshold_label,
+        "threshold_kind": threshold_protocol.threshold_kind,
+        "source_kind": threshold_protocol.source_kind,
+        "source_index": threshold_protocol.source_index,
+        "n_candidates": threshold_protocol.n_candidates,
+        "evidence_status": threshold_protocol.evidence_status,
+        "used_for_depth": False,
+        "unit_note": "exceeded_area_internal 以内部长度单位平方计；换算见水印。",
+        "note": (
+            "受限协议：只对**本事件入射能流**判超阈，绝不使用累计剂量；"
+            "该观测为分类标记（超阈值/改性），不产生去除量，也不代表任何热学量。"
+        ),
+    }
 
     last_event: PulseEvent | None = None
     n_events = 0
@@ -360,15 +413,31 @@ def solve(
             # 第 4 步：累计入射剂量与照射诊断
             surface.accumulate_illumination(section, patch.fluence, patch.mask)
 
+        # 受限阈值协议：只喂**本事件入射能流**（patch.fluence），绝不喂累计剂量；
+        # 协议未开启时 threshold_active=False，本段整体不执行（不产生假数组）。
+        if threshold_active and not patch.empty:
+            exceed = classify_exceedance(threshold_protocol, patch.fluence, patch.mask)
+            if exceed is not None and exceed.size:
+                n_exceed = surface.accumulate_threshold(section, exceed)
+                thr_diag = result.diagnostics["threshold"]
+                thr_diag["n_above_threshold_cells"] += n_exceed
+                thr_diag["n_exceeded_cell_events"] += n_exceed
+
         if threshold_only:
-            # 阈值展示与逐事件去除分开分派，不通过伪造零 delta 共用深度核
+            # 阈值展示与逐事件去除分开分派，不通过伪造零 delta 共用深度核。
+            # 协议已开启时由上面的受限协议路径统一计数，避免同一掩膜被重复累计。
             from .response import ThresholdEvaluator
 
             thr = ThresholdEvaluator.evaluate(
                 patch.fluence if not patch.empty else np.zeros((0, 0)),
                 {"threshold_internal": material.response.get("threshold_internal"), "observable_name": "fluence_above_threshold"},
             )
-            if thr.available and thr.exceed_mask is not None and thr.exceed_mask.size:
+            if (
+                not threshold_active
+                and thr.available
+                and thr.exceed_mask is not None
+                and thr.exceed_mask.size
+            ):
                 result.diagnostics["threshold"]["n_above_threshold_cells"] += int(np.count_nonzero(thr.exceed_mask & patch.mask))
             result.events_processed = n_events
             continue
@@ -433,6 +502,14 @@ def solve(
     result.diagnostics["events"]["n_events"] = n_events
     result.events_total = n_events
 
+    # 受限阈值协议终态：累积超阈单元数与相应面积（未开启时保持 0，
+    # 并保留 protocol_reason 说明为何不可用，而不是让调用方误以为「预测无超阈」）。
+    if threshold_active and surface.threshold_exceeded_mask is not None:
+        n_final = int(np.count_nonzero(surface.threshold_exceeded_mask))
+        thr_diag = result.diagnostics["threshold"]
+        thr_diag["exceeded_cells_final"] = n_final
+        thr_diag["exceeded_area_internal"] = float(n_final * surface.grid.dx_m * surface.grid.dy_m)
+
     if result.status == "running":
         result.status = "completed"
 
@@ -479,7 +556,8 @@ def solve(
 
     if threshold_only:
         result.removal_available = False
-        result.diagnostics["threshold"]["note"] = (
+        thr_diag = result.diagnostics["threshold"]
+        thr_diag["mode_note"] = (
             "threshold_only：removal_available=false；体积与深度统计写 null，"
             "界面显示“不提供”，不以 0 暗示已预测无去除。"
         )
@@ -488,6 +566,10 @@ def solve(
     result.metadata["status"] = result.status
     result.metadata["events_processed"] = n_events
     result.metadata["warnings"] = warnings
+    # 水印里的 warnings 必须与最终结果一致（导出与界面逐字段同源）
+    for _wm in (result.metadata.get("watermark"), (result.material_snapshot or {}).get("watermark")):
+        if isinstance(_wm, dict):
+            _wm["warnings"] = list(warnings)
     result.elapsed_s = time.perf_counter() - t_start
     result.diagnostics["stage"] = "finished"
 
@@ -566,6 +648,13 @@ def _snapshot_payload(surface: SurfaceState, config: RunConfig, event: PulseEven
     }
     if config.run_mode != "threshold_only":
         payload["depth"] = surface.depth.astype(np.float64)
+    # 受限阈值协议量：仅在协议开启（数组已分配）时进入快照，否则不写假数组。
+    thr_count = getattr(surface, "threshold_exceedance_count", None)
+    if thr_count is not None:
+        payload["threshold_exceedance_count"] = thr_count.astype(np.uint32)
+    thr_mask = getattr(surface, "threshold_exceeded_mask", None)
+    if thr_mask is not None:
+        payload["threshold_exceeded_mask"] = thr_mask.astype(np.uint8)
     return payload
 
 

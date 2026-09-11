@@ -98,14 +98,24 @@
   "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
   "schema_version": "1.0",
   "watermark": {
+    "acceleration": "off",
     "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
     "card_version": "1.0.0",
+    "depth_label": "m",
     "evidence_status": "unverified",
     "family": "mathematical_fixture",
+    "fluence_label": "J/m^2",
+    "geometry_feedback": "fixed_geometry",
     "grade": null,
     "identity_confirmed_by_user": false,
+    "length_label": "m",
     "material_id": "analytic_fixture_not_a_material",
+    "physical_depth_export_allowed": true,
     "physical_prediction_allowed": false,
-    "source_type": "analytic_test_definition"
+    "run_mode": "reference_case",
+    "source_type": "analytic_test_definition",
+    "unit_mode": "SI",
+    "unit_system": "SI",
+    "warnings": []
   }
 }

@@ -317,6 +317,7 @@ def _result_panel(state: U.SessionState):
         st.success(f"结果状态：{state.result_label()}")
 
     _watermark_block(frozen.material_watermark, where="result_header")
+    _threshold_diagnostics_block(frozen)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("状态", U.STATUS_ZH.get(frozen.status, frozen.status))
@@ -482,6 +483,29 @@ def _structure_diagnostics_block(frozen: U.FrozenRun):
             st.caption(d["truncation_note"])
 
 
+def _threshold_diagnostics_block(frozen: U.FrozenRun):
+    """批次 H：受限阈值协议面板（协议未开启/不可用时本块不显示）。
+
+    只讲清楚「这张图是什么量」：对本事件入射能流的超阈分类，不是去除量，
+    也不参与任何深度更新。措辞避开被禁词（严格子串口径）。
+    """
+    d = frozen.threshold_diagnostics
+    if not d:
+        return
+    with st.expander(
+        f"受限阈值协议｜观测 {d.get('observable')}｜基准 {d.get('fluence_basis')}"
+        f"｜阈值 {d.get('threshold_internal')}（内部单位）",
+        expanded=False,
+    ):
+        st.caption(
+            "该面板记录的是**分类标记**：只按本事件入射能流判是否超阈，"
+            "绝不使用累计剂量；它不产生去除量，不参与深度更新，也不代表任何热学量。"
+        )
+        st.dataframe(frozen.threshold_rows(), hide_index=True, width="stretch")
+        if d.get("note"):
+            st.caption(d["note"])
+
+
 # ---------------------------------------------------------------------------
 # 参考评估器（批次 D）
 # ---------------------------------------------------------------------------
@@ -565,6 +589,52 @@ def _history_panel(state: U.SessionState):
 # ---------------------------------------------------------------------------
 # 查表（批次 F）：读取曲线卡，插值，不求解
 # ---------------------------------------------------------------------------
+
+
+def _material_entries_panel():
+    st.subheader("七材料能力入口（开放 / 红线 / 缺口，逐条实跑核验）")
+    st.caption(
+        "下表不是文档声明，而是**实跑**得到的结论：`已核验=否` 表示该条目的依据不成立。"
+        "「红线」必须让指定错误码真的抛出来；「缺口」表示规格要求开放、"
+        "但当前实现尚未支持，用探针证明它**现在确实打不开**（不得声称为已开放）。"
+    )
+    try:
+        rows = U.material_entry_rows(default_material_dir())
+    except UFDemoError as err:
+        st.error(err.format_human())
+        return
+
+    summary = U.material_entry_summary(rows)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("开放项", summary["n_opened"])
+    c2.metric("红线（必须拦截）", summary["n_blocked"])
+    c3.metric("缺口（待决策）", summary["n_deferred"])
+    c4.metric("未核验", summary["n_unverified"])
+
+    if summary["all_probes_hold"]:
+        st.success("全部条目的探针均已实跑通过。")
+    else:
+        st.error("存在未通过或未核验的条目，见下表。")
+
+    if summary["deferred_items"]:
+        n_deferred = len(summary["deferred_items"])
+        with st.expander(f"缺口清单（{n_deferred}）——需在 M2 放行前决策", expanded=True):
+            for d in summary["deferred_items"]:
+                st.markdown(f"- **{d['family']}／{d['item']}**：{d['reason']}")
+
+    display = [
+        {
+            "材料族": r["family"],
+            "类别": {"opened": "开放", "blocked": "红线", "deferred": "缺口"}.get(r["kind"], r["kind"]),
+            "条目": r["item"],
+            "依据 / 生效位置": r["binding"],
+            "错误码 / 缺口": r["code"],
+            "已核验": "是" if r["verified"] is True else ("否" if r["verified"] is False else "未核验"),
+            "核验结论": r["detail"],
+        }
+        for r in rows
+    ]
+    st.dataframe(display, hide_index=True, width="stretch")
 
 
 def _table_panel(state: U.SessionState):
@@ -716,11 +786,13 @@ def main() -> None:
 
     st.title("七种材料超快激光加工 Demo")
     st.caption("M0 最小闭环 + 批次 D 参考评估器 + 批次 E 界面 + 批次 F 查表 "
-               "+ 批次 G 分相结构（颗粒/铺层与跨相界面截断）。"
+               "+ 批次 G 分相结构（颗粒/铺层与跨相界面截断）"
+               "+ 批次 H 受限阈值协议（只按本事件入射能流判超阈的分类标记）"
+               "与七材料能力入口表。"
                "合成结构不含实验复现结论；旧资料与 `微观仿真/` 未被修改。")
 
-    t1, t2, t3, t4, t5 = st.tabs(
-        ["参数与运行", "结果（形貌/截面/时间轴）", "参考评估器", "查表", "历史运行"]
+    t1, t2, t3, t4, t5, t6 = st.tabs(
+        ["参数与运行", "结果（形貌/截面/时间轴）", "参考评估器", "查表", "七材料能力入口", "历史运行"]
     )
     with t1:
         _param_panel(state, material, run_mode)
@@ -731,6 +803,8 @@ def main() -> None:
     with t4:
         _table_panel(state)
     with t5:
+        _material_entries_panel()
+    with t6:
         _history_panel(state)
 
 

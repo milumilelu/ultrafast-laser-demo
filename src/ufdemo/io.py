@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .errors import CONFIG_INVALID, UFDemoError
+from .materials import watermark_rows
 from .solver import RunResult
 
 RUN_STATUSES = ("running", "completed", "cancelled", "failed")
@@ -46,6 +47,7 @@ REQUIRED_FILES = (
     "config.json",
     "material_snapshot.json",
     "metadata.json",
+    "watermark.json",
     "statistics.csv",
     "diagnostics.json",
 )
@@ -237,8 +239,18 @@ def save_run(result: RunResult, output_dir: str | Path, *, project_root: str | P
     _write_atomic(out / "material_snapshot.json", stable_json(result.material_snapshot))
     written.append("material_snapshot.json")
 
+    # watermark.json（细则 11.3：标签贯穿导出，单文件即可读出身份与模式）
+    watermark = dict((result.metadata or {}).get("watermark") or {})
+    if not watermark:
+        watermark = dict(
+            ((result.material_snapshot or {}).get("watermark") or {})
+        )
+    _write_atomic(out / "watermark.json", stable_json(watermark))
+    written.append("watermark.json")
+
     # statistics.csv（长表：metric,value,unit）
     stats_rows: list[dict[str, Any]] = []
+    stats_rows.extend(watermark_rows(watermark) if watermark else [])
     for k, v in (result.statistics or {}).items():
         stats_rows.append({"metric": k, "value": "null" if v is None else v, "unit": _metric_unit(k, result)})
     for r in result.rois or []:
@@ -311,6 +323,13 @@ def save_run(result: RunResult, output_dir: str | Path, *, project_root: str | P
             "x": surface.x,
             "y": surface.y,
         }
+        # 受限阈值协议量：仅在协议开启时落盘（未开启不写全 0 假数组）
+        thr_count = getattr(surface, "threshold_exceedance_count", None)
+        if thr_count is not None:
+            payload["threshold_exceedance_count"] = thr_count.astype(np.uint32)
+        thr_mask = getattr(surface, "threshold_exceeded_mask", None)
+        if thr_mask is not None:
+            payload["threshold_exceeded_mask"] = thr_mask.astype(np.uint8)
         fname = "final_surface.npz" if result.status == "completed" else "partial_surface.npz"
         tmp = out / (fname + ".tmp.npz")
         np.savez_compressed(tmp, **payload)
@@ -378,6 +397,7 @@ class LoadedRun:
     profiles: list[dict[str, Any]]
     events: list[dict[str, Any]]
     warnings: list[str] = field(default_factory=list)
+    watermark: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -403,6 +423,16 @@ def load_run(output_dir: str | Path) -> LoadedRun:
     config = json.loads((d / "config.json").read_text(encoding="utf-8"))
     mat = json.loads((d / "material_snapshot.json").read_text(encoding="utf-8"))
     diagnostics = json.loads((d / "diagnostics.json").read_text(encoding="utf-8"))
+
+    # 水印：优先 watermark.json（导出时的唯一权威来源），再退回 metadata / 卡快照
+    watermark: dict[str, Any] = {}
+    wp = d / "watermark.json"
+    if wp.exists():
+        watermark = json.loads(wp.read_text(encoding="utf-8"))
+    if not watermark:
+        watermark = dict(metadata.get("watermark") or {})
+    if not watermark:
+        watermark = dict((mat or {}).get("watermark") or {})
 
     stats: dict[str, Any] = {}
     sp = d / "statistics.csv"
@@ -474,6 +504,7 @@ def load_run(output_dir: str | Path) -> LoadedRun:
         profiles=profiles,
         events=events,
         warnings=warnings,
+        watermark=watermark,
     )
 
 

@@ -1,4 +1,16 @@
 metric,value,unit
+watermark.material_id,analytic_fixture_not_a_material,
+watermark.family,mathematical_fixture,
+watermark.grade,null,
+watermark.evidence_status,unverified,
+watermark.source_type,analytic_test_definition,
+watermark.card_version,1.0.0,
+watermark.card_sha256,0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd,
+watermark.physical_prediction_allowed,False,
+watermark.identity_confirmed_by_user,False,
+watermark.run_mode,reference_case,
+watermark.unit_mode,SI,
+watermark.physical_depth_export_allowed,True,
 cell_count,25921,
 domain_area_internal,6.480250000000003e-09,m^2
 removal_volume_internal,3.1411e-17,m^3

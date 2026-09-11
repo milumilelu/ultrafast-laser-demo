@@ -1,0 +1,21 @@
+{
+  "acceleration": "off",
+  "card_sha256": "6438fa658ab8a35ae554a3ee48085db4bf8b49c874e17c629d94a029b6e4d5ea",
+  "card_version": "1.0.0",
+  "depth_label": "L_ref",
+  "evidence_status": "unverified",
+  "family": "synthetic_demo",
+  "fluence_label": "F_ref",
+  "geometry_feedback": "fixed_geometry",
+  "grade": "isotropic_normalized_surface",
+  "identity_confirmed_by_user": false,
+  "length_label": "L_ref",
+  "material_id": "synthetic_demo_isotropic",
+  "physical_depth_export_allowed": false,
+  "physical_prediction_allowed": false,
+  "run_mode": "synthetic_demo",
+  "source_type": "synthetic_definition",
+  "unit_mode": "dimensionless",
+  "unit_system": "dimensionless",
+  "warnings": []
+}

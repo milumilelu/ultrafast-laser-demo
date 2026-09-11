@@ -214,6 +214,7 @@ def write_figure() -> Path:
         rows=len(cards), cols=1,
         subplot_titles=[
             f"{T.load_curve(p).curve_id}｜{T.load_curve(p).output_semantics}"
+            f"<br><sup>{T.curve_watermark(T.load_curve(p))}</sup>"
             for p in cards
         ],
     )

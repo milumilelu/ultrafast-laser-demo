@@ -512,16 +512,77 @@ def main() -> int:
     # 查表不产生形貌
     add("G09-table", "curves/*", "", "查表是否产生形貌表面文件", "不产生（查表不是求解）",
         "无 final_surface.npz（查表只读曲线）", "", "", True, str(table_md_path), "数值实现验证",
-        "逐事件核接入属批次 H（T14）")
+        "批次 H（T14）：查表不接逐事件主循环；本批只开放 event_depth_increment 之外的语义路由")
+
+    # ---------------- H（批次 H：T14 受限阈值协议 + 七材料能力入口 + 标签）----------------
+    # G09 受限阈值协议（独立于 pytest，实跑硬约束）
+    import importlib.util as _ilu
+
+    _spec = _ilu.spec_from_file_location("_material_report", ROOT / "tools" / "material_report.py")
+    _mr = _ilu.module_from_spec(_spec)
+    assert _spec.loader is not None
+    _spec.loader.exec_module(_mr)
+    for r in _mr.collect_g09_checks():
+        add("G09-threshold", "tools/material_report.py", "", r["check"], r["expected"],
+            r["measured"], "", "", r["status"] == "通过",
+            str(D / "g09_threshold_protocol.csv"), "数值实现验证", r["detail"])
+
+    # G09 七材料能力入口（逐条实跑探针；缺口必须如实标出）
+    from ufdemo.materials import material_entry_rows, verify_entry_enforcements
+
+    _catalog = load_material_catalog(material_dir)
+    _verdicts = verify_entry_enforcements(_catalog, material_dir)
+    _kinds: dict[str, int] = {}
+    for _v in _verdicts:
+        _kinds[_v["kind"]] = _kinds.get(_v["kind"], 0) + 1
+    add("G09-entries", "data/materials/*.json", "", "七材料入口探针全部成立",
+        "全部 ok=True", f"探针 {sum(1 for v in _verdicts if v['ok'])}/{len(_verdicts)}"
+        f"｜开放 {_kinds.get('opened', 0)}｜红线 {_kinds.get('blocked', 0)}｜缺口 {_kinds.get('deferred', 0)}",
+        "", "全部 ok=True", all(v["ok"] for v in _verdicts),
+        str(D / "material_capability_table.csv"), "数值实现验证",
+        "拦截不是文档声明：每条红线都跑出指定错误码")
+    _deferred = [v for v in _verdicts if v["kind"] == "deferred"]
+    add("G09-entries", "data/materials/diamond_*.json", "", "金刚石「合成形貌」记为缺口（非开放）",
+        "opened 中不含该项｜缺口探针证明当前打不开",
+        f"缺口 {len(_deferred)} 项｜{[ (v['family'], v['item']) for v in _deferred ]}",
+        "", "缺口探针 ok=True",
+        bool(_deferred) and all(v["ok"] for v in _deferred),
+        str(D / "material_capability_table.csv"), "数值实现验证",
+        "规格要求开放但实现未支持，不得声称为已开放；留待 M2 放行前决策")
+
+    # G09 标签贯穿（细则 11.3 / 任务书 15.2）
+    _wm_dir = out_root / "g01_single_pulse"
+    _wm_json = _wm_dir / "watermark.json"
+    _wm_meta = json.loads((_wm_dir / "metadata.json").read_text(encoding="utf-8"))
+    _stats_rows = {}
+    with open(_wm_dir / "statistics.csv", newline="", encoding="utf-8") as _fh:
+        for _r in csv.DictReader(_fh):
+            _stats_rows[_r["metric"]] = _r["value"]
+    add("G09-watermark", "runs/g01_single_pulse", h1, "watermark.json 存在且非空",
+        "存在且含 material_id/run_mode/unit_mode",
+        f"存在={_wm_json.exists()}｜keys={len(json.loads(_wm_json.read_text(encoding='utf-8'))) if _wm_json.exists() else 0}",
+        "", "", _wm_json.exists(), str(_wm_dir), "数值实现验证",
+        "标签贯穿导出：单文件即可读出身份与模式")
+    add("G09-watermark", "runs/g01_single_pulse", h1, "metadata 含 run_mode/unit_mode/watermark",
+        "三者齐备", f"run_mode={_wm_meta.get('run_mode')}｜unit_mode={_wm_meta.get('unit_mode')}｜"
+        f"watermark_keys={len(_wm_meta.get('watermark') or {})}", "", "",
+        bool(_wm_meta.get("run_mode")) and bool(_wm_meta.get("unit_mode")) and bool(_wm_meta.get("watermark")),
+        str(_wm_dir), "数值实现验证", "模式与单位随结果落盘，回放同源")
+    add("G09-watermark", "runs/g01_single_pulse", h1, "statistics.csv 含 watermark.* 自描述行",
+        "watermark.material_id/run_mode/unit_mode 均存在",
+        f"watermark.* 行数={sum(1 for k in _stats_rows if k.startswith('watermark.'))}",
+        "", "", all(f"watermark.{k}" in _stats_rows for k in ("material_id", "run_mode", "unit_mode")),
+        str(_wm_dir), "数值实现验证", "单独拿走 statistics.csv 仍能读出材料身份")
 
     # ---------------- 未运行项 ----------------
     not_run("G07", "（斜入射基准）", "0° 退化；60° 足迹比 2、中心能流减半；可见性", "见执行细则 10 节",
             "批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）", "数值实现验证")
     not_run("G08", "（分组求解）", "分组与逐脉冲偏差 <= 1%；回退正确", "见执行细则 10 节",
             "批次 I（T17）未实施：accelerators.py 仍为占位", "数值实现验证")
-    not_run("G09", "（逐事件核查表接入）", "越界拒绝；标签；重读一致；逐事件核接入", "见执行细则 10 节",
-            "查表（T10，批次 F）已交付：曲线卡/越界/路由检查见上方 G09-table 行；"
-            "但**逐事件主循环接入**属批次 H（T14）未实施；界面（T09）操作检查见上方 G09-UI 行",
+    not_run("G09", "（查表接入逐事件核）", "查表值进入逐事件主循环并保持语义一致", "见执行细则 10 节",
+            "批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / "
+            "G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 "
+            "event_depth_increment 且协议适用时才可进入，本批不启用该通道）",
             "数值实现验证")
     not_run("B01-B04", "（性能基准）", "CPU/内存/事件数/耗时", "见任务书 12 节",
             "批次 I（T16）未实施：本批只记录单次运行的 elapsed_s", "不适用")
@@ -547,7 +608,7 @@ def main() -> int:
     n_nr = sum(1 for r in ROWS if r["status"] == "未运行")
 
     md = [
-        "# 验收报告（批次 A–G：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构）",
+        "# 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）",
         "",
         f"- 生成时间（UTC）：{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}",
         f"- 代码版本：commit={code.get('commit')}｜工作区有改动={code.get('working_tree_dirty')}｜源码清单哈希={code['source_manifest_sha256'][:16]}…",
@@ -562,6 +623,9 @@ def main() -> int:
         "> **不构成对原文曲线的复现**。原图/原表数字化与工况对应完成前不建立实验回归用例。",
         "> G 的分相结构为「数值实现验证」（同相合并/界面不跳过/种子复现/截断命名），",
         "> 相响应为内联合成定义、跨相截断为有损近似，**不含任何实验复现结论**。",
+        "> H 的受限阈值协议为「数值实现验证」（只按本事件能流判超阈/多脉冲口径拦截/不产生深度），",
+        "> 七材料能力入口为「数值实现验证」（红线与缺口均逐条实跑探针），标签贯穿导出与回放，",
+        "> **软件跑通不等于材料验证**。",
         "",
         "## 逐项结果",
         "",
@@ -593,6 +657,7 @@ def main() -> int:
         "python tools/make_curves.py",
         "python tools/table_report.py",
         "python tools/structure_report.py",
+        "python tools/material_report.py",
         "python tools/migrate_materials.py",
         "python tools/ui_probe.py",
         "python tools/ui_demo_probe.py",
