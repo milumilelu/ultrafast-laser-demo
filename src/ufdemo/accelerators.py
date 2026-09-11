@@ -525,8 +525,15 @@ def check_fallback_conditions(
     history_enabled: bool,
     geometry_feedback: str,
     dynamic_angle: bool = False,
+    oblique_incidence: bool = False,
 ) -> FallbackDecision:
-    """判定当前工况是否**禁止**使用批量模式；触发即回退参考实现并保存原因。"""
+    """判定当前工况是否**禁止**使用批量模式；触发即回退参考实现并保存原因。
+
+    第一版批量的边界（细则 9.1「只允许固定阈值、同相、无历史及受支持路径」）：
+    分相结构、历史耦合、动态角度、斜入射都不在批量路径内。斜入射之所以回退，
+    是因为窗口内**可见性**会随烧蚀形貌变化，而块内几何是冻结的——这会引入
+    块级近似，超出第一版允许的误差控制范围（斜入射本身仍可在参考模式下使用）。
+    """
     if structured:
         return FallbackDecision(
             False,
@@ -544,6 +551,13 @@ def check_fallback_conditions(
             False,
             "「批量 + 动态角度」组合在第一版明确不开放（细则 9.1 末）。已回退逐脉冲参考实现。",
         )
+    if oblique_incidence:
+        return FallbackDecision(
+            False,
+            "「批量 + 斜入射」不在第一版支持范围内：窗口内的可见性会随烧蚀形貌变化，"
+            "而块内几何被冻结，无法在块级保持遮挡判定一致。已回退逐脉冲参考实现"
+            "（斜入射本身仍可在 mode=reference 下使用）。",
+        )
     if geometry_feedback not in ("fixed_geometry", "axial_defocus"):
         return FallbackDecision(
             False,
@@ -559,6 +573,7 @@ def grouped_solve(**kwargs: Any) -> FallbackDecision:
         history_enabled=bool(kwargs.get("history_enabled", False)),
         geometry_feedback=str(kwargs.get("geometry_feedback", "fixed_geometry")),
         dynamic_angle=bool(kwargs.get("dynamic_angle", False)),
+        oblique_incidence=bool(kwargs.get("oblique_incidence", False)),
     )
 
 

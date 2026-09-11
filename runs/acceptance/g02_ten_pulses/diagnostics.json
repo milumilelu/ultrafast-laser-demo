@@ -10,6 +10,34 @@
       "max_domain_truncated_fraction": 1.0187324539501219e-08,
       "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
     },
+    "geometry": {
+      "backfacing_cells_total": 0,
+      "direction_unit": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "dynamic_angle": false,
+      "enabled": false,
+      "incidence_deg_axial": 0.0,
+      "initial_slope": [
+        0.0,
+        0.0
+      ],
+      "initial_surface": "flat",
+      "max_incidence_deg": null,
+      "min_mu": null,
+      "n_events_with_shadowing": 0,
+      "normal_thickness_conversions": 0,
+      "note": "几何修正只做投影（F_s=μ·F_⊥）与首次交点可见性；未提供材料偏振吸收依据时**不预测吸收差异**。",
+      "oblique_incidence": false,
+      "shadowed_cells_total": 0,
+      "supported_range": {
+        "max_incidence_deg": 60.0,
+        "min_nz": 0.5,
+        "note": "软件数值/展示范围，不是七类材料的物理边界。"
+      }
+    },
     "phase": {
       "final_phase_cell_counts": {},
       "initial_phase_cell_counts": {},
@@ -48,7 +76,7 @@
       "used_for_depth": false
     }
   },
-  "elapsed_s": 0.005911699990974739,
+  "elapsed_s": 0.0048420999955851585,
   "errors": [],
   "events_processed": 10,
   "events_total": 10,

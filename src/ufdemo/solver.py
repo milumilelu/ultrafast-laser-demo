@@ -16,7 +16,15 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from .beam import BeamOptions, beam_patch
-from .config import LaserConfig, PathConfig, RunConfig, SolverConfig, validate_run
+from .config import (
+    MAX_SUPPORTED_INCIDENCE_DEG,
+    MIN_SUPPORTED_NZ,
+    LaserConfig,
+    PathConfig,
+    RunConfig,
+    SolverConfig,
+    validate_run,
+)
 from .errors import NUMERIC_NONFINITE, RESPONSE_SEMANTICS_INVALID, RESOURCE_BUDGET_EXCEEDED, UFDemoError
 from .metrics import RoiSpec, cross_section, domain_statistics, removal_volume, roi_statistics
 from .materials import CAP_EVENT_INCREMENT, MaterialSpec, build_watermark, resolve_material
@@ -351,8 +359,7 @@ def solve(
             "不得解释为热损失或被吸收能量；这只检查光学输入账本。"
         ),
     }
-    result.diagnostics["threshold"] = {
-        "n_above_threshold_cells": 0,
+    result.diagnostics["threshold"] = {        "n_above_threshold_cells": 0,
         "n_exceeded_cell_events": 0,
         "exceeded_cells_final": 0,
         "exceeded_area_internal": 0.0,
@@ -380,6 +387,41 @@ def solve(
     n_events = 0
     events_limit = int(config.output.events_csv_max_rows or 0)
 
+    # 批次 J（T18）：几何修正诊断（正入射时各项保持 0/None，不制造假数据）
+    _axial_dir = (
+        abs(config.laser.direction_unit[0]) < 1e-15
+        and abs(config.laser.direction_unit[1]) < 1e-15
+        and abs(config.laser.direction_unit[2] - 1.0) < 1e-15
+    )
+    geom_diag: dict[str, Any] = {
+        "enabled": (not _axial_dir) or bool(config.solver.dynamic_angle),
+        "oblique_incidence": not _axial_dir,
+        "dynamic_angle": bool(config.solver.dynamic_angle),
+        "direction_unit": list(config.laser.direction_unit),
+        "incidence_deg_axial": (
+            math.degrees(math.acos(min(1.0, max(-1.0, float(config.laser.direction_unit[2])))))
+            if not _axial_dir else 0.0
+        ),
+        "initial_surface": getattr(config.grid, "initial_surface", "flat"),
+        "initial_slope": list(getattr(config.grid, "initial_slope", (0.0, 0.0))),
+        "normal_thickness_conversions": 0,
+        "n_events_with_shadowing": 0,
+        "shadowed_cells_total": 0,
+        "backfacing_cells_total": 0,
+        "min_mu": None,
+        "max_incidence_deg": None,
+        "supported_range": {
+            "min_nz": MIN_SUPPORTED_NZ,
+            "max_incidence_deg": MAX_SUPPORTED_INCIDENCE_DEG,
+            "note": "软件数值/展示范围，不是七类材料的物理边界。",
+        },
+        "note": (
+            "几何修正只做投影（F_s=μ·F_⊥）与首次交点可见性；"
+            "未提供材料偏振吸收依据时**不预测吸收差异**。"
+        ),
+    }
+    result.diagnostics["geometry"] = geom_diag
+
     # --- 批次 I（T15/T16/T17）：冻结几何分组 vs 逐脉冲参考 -------------------
     # 分组只在工况允许时启用；否则**回退**到逐脉冲参考实现并保存原因（不静默降级）。
     grouped_stats: dict[str, Any] | None = None
@@ -397,6 +439,7 @@ def solve(
             history_enabled=bool(config.solver.history_enabled),
             geometry_feedback=config.solver.geometry_feedback,
             dynamic_angle=bool(config.solver.dynamic_angle),
+            oblique_incidence=not _axial_dir,
         )
         accel_requested = config.solver.acceleration
         numba_ok = False
@@ -522,6 +565,7 @@ def solve(
         opt = BeamOptions(
             geometry_feedback=config.solver.geometry_feedback,
             tail_epsilon=config.solver.tail_epsilon,
+            dynamic_angle=bool(config.solver.dynamic_angle),
         )
         patch = beam_patch(event, surface, opt)
 
@@ -529,7 +573,22 @@ def solve(
         ledger["emitted_energy_internal"] += patch.emitted_energy_J
         ledger["estimated_intercepted_energy_internal"] += patch.estimated_intercepted_energy_J
         ledger["max_domain_truncated_fraction"] = max(ledger["max_domain_truncated_fraction"], patch.domain_truncated_fraction)
-        if patch.empty:
+
+        # 批次 J：几何修正统计（正入射时 patch.visibility/mu 为 None，本段不执行）
+        if patch.visibility is not None:
+            _n_sh = int(patch.visibility.get("n_shadowed", 0))
+            geom_diag["n_events_with_shadowing"] += int(_n_sh > 0)
+            geom_diag["shadowed_cells_total"] += _n_sh
+        if patch.mu is not None and getattr(patch.mu, "size", 0):
+            _lit = np.asarray(patch.mu) > 0.0
+            if np.any(_lit):
+                _mu_min = float(np.min(np.asarray(patch.mu)[_lit]))
+                geom_diag["min_mu"] = (
+                    _mu_min if geom_diag["min_mu"] is None else min(float(geom_diag["min_mu"]), _mu_min)
+                )
+            geom_diag["backfacing_cells_total"] += int(np.count_nonzero(~_lit))
+        # 正入射非空窗口：与原行为一致（不登记 notes）；空窗口或启用几何修正时登记。
+        if patch.empty or geom_diag["enabled"]:
             for note in patch.notes:
                 if note not in warnings:
                     warnings.append(note)
@@ -580,10 +639,28 @@ def solve(
         if phase_laws:
             # 只调用**当前暴露相**的响应；一个物理脉冲绝不拆给两个相各算一次
             cand_arr = _per_phase_candidate(surface, patch, section, phase_laws, history, material)
+            incr_direction = "vertical_height"
         else:
             assert law is not None
             incr = law.increment(patch.fluence, history, material)
             cand_arr = np.where(patch.mask, incr.values, 0.0)
+            incr_direction = incr.depth_direction
+
+        # 批次 J（T18）：法向厚度 → 高度（细则 6.6 / 9.2）
+        # 只在核**明确声明** depth_direction=surface_normal 且表面法向确实倾斜时转换；
+        # 正入射水平面 n_z≡1，该转换是恒等操作（因此批次 A–I 结果逐位不变）。
+        # 源文深度方向不明时**不自动转换**（任务书 6.6）。
+        normal_converted = False
+        if incr_direction == "surface_normal" and patch.nz is not None:
+            nz_win = np.asarray(patch.nz, dtype=np.float64)
+            if float(np.max(np.abs(nz_win - 1.0))) > 0.0:
+                from .geometry import normal_thickness_to_vertical_depth
+
+                # cand_arr 是**去除量**（正值），故用法向厚度→垂直深度的正关系 d=a_n/n_z；
+                # 对应的 Δh=-a_n/n_z（负高度变化）见 geometry.normal_thickness_to_height_drop。
+                cand_arr = normal_thickness_to_vertical_depth(cand_arr, nz_win)
+                normal_converted = True
+                geom_diag["normal_thickness_conversions"] += 1
 
         # 第 6 步：语义/方向/非负/有限校验已在 IncrementResult.validate() 内完成
         cand_vol = float(np.sum(cand_arr) * surface.grid.dx_m * surface.grid.dy_m)
@@ -714,6 +791,24 @@ def solve(
                 "这些块按更小的 batch_size 或参考更新处理，未提交被拒绝的状态。"
             )
         result.metadata["acceleration"]["n_rejected_blocks"] = int(grouped_stats["n_rejected"])
+
+    # --- 批次 J：几何修正收尾统计 ------------------------------------------
+    geom_diag["max_incidence_deg"] = (
+        None if geom_diag["min_mu"] is None
+        else float(math.degrees(math.acos(min(1.0, max(0.0, float(geom_diag["min_mu"]))))))
+    )
+    if geom_diag["enabled"]:
+        if geom_diag["normal_thickness_conversions"]:
+            result.metadata["approximations"].append(
+                "几何修正：核输出为**法向**厚度时按一阶关系 Δh=-a_n/n_z 换算为高度变化"
+                "（细则 6.6；不是 -a_n·n_z）。该换算是几何近似，不改变材料响应本身。"
+            )
+        if geom_diag["n_events_with_shadowing"]:
+            result.metadata["approximations"].append(
+                f"几何修正：共有 {geom_diag['n_events_with_shadowing']} 个事件的照射窗口内存在"
+                f"遮挡/背光单元（累计 {geom_diag['shadowed_cells_total']} 个单元次），"
+                "这些单元的直接照射记为 0；可见性按首次交点射线检查，不做域外假设。"
+            )
 
     # 最后一个事件后始终生成最终状态
     _finalize_statistics(result, surface, config, rois, cs_cfg, threshold_only)

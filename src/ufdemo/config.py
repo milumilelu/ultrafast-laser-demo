@@ -84,6 +84,17 @@ INCREMENT_SEMANTICS: tuple[str, ...] = (SEMANTIC_EVENT_INCREMENT,)
 # 几何反馈开关（细则 2.3）：前者用于 G01/G02，后者单独验证
 GEOMETRY_FEEDBACK_MODES: tuple[str, ...] = ("fixed_geometry", "axial_defocus")
 
+# 批次 J（T18）：斜入射/动态角度的软件支持范围。**单一权威来源**在 geometry.py，
+# 这里只做转出，避免两处各写一份而漂移（细则 9.2：「是软件数值/展示范围，
+# 不是七类材料的物理边界」）。
+def _supported_geometry_range() -> tuple[float, float]:
+    from .geometry import MAX_INCIDENCE_DEG, MIN_NZ
+
+    return float(MIN_NZ), float(MAX_INCIDENCE_DEG)
+
+
+MIN_SUPPORTED_NZ, MAX_SUPPORTED_INCIDENCE_DEG = _supported_geometry_range()
+
 # 单位系统内部尺度名
 DIMENSIONLESS_SCALES = ("L_ref_m", "F_ref_J_m2", "delta_ref_m")
 
@@ -296,11 +307,21 @@ class GridConfig:
     center_y_m: float
     initial_height_m: float = 0.0
     initial_surface: str = "flat"
+    # 批次 J（T18）：倾斜初始平面。斜率是**无量纲**的 (h_x, h_y)，
+    # 用于构造解析斜平面并验证 Δh=-a_n/n_z 与法向解析值。
+    initial_slope_x: float = 0.0
+    initial_slope_y: float = 0.0
     dtype_field: str = "float64"
     dtype_phase: str = "uint16"
     dtype_count: str = "uint32"
 
     AXIS_ORDER = ("y", "x")  # 细则 4.1
+
+    INITIAL_SURFACES: tuple[str, ...] = ("flat", "tilted_plane")
+
+    @property
+    def initial_slope(self) -> tuple[float, float]:
+        return (float(self.initial_slope_x), float(self.initial_slope_y))
 
     @staticmethod
     def from_dict(raw: Mapping[str, Any], unit: UnitContext) -> "GridConfig":
@@ -330,6 +351,41 @@ class GridConfig:
         cx = _require_finite(raw.get("center_x_m", 0.0), "grid.center_x_m")
         cy = _require_finite(raw.get("center_y_m", 0.0), "grid.center_y_m")
         h0 = _require_finite(raw.get("initial_height_m", 0.0), "grid.initial_height_m")
+        surf = _require_str(
+            raw.get("initial_surface", "flat"), "grid.initial_surface", GridConfig.INITIAL_SURFACES
+        )
+        sx = _require_finite(raw.get("initial_slope_x", 0.0), "grid.initial_slope_x")
+        sy = _require_finite(raw.get("initial_slope_y", 0.0), "grid.initial_slope_y")
+        if surf == "flat" and (sx != 0.0 or sy != 0.0):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "grid.initial_surface=flat 时不得给非零斜率",
+                field_path="grid.initial_slope_x",
+                actual={"slope_x": sx, "slope_y": sy},
+                requirement="flat ⇒ slope=(0,0)",
+                suggestion="改用 initial_surface=tilted_plane，或把斜率置零。",
+            )
+        if surf == "tilted_plane":
+            if sx == 0.0 and sy == 0.0:
+                raise UFDemoError(
+                    CONFIG_INVALID,
+                    "grid.initial_surface=tilted_plane 需要非零斜率",
+                    field_path="grid.initial_slope_x",
+                    actual={"slope_x": sx, "slope_y": sy},
+                    requirement="tilted_plane ⇒ slope≠(0,0)",
+                    suggestion="给出 initial_slope_x / initial_slope_y（无量纲 h_x、h_y）。",
+                )
+            # 与本工程支持范围一致：n_z = 1/sqrt(1+sx²+sy²) >= 0.5（约 60° 倾角）
+            nz = 1.0 / math.sqrt(1.0 + sx * sx + sy * sy)
+            if nz < MIN_SUPPORTED_NZ - 1e-12:
+                raise UFDemoError(
+                    GEOMETRY_UNSUPPORTED,
+                    "初始平面倾角超出软件支持范围",
+                    field_path="grid.initial_slope_x",
+                    actual={"slope_x": sx, "slope_y": sy, "n_z": nz},
+                    requirement=f"n_z >= {MIN_SUPPORTED_NZ:g}",
+                    suggestion="减小斜率；超范围时停止该模式，不裁剪角度继续。",
+                )
         return GridConfig(
             nx=nx,
             ny=ny,
@@ -338,7 +394,9 @@ class GridConfig:
             center_x_m=unit.length_to_internal(cx),
             center_y_m=unit.length_to_internal(cy),
             initial_height_m=unit.length_to_internal(h0),
-            initial_surface=str(raw.get("initial_surface", "flat")),
+            initial_surface=surf,
+            initial_slope_x=sx,
+            initial_slope_y=sy,
         )
 
     def axis(self, which: str):
@@ -371,6 +429,8 @@ class GridConfig:
             "center_y_m": self.center_y_m,
             "initial_height_m": self.initial_height_m,
             "initial_surface": self.initial_surface,
+            "initial_slope_x": self.initial_slope_x,
+            "initial_slope_y": self.initial_slope_y,
             "origin": "cell_center",
             "axis_order": list(self.AXIS_ORDER),
             "dtype_field": self.dtype_field,
@@ -1517,19 +1577,54 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
             suffix = f" 等 {len(no_speed)} 段" if len(no_speed) > 5 else ""
             warnings.append(f"段 {shown}{suffix} 未给 speed_m_s；位置由起止点线性插值得到。")
 
-    # 8. 几何组合准入（细则 2.3、8 节末：M0 只开放正入射）
-    kz = abs(config.laser.direction_unit[2])
-    kx = abs(config.laser.direction_unit[0])
-    ky = abs(config.laser.direction_unit[1])
-    if not (kz > 1.0 - 1e-12 and kx < 1e-12 and ky < 1e-12):
+    # 8. 几何组合准入（细则 2.3、9.2；批次 J / T18 起开放斜入射与动态角度）
+    kx, ky, kz = config.laser.direction_unit
+    if kz <= 0.0:
         fail(
             UFDemoError(
                 GEOMETRY_UNSUPPORTED,
-                "斜入射在 M0 未开放",
+                "laser.direction_unit 的 z 分量必须为正",
                 field_path="laser.direction_unit",
                 actual=list(config.laser.direction_unit),
-                requirement="|k_z|=1 且 k_x=k_y=0（M0 默认正入射）",
-                suggestion="改用正入射。斜入射、法向厚度转换与遮挡属 M3（T18），且未实现前不允许提供任意曲面开关。",
+                requirement="k_z > 0（本工程取「光轴正向」约定，使 μ=k·n>0 表示被照射）",
+                suggestion=(
+                    "把方向整体取反。符号约定见 docs/decisions/"
+                    "ADR-0015-oblique-incidence-and-visibility.md。"
+                ),
+            )
+        )
+    oblique = not (abs(kx) < 1e-15 and abs(ky) < 1e-15 and abs(kz - 1.0) < 1e-15)
+    if oblique:
+        inc_deg = math.degrees(math.acos(min(1.0, max(-1.0, kz))))
+        if inc_deg > MAX_SUPPORTED_INCIDENCE_DEG + 1e-9:
+            fail(
+                UFDemoError(
+                    GEOMETRY_UNSUPPORTED,
+                    "入射角超出软件支持范围",
+                    field_path="laser.direction_unit",
+                    actual=f"{inc_deg:.4f}°",
+                    requirement=(
+                        f"入射角 <= {MAX_SUPPORTED_INCIDENCE_DEG:g}°"
+                        "（软件数值/展示范围，不是材料物理边界）"
+                    ),
+                    suggestion="减小入射角；超范围时停止该模式，不裁剪角度继续。",
+                )
+            )
+        warnings.append(
+            f"已启用斜入射（相对光轴 {inc_deg:.3f}°）：表面能流按 F_s=μ·F_⊥ 投影，"
+            "只作用于可见的首次交点；μ 按"
+            + ("逐点法向（动态角度）" if config.solver.dynamic_angle else "解析平面法向")
+            + "计算。未提供材料偏振吸收依据时**只做几何修正**，不预测吸收差异。"
+        )
+    if oblique and config.solver.structured_interface:
+        fail(
+            UFDemoError(
+                CONFIG_INVALID,
+                "斜入射与分相结构不得同时启用",
+                field_path="solver",
+                actual={"oblique_incidence": True, "structured_interface": True},
+                requirement="法向去除路径与垂直相列路径不得混用（细则 8 节末）",
+                suggestion="改用正入射，或关闭分相结构；扩展须单独定义几何意义并增加测试。",
             )
         )
     # 批次 I（T16/T17）：分组批量是**独立求解模式**，其红线在配置层拦截。
@@ -1645,15 +1740,13 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
             )
         )
     if config.solver.dynamic_angle:
-        fail(
-            UFDemoError(
-                NOT_IMPLEMENTED,
-                "动态角度尚未实现",
-                field_path="solver.dynamic_angle",
-                actual=True,
-                requirement="动态角度属批次 J（T18）",
-                suggestion="设 solver.dynamic_angle=false。",
-            )
+        # 批次 J（T18）起开放：逐点法向 + 可见性。范围检查在 beam 层逐事件执行
+        # （超出 n_z/入射角范围即停并报位置，见 geometry.check_geometry_range）。
+        warnings.append(
+            "已启用动态角度：法向由当前窗口高度梯度计算（内部中心差分/边界单边差分），"
+            f"并按首次交点判定可见性；支持范围为 n_z >= {MIN_SUPPORTED_NZ:g}、"
+            f"入射角 <= {MAX_SUPPORTED_INCIDENCE_DEG:g}°，超出即停止该模式。"
+            "未提供材料偏振吸收依据时只做几何修正。"
         )
     if structure_enabled:
         from .structure import check_structure_config

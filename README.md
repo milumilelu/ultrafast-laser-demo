@@ -1,14 +1,14 @@
-# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–I）
+# ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–J）
 
-> 版本：`0.7.0-i1`｜日期：2026-09-11｜状态：**批次 A–I 已实施并通过验收；M0 已放行，M1/M2 条件齐备待审批；M3 仅差 G07（批次 J）**
+> 版本：`0.8.0-j1`｜日期：2026-09-11｜状态：**批次 A–J 已实施并通过验收；M0 已放行，M1/M2/M3 条件齐备待审批**
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
 >
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
 > + 查表（F）+ 分相结构（G）+ 受限阈值协议 / 七材料能力入口 / 水印同源（H）
-> + 冻结几何批量加速与性能基准（I）。
-> 斜入射与动态角度（批次 J）尚未开始，详见 `docs/reports/progress.md`。
+> + 冻结几何批量加速与性能基准（I）+ 斜入射 / 动态角度 / 可见性（J）。
+> **A–J 全部批次已交付**，详见 `docs/reports/progress.md`。
 
 ---
 
@@ -31,7 +31,7 @@
 | **受限阈值协议 + 七材料能力入口 + 水印同源**（只按本事件入射能流判超阈、红线/缺口逐条实跑核验、导出与回放共用一个水印） | ✅ 批次 H（T14），`python -m ufdemo materials` / `tools/material_report.py` |
 | **冻结几何批量加速**（块内逐事件各自算响应后相加、局部误差估计与自动回退、可选 Numba 后端） | ✅ 批次 I（T16/T17），`solver.mode=grouped`；基准见 `docs/reports/performance_baseline.md` |
 | 逐事件核查表**接入**（查表曲线进入逐事件主循环） | ❌ 本批保留不开放（细则第 7 节：只有 `event_depth_increment` 且协议适用时才可进） |
-| 斜入射 / 可见性（G07） | ❌ 批次 J（T18、T19） |
+| **斜入射 / 动态角度 / 可见性**（F_s=μF_⊥、首次交点遮挡、Δh=-a_n/n_z） | ✅ 批次 J（T18/T19），`examples/oblique_plane_60deg.json`、`examples/tilted_plane_dynamic_angle.json` |
 
 **明确不做**：热场、TTM 耦合、裂纹、分层、再沉积、深孔多次反射、机器学习、
 完整五轴 CAM。旧 TTM 工作区保持独立、未被修改。
@@ -367,6 +367,67 @@ python tools/perf_report.py --from-csv     # 按已有 CSV 重写报告（免重
 
 ---
 
+## 3g. 斜入射、动态角度与可见性（批次 J / T18、T19）
+
+```bash
+python -m pytest -q -m g07                    # G07 斜入射与表面几何（23 项）
+python -m ufdemo run examples/oblique_plane_60deg.json --out runs/oblique_001
+python -m ufdemo run examples/tilted_plane_dynamic_angle.json --out runs/tilted_001
+```
+
+三种几何模式（界面「几何修正」栏可切换）：
+
+| 模式 | 触发 | 法向来源 |
+|---|---|---|
+| 正入射 | `direction_unit=(0,0,1)` 且 `dynamic_angle=false` | 不启用修正，**走既有正入射核（逐位不变）** |
+| 固定角度 | `direction_unit` 倾斜，`dynamic_angle=false` | **解析平面法向**（`flat`→(0,0,1)；`tilted_plane`→由斜率给出） |
+| 动态角度 | `solver.dynamic_angle=true` | 当前窗口高度场的**逐点梯度** |
+
+**符号约定（务必先读，否则会把入射角算反）**
+
+本工程取 ``k = direction_unit`` 指向**光照侧**，故入射余弦为
+
+```
+mu = max(0, k·n),      n = (-h_x, -h_y, 1)/sqrt(1+h_x^2+h_y^2)
+```
+
+任务书写的是 ``max(0, -k·n)``，两者只差 ``k`` 的整体符号（令 ``k'=-k`` 即等价）。
+采用本形式可保证 **0° 严格退化到既有正入射核**（G07 已逐位验证）。
+因此 `direction_unit` 的 ``k_z`` 必须为正，否则配置层拒绝。
+
+**核心公式**
+
+* ``s = (q-q_f)·k``，``r² = |q-q_f|² - s²``（只把**浮点舍入**的极小负值截零；
+  明显负值视为实现错误并报错）；
+* 表面能流 ``F_s = mu · F_perp``，**只乘一次**余弦——椭圆投影由 ``r²`` 的定义自然得到；
+* 法向厚度 → 高度：``Δh = -a_n/n_z``（**不是** ``-a_n·n_z``）；
+* 仅作用于**可见的首次交点**（射线沿 ``+k`` 步进，落到表面之下即判遮挡）。
+
+**四条硬规矩**
+
+1. **超范围即停**：``n_z < 0.5`` 或入射角 > 60° 时停止该模式并报**首个越界单元位置与原因**，
+   **不裁剪角度继续运行**。这两个数是**软件数值/展示范围**，不是材料物理边界。
+   背向（``μ≤0``）不算越界——它天然零直接照射。
+2. **只做几何修正**：未提供材料与波长的 ``A(θ)`` 依据时**不预测吸收差异**；
+   界面不提供"材料偏振吸收预测"，也不给透明介质无条件设 ``A=1-R``。
+3. **遮挡/背向零直接照射**，但**不代表材料内部无响应**；诊断与 ``metadata.approximations``
+   会如实标注。
+4. **批量 × 斜入射回退参考**：窗口内可见性会随烧蚀形貌变化而块内几何被冻结，
+   故第一版回退逐脉冲并写明原因。斜入射本身仍可在 ``mode=reference`` 下使用。
+
+**配置示例**
+
+```json
+"grid": { "initial_surface": "tilted_plane", "initial_slope_x": 0.6, "initial_slope_y": 0.0 },
+"laser": { "direction_unit": [0.342, 0.0, 0.940] },
+"solver": { "dynamic_angle": true }
+```
+
+> **实测**：0° 与参考逐位一致；60° 足迹长短轴比 1.9917（理论 2）、中心能流比
+> 0.500000000000；``Δh=-a_n/n_z`` 与解析预测误差 1.5e-16；截获能量相对误差 1.7e-9。
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -420,6 +481,12 @@ python tools/perf_report.py --from-csv     # 按已有 CSV 重写报告（免重
   缺失时**回退 NumPy 并给出警告**（结果同式、逐位一致）。
 * **不承诺加速倍数**：无收益即保留参考模式，如实记录实测值
   （`docs/reports/performance_baseline.md`）。
+* **几何修正只做几何**：斜入射/动态角度按 ``F_s=μ·F_⊥``、首次交点可见性与
+  ``Δh=-a_n/n_z`` 修正；未提供 ``A(θ)`` 依据时**不预测吸收差异**。
+* **符号约定必须显式**：``μ=max(0,k·n)``（``k`` 指向光照侧；``k_z>0`` 强制），
+  与任务书 ``max(0,-k·n)`` 等价但差一个整体符号（ADR-0015）。
+* **支持范围是软件范围**：``n_z≥0.5``、入射角≤60°；超出**停止并报位置与原因**，
+  不裁剪角度继续运行；背向不算越界。
 * **查表不是任意外推**：默认分段线性；可选 PCHIP 显式 `extrapolate=False`；
   越界是显式状态（`TABLE_OUT_OF_RANGE`），**不返回 0、不外推、不钳端点**；
   重复 x 默认拒绝，需合并时须附规则并保留原始点（见
@@ -446,9 +513,12 @@ python tools/perf_report.py --from-csv     # 按已有 CSV 重写报告（免重
 
 1. **M0 只开放正入射**。斜入射 / 法向厚度转换 / 遮挡未实现，非正入射
    配置会被 `GEOMETRY_UNSUPPORTED` 拦截（不是靠按钮禁用）。
-2. **只支持正入射**；表面几何现支持**均质单相**与**解析分相结构**（铺层条纹 /
-   随机颗粒，批次 G），但**不支持任意三维几何**。斜入射与动态角度未实现
-   （「分相截断 × 动态角度」在配置层互斥）。
+2. **几何**：正入射与**斜入射**（≤60°，含投影与首次交点可见性）均已支持；
+   表面为**2.5D 高度场**，支持均质单相、**解析分相结构**（铺层条纹 / 随机颗粒，批次 G）
+   与**解析斜平面**（批次 J），但**不支持任意三维几何**（悬垂/多值表面）。
+   遮挡只做**首次交点**射线检查，不做多次反射/衍射。
+   「分相截断 × 动态角度」与「斜入射 × 分相」在配置层互斥；
+   「批量 × 斜入射」「批量 × 动态角度」回退或拦截（见 ADR-0014/0015）。
 3. **历史与孵化未实现**。`solver.history_enabled=true` 会报错；
    局部受照计数已记录，但不用作孵化输入。
 4. **不能从阈值反推绝对深度**。CFRP / Inconel 718 / 金刚石 / 铝基 SiC /
@@ -505,7 +575,7 @@ ultrafast-demo/
 │   ├── tables.py         # 查表：曲线 schema、插值核、越界与语义路由（批次 F）
 │   ├── structure.py      # 分相结构：相/结构接口、铺层与颗粒、种子与体积分数（批次 G）
 │   ├── thresholds.py     # 受限阈值协议：只按本事件入射能流判超阈（批次 H）
-│   ├── geometry.py       # 批次 J 占位（斜入射/可见性）
+│   ├── geometry.py       # 法向/投影/首次交点可见性/法向厚度转换（批次 J）
 │   ├── accelerators.py   # 冻结几何分组批量、局部误差估计与回退（批次 I）
 │   └── __main__.py       # CLI
 ├── tools/
@@ -521,9 +591,9 @@ ultrafast-demo/
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
 ├── data/curves/          # 响应曲线卡（*.curve.json + *.points.csv，批次 F）
 ├── data/references/      # 原始来源快照与输入指纹
-├── examples/             # 可运行配置（含两个合成结构实例，批次 G）
+├── examples/             # 可运行配置（含合成结构实例、查表算例与斜入射/斜平面示例）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0014）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0015）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -536,9 +606,10 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 345 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + 回归 5）
+python -m pytest -q                  # 368 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + J 斜入射 23 + 回归 5）
 python -m pytest -q -m g05           # 只跑文献语义回归
 python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
+python -m pytest -q -m g07           # 斜入射与表面几何（批次 J）
 python -m pytest -q -m g08           # 分组模式与逐脉冲对照（批次 I）
 python -m pytest -q -m g09           # 界面、查表、受限阈值协议的 G09 相关测试（含批次 H）
 python tools/migrate_materials.py    # 迁移 + 7 项准入探针
@@ -549,7 +620,7 @@ python tools/material_report.py      # 受限阈值协议报告 + 七材料能�
 python tools/perf_report.py           # B01–B04 性能基准（批次 I）
 python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
 python tools/ui_demo_probe.py        # 端到端演示可用性（前后端对接全链路）
-python tools/run_acceptance.py       # 实际执行并生成验收报告（A–I）
+python tools/run_acceptance.py       # 实际执行并生成验收报告（A–J）
 ```
 
 产物：
@@ -574,5 +645,5 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–I
 * `docs/reports/input_hash_check.csv` —— 输入文件哈希核对；
 * `docs/reports/progress.md` —— 批次状态与下一步依赖。
 
-报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–I 只做到前两项；
+报告把**公式核查**、**数值实现验证**、**实验复现**分栏记录。A–J 只做到前两项；
 “软件跑通”不等于“材料物理验证”。

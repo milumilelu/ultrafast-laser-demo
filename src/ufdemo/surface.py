@@ -102,7 +102,17 @@ class SurfaceState:
 
         x = grid.axis("x")
         y = grid.axis("y")
-        h0 = np.full((grid.ny, grid.nx), grid.initial_height_m, dtype=np.float64)
+        # 批次 J（T18）：初始面可以是**解析斜平面** h = h0 + s_x*(x-cx) + s_y*(y-cy)。
+        # 斜率无量纲（h_x、h_y），乘以长度坐标后自然得到长度。用于验证
+        # Δh = -a_n/n_z 与法向解析值（`geometry.analytic_plane_normal`）。
+        if getattr(grid, "initial_surface", "flat") == "tilted_plane":
+            sx, sy = grid.initial_slope
+            XX = x[None, :] - float(grid.center_x_m)
+            YY = y[:, None] - float(grid.center_y_m)
+            h0 = float(grid.initial_height_m) + sx * XX + sy * YY
+            h0 = np.ascontiguousarray(h0, dtype=np.float64)
+        else:
+            h0 = np.full((grid.ny, grid.nx), grid.initial_height_m, dtype=np.float64)
         return SurfaceState(
             grid=grid,
             laser=laser,

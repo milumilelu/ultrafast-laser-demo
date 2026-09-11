@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -267,6 +268,22 @@ def _param_panel(state: U.SessionState, material, run_mode: str):
         help="T16 实测：该逐元素对数核 NumPy 已足够，Numba 无收益且内存更高；缺 numba 时自动回退并警告。",
     )
 
+    st.markdown("**几何修正（批次 J：斜入射 / 动态角度）**")
+    # 入射角以 xz 平面内的倾角表示：k=(sinθ,0,cosθ)（θ=0 即正入射）。
+    # 当前配置的方向反算出角度，作为表单默认值。
+    _k = G(p, "laser.direction_unit", [0.0, 0.0, 1.0]) or [0.0, 0.0, 1.0]
+    _cur_inc = math.degrees(math.acos(max(-1.0, min(1.0, float(_k[2]) / max(1e-12, math.sqrt(sum(float(v) ** 2 for v in _k)))))))
+    c1, c2, c3 = st.columns(3)
+    inc_deg = c1.number_input(
+        "入射角 (°)：相对光轴", 0.0, 60.0, float(_cur_inc), key="f_inc",
+        help="0° 为正入射；超过 60° 超出软件展示范围会停止该模式（不裁剪角度继续）。",
+    )
+    dyn = c2.checkbox(
+        "动态角度（逐点法向）", value=bool(G(p, "solver.dynamic_angle", False)), key="f_dyn",
+        help="按当前高度梯度逐点算法向并做首次交点可见性；关闭时用解析平面法向。",
+    )
+    c3.caption("只做几何修正：未提供吸收依据时**不预测吸收差异**。")
+
     st.markdown("**输出**")
     c1, c2 = st.columns(2)
     roi_um = c1.number_input("ROI 半径 (µm)", 0.0, 1e4, float(G(p, "output.roi.0.radius_m", 1e-5)) * 1e6, key="f_roi")
@@ -290,6 +307,12 @@ def _param_panel(state: U.SessionState, material, run_mode: str):
         "solver.mode": smode,
         "solver.batch_size": int(batch),
         "solver.acceleration": backend,
+        "solver.dynamic_angle": bool(dyn),
+        "laser.direction_unit": [
+            math.sin(math.radians(float(inc_deg))),
+            0.0,
+            math.cos(math.radians(float(inc_deg))),
+        ],
     }
     base = U.load_template(EXAMPLES, tmpl)
     base["run_mode"] = run_mode
@@ -343,6 +366,7 @@ def _result_panel(state: U.SessionState):
 
     _watermark_block(frozen.material_watermark, where="result_header")
     _threshold_diagnostics_block(frozen)
+    _geometry_block(frozen)
     _acceleration_block(frozen)
 
     c1, c2, c3, c4 = st.columns(4)
@@ -581,6 +605,53 @@ def _acceleration_block(frozen: U.FrozenRun):
             st.caption(d["boundary_note"])
         if d.get("note"):
             st.caption(d["note"])
+
+
+def _geometry_block(frozen: U.FrozenRun):
+    """批次 J：几何修正面板（未启用几何修正时本块不显示）。
+
+    T19 要求「两增强对照可检查、**支持范围与误差标识可见**」：本面板把批量与角度
+    两个增强的**实际生效模式、范围边界与近似标注**并列展示，便于逐项核对。
+    """
+    d = frozen.geometry_diagnostics
+    if not d:
+        return
+    accel = frozen.acceleration_diagnostics or {}
+    title = "几何修正｜" + ("斜入射" if d.get("oblique_incidence") else "正入射")
+    if d.get("dynamic_angle"):
+        title += " + 动态角度"
+    with st.expander(title, expanded=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("光轴夹角 (°)", f"{d.get('incidence_deg_axial'):.3f}"
+                  if d.get("incidence_deg_axial") is not None else "—")
+        c2.metric("窗口内最大入射角 (°)", f"{d.get('max_incidence_deg'):.3f}"
+                  if d.get("max_incidence_deg") is not None else "—")
+        c3.metric("法向厚度转换次数", d.get("normal_thickness_conversions") or 0)
+        c4.metric("含遮挡的事件数", d.get("n_events_with_shadowing") or 0)
+
+        st.dataframe(U.geometry_diagnostics_rows(d), hide_index=True, width="stretch")
+
+        if d.get("lossy_approximation"):
+            st.warning(
+                "本运行含**近似**：法向厚度按一阶关系 Δh=-a_n/n_z 换算为高度变化；"
+                "遮挡/背向单元的直接照射记为 0（不代表材料内部无响应）。"
+            )
+        st.caption(d.get("boundary_note") or "")
+        if d.get("note"):
+            st.caption(d["note"])
+
+        # 两增强（批量 + 角度）对照：并列显示各自的实际生效状态
+        st.markdown("**两个增强的实际生效状态**")
+        both = [
+            {"增强": "冻结几何批量", "是否启用": bool(accel.get("grouped")),
+             "实际模式/后端": f"{accel.get('effective_mode')} / {accel.get('effective_backend')}",
+             "回退或近似原因": accel.get("fallback_reason") or "—"},
+            {"增强": "动态角度", "是否启用": bool(d.get("dynamic_angle")),
+             "实际模式/后端": "逐点法向" if d.get("dynamic_angle") else "解析平面法向",
+             "回退或近似原因": "—" if not d.get("lossy_approximation")
+             else "含法向厚度换算/遮挡近似"},
+        ]
+        st.dataframe(both, hide_index=True, width="stretch")
 
 
 # ---------------------------------------------------------------------------

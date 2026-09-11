@@ -208,6 +208,129 @@ def build_acceleration_diagnostics(
     }
 
 
+def build_geometry_diagnostics(
+    diagnostics_inner: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """批次 J：把斜入射/动态角度的几何诊断整理成界面可展示的字典。
+
+    入参对应 ``result.diagnostics`` 与 ``result.metadata``（也能从运行目录读回），
+    因此**实时运行与历史读取同源**（与批次 G/H/I 的诊断面板一致）。
+
+    关键口径（细则 9.2 / 任务书 6.6）：
+
+    * ``n_z>=0.5``、入射角≤60° 是**软件数值/展示范围**，不是材料物理边界；
+    * **只做几何修正**，未提供吸收依据时不预测吸收差异；
+    * 遮挡/背向的直接照射记为 0，但**不代表材料内部无响应**。
+    """
+    diag = dict(diagnostics_inner or {})
+    geo = dict(diag.get("geometry") or {})
+    # 正入射（未启用几何修正）时返回空字典：界面不显示该面板，
+    # 与批次 G/H/I 的「未启用即不显示、不返回假数据」同口径。
+    if not geo or not geo.get("enabled"):
+        return {}
+    return {
+        "available": True,
+        "enabled": bool(geo.get("enabled")),
+        "oblique_incidence": bool(geo.get("oblique_incidence")),
+        "dynamic_angle": bool(geo.get("dynamic_angle")),
+        "direction_unit": geo.get("direction_unit"),
+        "incidence_deg_axial": geo.get("incidence_deg_axial"),
+        "min_mu": geo.get("min_mu"),
+        "max_incidence_deg": geo.get("max_incidence_deg"),
+        "initial_surface": geo.get("initial_surface"),
+        "initial_slope": geo.get("initial_slope"),
+        "normal_thickness_conversions": geo.get("normal_thickness_conversions"),
+        "n_events_with_shadowing": geo.get("n_events_with_shadowing"),
+        "shadowed_cells_total": geo.get("shadowed_cells_total"),
+        "backfacing_cells_total": geo.get("backfacing_cells_total"),
+        "supported_range": geo.get("supported_range"),
+        "lossy_approximation": bool(
+            (geo.get("normal_thickness_conversions") or 0) or (geo.get("shadowed_cells_total") or 0)
+        ),
+        "boundary_note": (
+            "n_z≥0.5、入射角≤60° 是**软件数值/展示范围**，不是七类材料的物理边界；"
+            "超范围会停止该模式并给出位置，不裁剪角度继续运行。"
+        ),
+        "note": geo.get("note"),
+    }
+
+
+def _fmt_cell(v: Any) -> str:
+    """统一把诊断值格式化为字符串。
+
+    Streamlit 的 ``st.dataframe`` 经 pyarrow 转换时要求**同列同类型**；
+    混合 bool/str/float/None 会抛 ``ArrowInvalid``。诊断面板天然是异构的
+    "键-值"表，故在纯逻辑层就统一成字符串，界面层无需再猜类型。
+    """
+    if v is None:
+        return "—"
+    if isinstance(v, bool):
+        return "是" if v else "否"
+    if isinstance(v, float):
+        return f"{v:.6g}"
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_fmt_cell(x) for x in v) + "]"
+    if isinstance(v, Mapping):
+        return "{" + ", ".join(f"{k}={_fmt_cell(val)}" for k, val in v.items()) + "}"
+    return str(v)
+
+
+def acceleration_diagnostics_rows(d: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """把加速诊断整理成界面可直接显示的「键-值」行（纯逻辑，便于断言）。
+
+    所有值统一为字符串：``st.dataframe`` 的列必须同类型（见 `_fmt_cell`）。
+    """
+    if not d:
+        return []
+    grouped = bool(d.get("grouped"))
+    rows = [
+        {"项": "请求模式", "值": _fmt_cell(d.get("requested_mode"))},
+        {"项": "实际模式", "值": _fmt_cell(d.get("effective_mode"))},
+        {"项": "局部核后端", "值": _fmt_cell(d.get("effective_backend"))},
+    ]
+    if grouped:
+        rows += [
+            {"项": "批大小", "值": _fmt_cell(d.get("batch_size_configured"))},
+            {"项": "块数", "值": _fmt_cell(d.get("n_blocks"))},
+            {"项": "拒绝/回退块数", "值": _fmt_cell(d.get("n_rejected_blocks"))},
+            {"项": "光束补丁数", "值": _fmt_cell(d.get("n_beam_patches"))},
+            {"项": "补丁复用命中", "值": _fmt_cell(d.get("patch_cache_hits"))},
+            {"项": "补丁复用率", "值": _fmt_cell(d.get("patch_reuse_ratio"))},
+            {"项": "局部误差（内部单位）", "值": _fmt_cell(d.get("max_local_error_internal"))},
+            {"项": "执行半步试算", "值": _fmt_cell(d.get("local_error_estimated"))},
+            {"项": "快照在块边界", "值": _fmt_cell(d.get("snapshot_on_block_boundary"))},
+        ]
+    if d.get("fallback_reason"):
+        rows.append({"项": "回退原因", "值": _fmt_cell(d["fallback_reason"])})
+    return rows
+
+
+def geometry_diagnostics_rows(d: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """把几何诊断整理成界面可直接显示的「键-值」行（纯逻辑，便于断言）。
+
+    所有值统一为字符串（见 `_fmt_cell`），避免 pyarrow 的混合类型转换失败。
+    """
+    if not d or not d.get("enabled"):
+        return []
+    rng = d.get("supported_range") or {}
+    rows = [
+        {"项": "斜入射", "值": _fmt_cell(d.get("oblique_incidence"))},
+        {"项": "动态角度（逐点法向）", "值": _fmt_cell(d.get("dynamic_angle"))},
+        {"项": "初始面", "值": _fmt_cell(d.get("initial_surface"))},
+        {"项": "初始斜率 (h_x, h_y)", "值": _fmt_cell(d.get("initial_slope"))},
+        {"项": "光轴夹角 (°)", "值": _fmt_cell(d.get("incidence_deg_axial"))},
+        {"项": "窗口内最大入射角 (°)", "值": _fmt_cell(d.get("max_incidence_deg"))},
+        {"项": "法向厚度转换次数", "值": _fmt_cell(d.get("normal_thickness_conversions"))},
+        {"项": "含遮挡的事件数", "值": _fmt_cell(d.get("n_events_with_shadowing"))},
+        {"项": "遮挡单元次", "值": _fmt_cell(d.get("shadowed_cells_total"))},
+        {"项": "背向单元次", "值": _fmt_cell(d.get("backfacing_cells_total"))},
+        {"项": "支持范围 n_z ≥", "值": _fmt_cell(rng.get("min_nz"))},
+        {"项": "支持范围入射角 ≤", "值": _fmt_cell(rng.get("max_incidence_deg"))},
+    ]
+    return rows
+
+
 STATUS_ZH = {
     "completed": "已完成",
     "failed": "失败",
@@ -284,6 +407,8 @@ class FrozenRun:
     threshold_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 批次 I：分组批量诊断（参考模式/回退时也给出模式与原因；含批大小、拒绝次数、局部误差）
     acceleration_diagnostics: dict[str, Any] = field(default_factory=dict)
+    # 批次 J：几何修正诊断（斜入射/动态角度；正入射时为空字典）
+    geometry_diagnostics: dict[str, Any] = field(default_factory=dict)
     # 内存中的结果与表面（用于渲染；不写回表单）
     result: RunResult | None = None
     # 从磁盘读取的最终表面数组（历史运行；同样只读，不求解）
@@ -679,6 +804,9 @@ def submit(
         acceleration_diagnostics=build_acceleration_diagnostics(
             getattr(result, "diagnostics", None), getattr(result, "metadata", None)
         ),
+        geometry_diagnostics=build_geometry_diagnostics(
+            getattr(result, "diagnostics", None), getattr(result, "metadata", None)
+        ),
         elapsed_s=getattr(result, "elapsed_s", None),
     )
 
@@ -791,6 +919,10 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
             (loaded.diagnostics or {}).get("diagnostics")
         ),
         acceleration_diagnostics=build_acceleration_diagnostics(
+            (loaded.diagnostics or {}).get("diagnostics"),
+            loaded.metadata,
+        ),
+        geometry_diagnostics=build_geometry_diagnostics(
             (loaded.diagnostics or {}).get("diagnostics"),
             loaded.metadata,
         ),

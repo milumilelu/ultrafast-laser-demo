@@ -1,11 +1,11 @@
 {
   "case_id": "g05_ysz_effective_n_conversion",
   "code": {
-    "commit": "fdb7e8cedc2aab12d6122b27700d2e3f1ef7dc6d",
+    "commit": "7fb03e7141f40b94fca94ede8120ae48de2123f4",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 19,
-    "source_manifest_sha256": "8608aa04f7c5f14245839eb075022946156282387285ffb20e0cae94ec9df08c",
+    "source_manifest_sha256": "89b28636c51547c7718a1185ccf88b9a6236474f3ecf389dd719957f0161eb6a",
     "working_tree_dirty": true
   },
   "config_sha256": "871b14b82aa267f1f39dbba03f3af0d13e347825274861a3adbdb802b52fd370",
@@ -112,7 +112,7 @@
   "run_mode": "reference_case",
   "schema_version": "1.0",
   "status": "completed",
-  "written_at_utc": "2026-09-11T05:11:01.243519+00:00",
+  "written_at_utc": "2026-09-11T06:19:43.304795+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

@@ -574,12 +574,134 @@ def main() -> int:
         "", "", all(f"watermark.{k}" in _stats_rows for k in ("material_id", "run_mode", "unit_mode")),
         str(_wm_dir), "数值实现验证", "单独拿走 statistics.csv 仍能读出材料身份")
 
-    # ---------------- 批次 I（T16/T17）：G08 分组模式与逐脉冲对照 ----------------
+    # ---------------- 批次 J（T18）：G07 斜入射与表面几何 ----------------
     import numpy as _np  # noqa: E402
 
     from ufdemo.config import RunConfig as _RunConfig  # noqa: E402
     from ufdemo.config import validate_run as _validate  # noqa: E402
+    from ufdemo import geometry as _G  # noqa: E402
+    from ufdemo.beam import BeamOptions as _BO  # noqa: E402
+    from ufdemo.beam import beam_patch as _bp  # noqa: E402
+    from ufdemo.surface import SurfaceState as _SS  # noqa: E402
 
+    _g08_raw = json.loads((ROOT / "examples" / "ten_pulses.json").read_text(encoding="utf-8"))
+    _g08_card = load_material_card(Path(_g08_raw["material_card_file"]))
+
+    _OBL = ROOT / "examples" / "oblique_plane_60deg.json"
+    _TILT = ROOT / "examples" / "tilted_plane_dynamic_angle.json"
+    _K60 = (math.sin(math.radians(60.0)), 0.0, math.cos(math.radians(60.0)))
+
+    def _geo_cfg(path: Path, **over):
+        import copy as _copy
+
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        for k, v in over.items():
+            raw["laser"][k] = v
+        return raw
+
+    # 0° 退化：与正入射逐位一致
+    _raw_ax = json.loads((ROOT / "examples" / "ten_pulses.json").read_text(encoding="utf-8"))
+    _raw_z = json.loads(json.dumps(_raw_ax))
+    _raw_z["laser"]["direction_unit"] = [0.0, 0.0, 1.0]
+    _r_ax = solve(_RunConfig.from_dict(_raw_ax), _g08_card)
+    _r_z = solve(_RunConfig.from_dict(_raw_z), _g08_card)
+    add("G07", "examples/ten_pulses.json", "", "0° 入射退化为正入射核（逐位一致）",
+        "height 完全相同", f"逐位={bool(_np.array_equal(_r_ax.surface.height, _r_z.surface.height))}",
+        "0", "严格相等", bool(_np.array_equal(_r_ax.surface.height, _r_z.surface.height)),
+        str(ROOT / "examples" / "ten_pulses.json"), "数值实现验证",
+        "符号约定（μ=k·n）的等价性由本行锁定")
+
+    # 60°：足迹比、中心能流减半、能量守恒
+    _o60 = _geo_cfg(_OBL)
+    _o60["laser"]["rayleigh_range_m"] = None
+    _cfg60 = _RunConfig.from_dict(_o60)
+    _s60 = _SS.initialize(_cfg60.grid, _cfg60.laser, history_enabled=False)
+    _ev60 = next(iter(iter_events(_cfg60.path, _cfg60.laser)))
+    _p60 = _bp(_ev60, _s60, _BO())
+    _m = _np.asarray(_p60.mask, dtype=bool)
+    _ys, _xs = _np.nonzero(_m)
+    _dx = _s60.grid.dx_m
+    _ratio = ((_xs.max() - _xs.min() + 1) * _dx) / ((_ys.max() - _ys.min() + 1) * _dx)
+    add("G07", "examples/oblique_plane_60deg.json", "", "60° 足迹长短轴比（应 = 1/cos60° = 2）",
+        "2（±2 格离散容差）", f"{_ratio:.4f}", f"{abs(_ratio - 2.0):.4f}", "<= 0.03",
+        abs(_ratio - 2.0) <= 0.03, str(_OBL), "数值实现验证",
+        "准直光束隔离投影；椭圆比由 r²=|q-q_f|²-s² 自然得到")
+
+    _s_ax = _SS.initialize(_RunConfig.from_dict(
+        {**_o60, "laser": {**_o60["laser"], "direction_unit": [0.0, 0.0, 1.0]}}).grid,
+        _RunConfig.from_dict({**_o60, "laser": {**_o60["laser"], "direction_unit": [0.0, 0.0, 1.0]}}).laser,
+        history_enabled=False)
+    _p_ax = _bp(_ev60, _s_ax, _BO())
+    _f_ax = float(_np.asarray(_p_ax.fluence)[_p_ax.shape[0] // 2, _p_ax.shape[1] // 2])
+    _f_60 = float(_np.asarray(_p60.fluence)[_p60.shape[0] // 2, _p60.shape[1] // 2])
+    add("G07", "examples/oblique_plane_60deg.json", "", "60° 中心表面能流 = 法向对应值的 1/2",
+        "0.5×F_perp（μ=cos60°）", f"{_f_60 / _f_ax:.12f}", f"{abs(_f_60 / _f_ax - 0.5):.3e}",
+        "rel <= 1e-12", abs(_f_60 / _f_ax - 0.5) <= 1e-12, str(_OBL), "数值实现验证",
+        "F_s=μ·F_perp，只乘一次余弦（不再重复缩放光斑）")
+
+    _Ep = float(_ev60.energy_J)
+    _dA60 = _s60.grid.dx_m * _s60.grid.dy_m
+    _cap = float(_np.sum(_np.asarray(_p60.fluence)) * _dA60)
+    add("G07", "examples/oblique_plane_60deg.json", "", "完整平面截获能量（应为 Ep）",
+        f"{_Ep:.6e} J", f"{_cap:.6e} J", f"{abs(_cap - _Ep) / _Ep:.3e}", "rel <= 1%",
+        abs(_cap - _Ep) / _Ep <= 0.01, str(_OBL), "数值实现验证",
+        "投影面积元口径：ΣF_s·dx·dy = Ep")
+
+    # 斜平面：Δh=-a_n/n_z 解析一致
+    _tilt = json.loads(_TILT.read_text(encoding="utf-8"))
+    _cfg_t = _RunConfig.from_dict(_tilt)
+    _res_t = solve(_cfg_t, load_material_card(Path(_tilt["material_card_file"])))
+    from ufdemo.response import build_pulse_law as _bpl  # noqa: E402
+
+    _law_t = _bpl(load_material_card(Path(_tilt["material_card_file"])), unit=_cfg_t.unit)
+    _kt = _np.array(_cfg_t.laser.direction_unit, dtype=float)
+    _npn = _np.array(_G.analytic_plane_normal(_cfg_t.grid), dtype=float)
+    _mu_t = float(_np.dot(_kt, _npn))
+    _sx, _sy = _cfg_t.grid.initial_slope
+    _nz_t = 1.0 / math.sqrt(1.0 + _sx * _sx)
+    _Fp = 2.0 * _cfg_t.laser.pulse_energy_J / (math.pi * _cfg_t.laser.spot_radius_m ** 2)
+    _an_t = float(_law_t.delta_internal) * math.log((_mu_t * _Fp) / float(_law_t.threshold_internal))
+    _pred = _an_t / _nz_t
+    _meas = float(_res_t.surface.initial_height[80, 80] - _res_t.surface.height[80, 80])
+    add("G07", "examples/tilted_plane_dynamic_angle.json", "", "斜平面 Δh=-a_n/n_z（解析预测）",
+        f"{_pred:.6e} m", f"{_meas:.6e} m", f"{abs(_meas - _pred) / _pred:.3e}", "rel <= 2%",
+        abs(_meas - _pred) / _pred <= 0.02, str(_TILT), "数值实现验证",
+        "明确不是 -a_n·n_z；法向厚度转换计入 diagnostics.geometry")
+
+    add("G07", "examples/tilted_plane_dynamic_angle.json", "", "法向厚度转换被记录",
+        "转换次数 >= 1 且含近似说明",
+        f"转换={_res_t.diagnostics['geometry']['normal_thickness_conversions']}",
+        "", ">= 1",
+        int(_res_t.diagnostics["geometry"]["normal_thickness_conversions"]) >= 1
+        and any("Δh=-a_n/n_z" in a for a in _res_t.metadata["approximations"]),
+        str(_TILT), "数值实现验证", "源文方向不明时不自动转换；此处核声明 surface_normal")
+
+    # 超范围即停（不裁剪角度继续）
+    _raw70 = json.loads((ROOT / "examples" / "ten_pulses.json").read_text(encoding="utf-8"))
+    _raw70["laser"]["direction_unit"] = [
+        math.sin(math.radians(70.0)), 0.0, math.cos(math.radians(70.0))]
+    _rep70 = _validate(_RunConfig.from_dict(_raw70), _g08_card)
+    _err70 = [e for e in _rep70.errors if e["code"] == "GEOMETRY_UNSUPPORTED"]
+    add("G07", "（入射角 70° 超范围）", "", "超出软件范围即停止（不裁剪角度）",
+        "GEOMETRY_UNSUPPORTED 且说明 60° 上限",
+        f"ok={_rep70.ok}｜码={[e['code'] for e in _rep70.errors]}", "", "拒绝",
+        bool(_err70) and "60" in json.dumps(_err70[0], ensure_ascii=False),
+        str(ROOT / "src" / "ufdemo" / "config.py"), "数值实现验证",
+        "支持范围是软件数值/展示范围，不是材料物理边界")
+
+    # 遮挡：迎光侧
+    _cfg_sh = _RunConfig.from_dict(json.loads((ROOT / "examples" / "ten_pulses.json").read_text(encoding="utf-8")))
+    _s_sh = _SS.initialize(_cfg_sh.grid, _cfg_sh.laser, history_enabled=False)
+    _s_sh.height[:, 80] = 5e-6
+    _vis_sh = _G.first_intersection_visibility(_s_sh.height, _cfg_sh.grid, _K60, section=None)
+    _cols = _np.nonzero((~_vis_sh).any(axis=0))[0]
+    add("G07", "（竖直墙 + 60°）", "", "遮挡出现在墙的迎光侧",
+        "被遮挡列全部位于墙(x=80)迎光侧", f"列范围={int(_cols.min())}–{int(_cols.max())}",
+        "", "< 80",
+        _cols.size > 0 and int(_cols.max()) < 80, str(ROOT / "src" / "ufdemo" / "geometry.py"),
+        "数值实现验证", "首次交点射线检查；表面起伏 ≤ 一步长时走解析快速路径")
+
+    # ---------------- 批次 I（T16/T17）：G08 分组模式与逐脉冲对照 ----------------
     _TP = ROOT / "examples" / "ten_pulses.json"
     _g08_raw = json.loads(_TP.read_text(encoding="utf-8"))
     _g08_card = load_material_card(Path(_g08_raw["material_card_file"]))
@@ -684,8 +806,6 @@ def main() -> int:
                 _pr.get("note") or "同配置对照；不承诺固定加速倍数")
 
     # ---------------- 未运行项 ----------------
-    not_run("G07", "（斜入射基准）", "0° 退化；60° 足迹比 2、中心能流减半；可见性", "见执行细则 10 节",
-            "批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）", "数值实现验证")
     not_run("G09", "（查表接入逐事件核）", "查表值进入逐事件主循环并保持语义一致", "见执行细则 10 节",
             "批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / "
             "G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 "

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
 
 import pytest
@@ -198,11 +199,34 @@ def test_nan_fluence_terminates_run_with_nonfinite_code():
     assert ei.value.code == "NUMERIC_NONFINITE"
 
 
-def test_oblique_incidence_rejected_at_config_layer():
+def test_oblique_incidence_admission_and_range_limits():
+    """批次 J（T18）：斜入射已开放，但**超范围即停**（不裁剪角度继续）。
+
+    旧断言「斜入射一律拒绝」是 M0 时期的行为，已随批次 J 过时。
+    现在：范围内（≤60°）放行；超范围（>60°）拒绝；``k_z<=0`` 违反方向约定拒绝。
+    """
+    card = load_material_card(_base()["material_card_file"])
+
+    # 30°：允许（范围内）
     raw = _base()
     raw["laser"]["direction_unit"] = [0.0, 0.5, 0.8660254037844386]
-    cfg = make_config(raw)
-    rep = validate_run(cfg, load_material_card(raw["material_card_file"]))
+    rep = validate_run(make_config(raw), card)
+    assert rep.ok, [e["code"] for e in rep.errors]
+    assert any("斜入射" in w for w in rep.warnings)
+
+    # 70°：超出软件支持范围 → 拒绝
+    raw = _base()
+    raw["laser"]["direction_unit"] = [math.sin(math.radians(70.0)), 0.0, math.cos(math.radians(70.0))]
+    rep = validate_run(make_config(raw), card)
+    assert not rep.ok
+    errs = [e for e in rep.errors if e["code"] == "GEOMETRY_UNSUPPORTED"]
+    assert errs
+    assert "60" in json.dumps(errs[0], ensure_ascii=False)
+
+    # k_z <= 0：违反「光轴正向」约定 → 拒绝（并指出约定）
+    raw = _base()
+    raw["laser"]["direction_unit"] = [0.0, 0.0, -1.0]
+    rep = validate_run(make_config(raw), card)
     assert not rep.ok
     assert any(e["code"] == "GEOMETRY_UNSUPPORTED" for e in rep.errors)
 

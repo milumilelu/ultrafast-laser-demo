@@ -402,6 +402,58 @@ def run_ui_checks(
         "批次 I：局部误差估计不是全局误差证明，边界必须写明",
     ))
 
+    # --- 10. 批次 J：几何修正（斜入射 + 动态角度）在界面上可见且可切换 ---------
+    at_g = fresh()
+    ok_geo = False
+    geo_note = "界面未提供入射角/动态角度开关"
+    if _has(at_g.number_input, "f_inc"):
+        at_g.number_input(key="f_inc").set_value(60.0).run()
+        if _has(at_g.checkbox, "f_dyn"):
+            at_g.checkbox(key="f_dyn").set_value(True).run()
+        cnt_before_g = at_g.session_state.ui.solve_count
+        if _has(at_g.button, "submit_run"):
+            at_g.button(key="submit_run").click().run()
+        s_g = at_g.session_state.ui
+        d_g = getattr(s_g.frozen, "geometry_diagnostics", {}) or {}
+        rng = d_g.get("supported_range") or {}
+        ok_geo = (
+            (not at_g.exception)
+            and s_g.solve_count == cnt_before_g + 1
+            and bool(d_g.get("oblique_incidence"))
+            and bool(d_g.get("dynamic_angle"))
+            and rng.get("min_nz") is not None
+            and rng.get("max_incidence_deg") is not None
+        )
+        geo_note = (
+            f"solve_count={cnt_before_g}→{s_g.solve_count}｜斜入射={d_g.get('oblique_incidence')}｜"
+            f"动态角度={d_g.get('dynamic_angle')}｜光轴夹角={d_g.get('incidence_deg_axial')}｜"
+            f"法向厚度转换={d_g.get('normal_thickness_conversions')}｜"
+            f"支持范围 n_z≥{rng.get('min_nz')}、入射角≤{rng.get('max_incidence_deg')}"
+            + (f"｜异常 {at_g.exception}" if at_g.exception else "")
+        )
+    rows.append(_row(
+        "几何修正：入射角/动态角度可切换，且支持范围与近似标注可见",
+        "solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围",
+        geo_note,
+        "通过" if ok_geo else "失败",
+        "批次 J / T19：两增强对照可检查、支持范围与误差标识可见",
+    ))
+
+    # 10b. 正入射时不得显示几何面板（未启用即不显示，不返回假数据）
+    at_n = fresh()
+    ok_no_geo = False
+    if _has(at_n.button, "submit_run"):
+        at_n.button(key="submit_run").click().run()
+        d_n = getattr(at_n.session_state.ui.frozen, "geometry_diagnostics", {}) or {}
+        ok_no_geo = (not at_n.exception) and d_n == {}
+    rows.append(_row(
+        "正入射：不显示几何修正面板（未启用即不显示）",
+        "geometry_diagnostics 为空字典",
+        f"空字典={ok_no_geo}",
+        "通过" if ok_no_geo else "失败",
+        "与批次 G/H/I 同口径：未启用不返回假数据",
+    ))
+
     # 清理：本探针自己写入 work_dir 的运行目录保持原样（work_dir 属临时目录）
     rows.append(_row(
         "探针运行输出位置", f"隔离到 {work}",

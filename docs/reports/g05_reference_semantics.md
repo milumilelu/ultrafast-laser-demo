@@ -1,7 +1,7 @@
 # G05：文献语义回归报告（批次 D / T07）
 
-- 生成时间（UTC）：2026-09-11T05:11:17.248016+00:00
-- 代码版本：commit=fdb7e8cedc2aab12d6122b27700d2e3f1ef7dc6d｜工作区有改动=True
+- 生成时间（UTC）：2026-09-11T06:20:10.766405+00:00
+- 代码版本：commit=7fb03e7141f40b94fca94ede8120ae48de2123f4｜工作区有改动=True
 - 汇总：通过 9｜失败 0
 
 源公式与实现的逐条对应见 `docs/reports/reference_equations.md`。

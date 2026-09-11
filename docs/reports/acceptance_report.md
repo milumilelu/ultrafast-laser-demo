@@ -1,10 +1,10 @@
 # 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）
 
-- 生成时间（UTC）：2026-09-11T05:11:17.222069+00:00
-- 代码版本：commit=fdb7e8cedc2aab12d6122b27700d2e3f1ef7dc6d｜工作区有改动=True｜源码清单哈希=8608aa04f7c5f142…
+- 生成时间（UTC）：2026-09-11T06:20:10.737002+00:00
+- 代码版本：commit=7fb03e7141f40b94fca94ede8120ae48de2123f4｜工作区有改动=True｜源码清单哈希=89b28636c51547c7…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
-- 汇总：通过 128｜失败 0｜未运行 2
+- 汇总：通过 138｜失败 0｜未运行 1
 
 > 公式核查、数值实现验证、实验复现三栏分开记录。本报告不含任何实验复现结论：
 > A–C 只做到「公式核查 + 数值实现验证」；D 的 YSZ/SiC 参考量也只做到「公式核查」；
@@ -78,10 +78,10 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T05:11:06.273340+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T06:19:49.408616+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T051106_oyaz |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T061949_hdrw |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
@@ -94,7 +94,9 @@
 | G09-UI | app.py（Streamlit） | threshold_only/参考结果：去除量显示「不提供」而非 0 | removal_available=False | removal_available=False｜run_id=g05_ysz_reference |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 求解模式可切为「冻结几何分组」并产出批量诊断 | solve_count+1｜acceleration_diagnostics.grouped=True｜含块数与批大小 | solve_count=0→1｜grouped=True｜批大小=5｜块=1｜拒绝/回退=0｜补丁复用率=0.0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考模式：加速面板如实说明未启用批量（不假装加速过） | grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明 | grouped=False｜effective_mode=reference｜boundary_note 存在=True |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 122 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 几何修正：入射角/动态角度可切换，且支持范围与近似标注可见 | solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围 | solve_count=0→1｜斜入射=True｜动态角度=True｜光轴夹角=59.99999999999999｜法向厚度转换=0｜支持范围 n_z≥0.5、入射角≤60.0 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 正入射：不显示几何修正面板（未启用即不显示） | geometry_diagnostics 为空字典 | 空字典=True |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 158 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
@@ -137,6 +139,14 @@
 | G09-watermark | runs/g01_single_pulse | watermark.json 存在且非空 | 存在且含 material_id/run_mode/unit_mode | 存在=True｜keys=19 |  |  | 通过 | 数值实现验证 |
 | G09-watermark | runs/g01_single_pulse | metadata 含 run_mode/unit_mode/watermark | 三者齐备 | run_mode=reference_case｜unit_mode=SI｜watermark_keys=19 |  |  | 通过 | 数值实现验证 |
 | G09-watermark | runs/g01_single_pulse | statistics.csv 含 watermark.* 自描述行 | watermark.material_id/run_mode/unit_mode 均存在 | watermark.* 行数=12 |  |  | 通过 | 数值实现验证 |
+| G07 | examples/ten_pulses.json | 0° 入射退化为正入射核（逐位一致） | height 完全相同 | 逐位=True | 0 | 严格相等 | 通过 | 数值实现验证 |
+| G07 | examples/oblique_plane_60deg.json | 60° 足迹长短轴比（应 = 1/cos60° = 2） | 2（±2 格离散容差） | 1.9917 | 0.0083 | <= 0.03 | 通过 | 数值实现验证 |
+| G07 | examples/oblique_plane_60deg.json | 60° 中心表面能流 = 法向对应值的 1/2 | 0.5×F_perp（μ=cos60°） | 0.500000000000 | 1.110e-16 | rel <= 1e-12 | 通过 | 数值实现验证 |
+| G07 | examples/oblique_plane_60deg.json | 完整平面截获能量（应为 Ep） | 1.160670e-05 J | 1.160670e-05 J | 1.685e-09 | rel <= 1% | 通过 | 数值实现验证 |
+| G07 | examples/tilted_plane_dynamic_angle.json | 斜平面 Δh=-a_n/n_z（解析预测） | 1.793211e-07 m | 1.793211e-07 m | 1.476e-16 | rel <= 2% | 通过 | 数值实现验证 |
+| G07 | examples/tilted_plane_dynamic_angle.json | 法向厚度转换被记录 | 转换次数 >= 1 且含近似说明 | 转换=1 |  | >= 1 | 通过 | 数值实现验证 |
+| G07 | （入射角 70° 超范围） | 超出软件范围即停止（不裁剪角度） | GEOMETRY_UNSUPPORTED 且说明 60° 上限 | ok=False｜码=['GEOMETRY_UNSUPPORTED'] |  | 拒绝 | 通过 | 数值实现验证 |
+| G07 | （竖直墙 + 60°） | 遮挡出现在墙的迎光侧 | 被遮挡列全部位于墙(x=80)迎光侧 | 列范围=64–79 |  | < 80 | 通过 | 数值实现验证 |
 | G08 | examples/ten_pulses.json | 深度场最大绝对差 (m) | 与逐脉冲参考接近浮点一致 | 0.000e+00（尺度 2.000e-06） | 0.000e+00 | rel <= 1e-12 | 通过 | 数值实现验证 |
 | G08 | examples/ten_pulses.json | 归一化 L2 差（完整逐脉冲对照） | 与逐脉冲参考接近浮点一致 | 0.000e+00 | 0.000e+00 | <= 1e-12 | 通过 | 数值实现验证 |
 | G08 | examples/ten_pulses.json | 曝光/照射计数逐位一致 | 与参考逐位相等 | 曝光=True｜照射=True |  | 两者皆为 True | 通过 | 数值实现验证 |
@@ -149,12 +159,10 @@
 | B02-numba | 性能基准（同配置仅换局部核后端（off → numba）） | 求解耗时 / 峰值内存 | 见 docs/reports/performance_baseline.md | 加速比=0.999｜峰值内存=50.709 MB｜块=79｜拒绝=0 |  | 记录实测（非承诺） | 通过 | 数值实现验证 |
 | B03 | 性能基准（事件流与长序列内存（512×512、100000 脉冲、有限快照）） | 求解耗时 / 峰值内存 | 见 docs/reports/performance_baseline.md | 加速比=｜峰值内存=29.312 MB｜块=391｜拒绝=0 |  | 记录实测（非承诺） | 通过 | 数值实现验证 |
 | B04 | 性能基准（分组加速与参考误差（5 行 × 40 点 × 3 遍蛇形）） | 求解耗时 / 峰值内存 | 见 docs/reports/performance_baseline.md | 加速比=1.323｜峰值内存=12.165 MB｜块=19｜拒绝=0 |  | 记录实测（非承诺） | 通过 | 数值实现验证 |
-| G07 | （斜入射基准） | 0° 退化；60° 足迹比 2、中心能流减半；可见性 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
 | G09 | （查表接入逐事件核） | 查表值进入逐事件主循环并保持语义一致 | 见执行细则 10 节 | 未运行 |  |  | 未运行 | 数值实现验证 |
 
 ## 未运行项与原因
 
-- **G07**（数值实现验证）：批次 J（T18）未实施：斜入射在配置层拦截（GEOMETRY_UNSUPPORTED）
 - **G09**（数值实现验证）：批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 event_depth_increment 且协议适用时才可进入，本批不启用该通道）
 
 ## 复现命令
