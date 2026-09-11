@@ -24,6 +24,10 @@ runs/_ui_demo_probe/
 _streamlit.log
 *.log
 
+# 本地临时输出（测试 / 诊断重定向到仓库根目录的临时文件）
+/_*.txt
+/_*.tar
+
 # 编辑器
 .vscode/
 .idea/
