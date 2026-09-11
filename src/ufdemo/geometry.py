@@ -322,6 +322,7 @@ def first_intersection_visibility(
     direction_unit: Any,
     *,
     section: tuple[int, int, int, int] | None = None,
+    global_height: Any | None = None,
     step_factor: float = DEFAULT_STEP_FACTOR,
     max_steps: int = DEFAULT_MAX_STEPS,
 ) -> np.ndarray:
@@ -342,7 +343,10 @@ def first_intersection_visibility(
     Python 循环），并无条件走「完全平坦 → 无自遮挡」的解析快速路径；
     仍只对局部照射窗口调用（`beam.py` 内），不对全网格无条件启用。
     """
-    h = np.asarray(height, dtype=np.float64)
+    # Keep the full surface for ray sampling when the requested result is a
+    # local window.  A local height crop alone cannot detect upstream points
+    # outside that crop and can also be indexed with global dimensions.
+    h = np.asarray(global_height if global_height is not None else height, dtype=np.float64)
     k = np.asarray(direction_unit, dtype=np.float64)
     to_source = k  # 朝光源侧（k·n>0 的约定下即为 +k）
 

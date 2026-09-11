@@ -357,7 +357,8 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
         check_geometry_range(n_z, mu, surface.grid, where="solver.dynamic_angle")
 
         visible = first_intersection_visibility(
-            HH, surface.grid, kvec, section=(iy0, iy1, ix0, ix1)
+            HH, surface.grid, kvec, section=(iy0, iy1, ix0, ix1),
+            global_height=h_ref,
         )
         vis_stats = visibility_summary(visible, surface.grid)
         F = project_fluence(F_perp, mu, visible=visible)
@@ -375,8 +376,12 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
                 "这不代表材料内部无任何响应，而是几何上不直接受照。"
             )
     dA = surface.grid.dx_m * surface.grid.dy_m
-    intercepted = float(np.sum(F[mask]) * dA)
-    total_plane = float(np.sum(F) * dA)
+    # F is defined per unit *surface* area after projection.  Convert the
+    # horizontal cell area to surface area for sloped faces; the old
+    # projection-area integral under-counted a complete oblique plane by μ.
+    area_factor = np.ones_like(F, dtype=np.float64) if mu is None else (1.0 / np.maximum(n_z, 1e-15))
+    intercepted = float(np.sum(F[mask] * area_factor[mask]) * dA)
+    total_plane = float(np.sum(F * area_factor) * dA)
 
     # 尾部截断：裁剪半径之外的能量占比（解析值）。它是数值设置，不是物理阈值。
     tail_frac_analytic = math.exp(-2.0 * (r_cut * r_cut) / (w_used * w_used))

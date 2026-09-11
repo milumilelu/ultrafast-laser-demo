@@ -102,3 +102,13 @@ def test_pass_snapshots_are_end_of_pass_and_obey_limit(fixture_card):
     assert [s["event_index"] for s in policy] == [2]
     assert capped.snapshots[-1]["final"] is True
     assert capped.snapshots[-1]["event_index"] == 8
+
+def test_local_visibility_uses_global_surface_for_upstream_occluders():
+    from types import SimpleNamespace
+    from ufdemo.geometry import first_intersection_visibility
+    g = SimpleNamespace(nx=21, ny=5, dx_m=1.0, dy_m=1.0, center_x_m=0.0, center_y_m=0.0)
+    h = np.zeros((5, 21)); h[:, 13:] = 10.0
+    k = (math.sin(math.pi / 3), 0.0, math.cos(math.pi / 3))
+    local = first_intersection_visibility(h[:, 9:12], g, k, section=(1, 4, 9, 12), global_height=h)
+    full = first_intersection_visibility(h, g, k, section=(1, 4, 9, 12))
+    assert np.array_equal(local, full)
