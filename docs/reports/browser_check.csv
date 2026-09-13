@@ -1,5 +1,5 @@
 ﻿u03,check,expected,measured,status,note
-U03-浏览器级,运行环境,真实系统浏览器,chrome 152.0.7977.84｜C:/Program Files/Google/Chrome/Application/chrome.exe,通过,真实求解=True｜结果：C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check\probe\result.json
+U03-浏览器级,运行环境,真实系统浏览器,chrome 152.0.7977.84｜C:/Program Files/Google/Chrome/Application/chrome.exe,通过,真实求解=True｜结果：C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\_browser_check\probe\result.json
 U03-1 启动,首页返回 200（实际 200）,,符合,通过,
 U03-1 启动,页面未显示 boot-error 面板,,符合,通过,
 U03-1 启动,无未捕获 JS 异常,,符合,通过,
