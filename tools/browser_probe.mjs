@@ -136,7 +136,24 @@ console.log(`浏览器：${br.name} ${br.version}\n  ${br.exe}`);
 console.log(`目标：${BASE}\n无头：${!HEADED}｜真实求解：${DO_SOLVE}\n产物：${OUT}\n`);
 
 fs.mkdirSync(OUT, { recursive: true });
-const profileDir = path.join(OUT, ".profile");
+
+/* ⚠️ **每次都用全新 profile**（启动前清掉上一次的）。
+ *
+ * 为什么必须清：脚本末尾虽然会删 `.profile`，但那只在**正常跑到结尾**时生效。
+ * 探针一旦被中途杀掉（超时、Ctrl-C、外部 kill），`.profile` 就留下来带着
+ * `SingletonLock` / `SingletonCookie` 等锁文件 → 下一次 Chrome **拒绝启动这个
+ * profile**，`puppeteer.launch` 卡在等 DevTools 端点。
+ *
+ * 症状极具误导性：探针**进程在跑**、**一个 chrome 都没有**、挂十几分钟不返回
+ * （实测挂 10 分钟 vs 正常 45 秒），看起来像「探针坏了 / 环境又坏了」。
+ * 删不掉（仍被占用）时退到带 pid+时间戳的唯一目录，保证一定能启动。 */
+let profileDir = path.join(OUT, ".profile");
+try {
+  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+} catch {
+  profileDir = path.join(OUT, `.profile-${process.pid}-${Date.now()}`);
+  fs.mkdirSync(profileDir, { recursive: true });
+}
 
 const browser = await puppeteer.launch({
   executablePath: br.exe,
@@ -608,8 +625,28 @@ try {
     summary: { pass, fail, skipped }, checks,
     consoleErrors, pageErrors, failedRequests: failedReqs, apiCalls, actionErrors,
   }, null, 2));
-  await browser.close();
-  if (!HEADED) { try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch {} }
+
+  /* ⚠️ `browser.close()` 在 Windows + 本机 Chrome 下**会永久挂住**：
+   * Chrome 进程其实已经退出（进程表里一个都没有），但 CDP 连接的关闭应答不返回，
+   * 于是这个 await 永不 resolve。
+   *
+   * 后果极具误导性：`result.json` 已写好、结果完全正常，但**探针进程不退出** →
+   *   - 包装器 `tools/browser_check.py` 等到 900s 超时，把「探针成功」误报成「未运行」；
+   *   - 验收总数凭空少一整组（实测：168 → 138），看起来像 U03 全坏。
+   *
+   * 因此这里加**超时兜底**：close 超时就直接强杀浏览器进程并继续往下走。
+   * `result.json` 已经先写好，所以结果永远不会因为这个丢。 */
+  await Promise.race([
+    browser.close().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 15000)),
+  ]);
+  try { browser.process()?.kill("SIGKILL"); } catch { /* 已退出 */ }
+
+  // 清理 profile：只做**有界**尝试，绝不能让清理把进程挂住
+  if (!HEADED) {
+    try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+    catch { /* 仍被占用就留给下次启动前清理 */ }
+  }
 }
 
 /* U03 逐路径汇总，便于人工对照清单 */
