@@ -156,8 +156,30 @@ def _wait_health(base: str, proc: subprocess.Popen, timeout: float = 30.0) -> bo
 
 # ---------------- 主流程 ----------------
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """杀掉子进程**整棵树**。
+
+    为什么必须连树一起杀：探针会拉起 Chrome 子进程。只杀 node 会留下孤儿
+    Chrome 继续占着 profile 目录，下一次探针就起不来（本工程踩过）。
+    Windows 用 ``taskkill /T /F``，其它平台退回 ``proc.kill()``。
+    """
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, timeout=20, check=False)
+        else:
+            proc.kill()
+    except Exception:  # noqa: BLE001 - 兜底失败也不能让包装器自己挂掉
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def run_browser_checks(out_dir: Path, *, browser: str = "auto", solve: bool = True,
-                       port: int | None = None, timeout: float = 900.0) -> list[dict[str, Any]]:
+                       port: int | None = None, timeout: float = 300.0) -> list[dict[str, Any]]:
     """起隔离服务 → 跑 node 探针 → 把逐条结果映射成验收行。
 
     前置条件不满足时**不抛异常**，而是返回带准确原因的「未运行」行——
@@ -208,14 +230,36 @@ def run_browser_checks(out_dir: Path, *, browser: str = "auto", solve: bool = Tr
         env["NO_PROXY"] = "127.0.0.1,localhost"
         env["no_proxy"] = "127.0.0.1,localhost"
         env["WB_NODE_WS"] = NODE_WS
-        cp = subprocess.run(cmd, cwd=str(ROOT), env=env, capture_output=True, text=True,
-                            timeout=timeout)
+        # 用 Popen + communicate 而不是 subprocess.run：
+        # 超时后要能**杀掉整棵进程树**（node + 它拉起的 Chrome），
+        # 否则孤儿 Chrome 会占着 profile 目录，下一次探针起不来（本工程踩过）。
+        cp = subprocess.Popen(cmd, cwd=str(ROOT), env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            out_s, err_s = cp.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_tree(cp)
+            try:
+                out_s, err_s = cp.communicate(timeout=15)
+            except Exception:  # noqa: BLE001
+                out_s, err_s = "", ""
+            (out_dir / "browser_probe.log").write_text(
+                (out_s or "") + "\n" + (err_s or ""), encoding="utf-8")
+            # ⚠️ **挂死是「失败」，不是「未运行」** —— 两者含义完全不同：
+            # 「未运行」= 没跑；「失败」= 跑了但没跑完。把它记成未运行会把
+            # 一个真实缺陷藏起来（本工程踩过：探针挂死被记成未运行，
+            # 验收凭空少一整组，看起来像功能没做）。
+            return [_row("U03 浏览器级", f"探针在 {timeout:.0f}s 内完成", "在超时内完成",
+                         f"超时 {timeout:.0f}s（已终止进程树）", "失败",
+                         "探针挂死：不是断言失败。用命令行核对 Chrome 是否启动、"
+                         "profile 是否被占用、CDP 是否返回。",
+                         "U03-浏览器级")]
         log_file = out_dir / "browser_probe.log"
-        log_file.write_text((cp.stdout or "") + "\n" + (cp.stderr or ""), encoding="utf-8")
+        log_file.write_text((out_s or "") + "\n" + (err_s or ""), encoding="utf-8")
 
         result_file = probe_out / "result.json"
         if not result_file.exists():
-            tail = "\n".join((cp.stdout or "").splitlines()[-12:])
+            tail = "\n".join((out_s or "").splitlines()[-12:])
             return [_row("U03 浏览器级", "探针产出 result.json", "未运行", "未运行",
                          f"探针未产出 result.json（exit={cp.returncode}）。末尾输出：{tail}",
                          "U03-浏览器级")]
@@ -236,10 +280,9 @@ def run_browser_checks(out_dir: Path, *, browser: str = "auto", solve: bool = Tr
                             "通过", f"真实求解={data.get('solveRan')}｜结果：{result_file}",
                             "U03-浏览器级"))
         return rows
-    except subprocess.TimeoutExpired:
-        return [_row("U03 浏览器级", "探针在超时内完成", "未运行", "未运行",
-                     f"探针运行超过 {timeout:.0f}s", "U03-浏览器级")]
     finally:
+        # 收尾：关掉自起的 web 服务。**无论成功/超时/异常都要关** ——
+        # 否则会留下占端口的僵尸服务。
         try:
             proc.terminate()
             proc.wait(timeout=10)

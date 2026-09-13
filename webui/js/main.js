@@ -1357,6 +1357,7 @@ function renderAll() {
   renderRefPanel();
   renderTablePanel();
   renderCapsPanel();
+  renderProcessPanel();
   renderHistoryPanel();
 }
 
@@ -1407,9 +1408,117 @@ function bindGlobal() {
   $("#t-lookup").addEventListener("click", onLookup);
 
   $("#h-run").addEventListener("change", (e) => { state.history.idx = +e.target.value; renderHistoryPanel(); });
+  const peRun = $("#pe-run");
+  if (peRun) peRun.addEventListener("click", onEvaluatorPredict);
   $("#h-load").addEventListener("click", onLoadHistory);
 
   window.addEventListener("resize", () => { paintResultCharts(); paintCurveChart(); });
+}
+
+/* U06：金刚石过程响应评估器面板。
+ * 显示「数据支持范围 + 三档指标 + 门槛判定 + 预测」。
+ * **不走 /api/solve**：这是独立的工艺响应通道，不产生形貌、不递增求解次数。 */
+function renderProcessPanel() {
+  const box = $("#pe-summary");
+  if (!box) return;
+  const d = STORE.diamondEvaluator;
+  if (!d || d.available === false) {
+    box.innerHTML = `<div class="empty">${escHTML((d && d.reason) || "评估器数据不可用。")}</div>`;
+    $("#pe-result").innerHTML = "";
+    return;
+  }
+  const b = d.support_bounds || {};
+  const f = (v) => (typeof v === "number" ? v.toFixed(2) : "—");
+  const row = (name, m) =>
+    `<tr><td>${escHTML(name)}</td><td>${f(m.MAPE_percent)}%</td>
+     <td>${f(m.RMSE)}</td></tr>`;
+  const g = d.grouped_cv_metrics || {}, t = d.training_metrics || {}, h = d.holdout;
+
+  box.innerHTML =
+    `<div class="watermark">数据：${escHTML(d.material_family || "?")}｜doi ${escHTML(d.source_doi || "?")}
+      ｜训练 ${d.n_training_rows} 行（${d.n_distinct_conditions} 种工况）｜
+      α=${d.regularization_alpha}｜分组 CV seed=${d.grouped_cv_seed}</div>
+     <div class="section-title">数据支持范围（超出即拒绝预测，不外推）</div>
+     <table class="data"><thead><tr><th>输入</th><th>下限</th><th>上限</th></tr></thead><tbody>
+       <tr><td>功率 P（W）</td><td>${f((b.power_W||[])[0])}</td><td>${f((b.power_W||[])[1])}</td></tr>
+       <tr><td>扫描速度 v（m/s）</td><td>${f((b.scan_speed_m_s||[])[0])}</td><td>${f((b.scan_speed_m_s||[])[1])}</td></tr>
+       <tr><td>遍数 N</td><td>${f((b.passes||[])[0])}</td><td>${f((b.passes||[])[1])}</td></tr>
+     </tbody></table>
+     <div class="notice warn">「在采样范围内」是<strong>必要条件</strong>，不是支撑保证：
+       范围内仍可能存在未采样区域。结论只适用于同一研究的工艺窗口。</div>
+     <div class="section-title">误差（三档并报，缺一不可）</div>
+     <table class="data"><thead><tr><th>输出</th><th>MAPE</th><th>RMSE</th></tr></thead><tbody>
+       ${row("训练（同批拟合）", t.depth_um || {})}
+       ${row("分组五折（泛化）", g.depth_um || {})}
+       ${h ? row("留出（1 工况）", (h.metrics || {}).depth_um || {}) : ""}
+     </tbody></table>
+     <div class="notice warn">
+       <strong>不要只看留出</strong>：留出只有 1 个工况，看起来漂亮；
+       分组五折的深度误差才是这个小样本的真实泛化水平
+       （MAPE ${f((g.depth_um||{}).MAPE_percent)}%）。
+       样本 ${d.n_distinct_conditions} 种工况，<strong>任何「高精度/普适」的说法都不成立</strong>。
+     </div>
+     <div class="notice warn">门槛判定：${escHTML((d.gate||{}).verdict || "—")}
+       （自设门槛：分组五折深度 MAPE ≤ ${((d.gate||{}).gate||{}).grouped_cv_depth_mape_percent_max ?? "—"}%）</div>
+     <div class="watermark">${escHTML(d.disclaimer || "")}</div>`;
+
+  const hr = $("#pe-result");
+  if (h) {
+    hr.innerHTML =
+      `<div class="section-title">留出对照（${escHTML((h.case_ids||[]).join("、"))}，未参与拟合）</div>
+       <table class="data"><thead><tr><th>输出</th><th>实测</th><th>预测</th><th>相对误差</th></tr></thead><tbody>
+       ${["width_um","depth_um","Ra_um"].map((k) => {
+          const m = h.measured[k], p = h.predicted[k];
+          return `<tr><td>${escHTML(k)}</td><td>${m}</td><td>${p.toFixed(4)}</td>
+                  <td>${(Math.abs(p-m)/m*100).toFixed(2)}%</td></tr>`;
+       }).join("")}
+       </tbody></table>`;
+  } else {
+    hr.innerHTML = "";
+  }
+}
+
+async function onEvaluatorPredict() {
+  const out = $("#pe-result");
+  const P = parseFloat($("#pe-power").value);
+  const v = parseFloat($("#pe-speed").value);
+  const N = parseFloat($("#pe-passes").value);
+  if (![P, v, N].every(Number.isFinite)) {
+    out.innerHTML = `<div class="notice warn">三个输入都必须是有限数值。</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="watermark">预测中…（此操作<strong>不触发求解</strong>）</div>`;
+  let res;
+  try {
+    res = await API.evaluatorPredict(P, v, N);
+  } catch (e) {
+    out.innerHTML = `<div class="notice warn">请求失败：${escHTML(e && e.message ? e.message : String(e))}</div>`;
+    return;
+  }
+  if (!res.available) {
+    out.innerHTML = `<div class="notice warn">${escHTML(res.reason || "评估器不可用")}</div>`;
+    return;
+  }
+  if (!res.ok) {
+    /* 越界是**显式拒绝**，不是错误弹窗：把原因与边界如实展示出来。 */
+    const e = res.error || {};
+    out.innerHTML =
+      `<div class="notice warn"><strong>已拒绝（不外推）</strong>：${escHTML(e.message || "工况超出采样范围")}
+        <div class="watermark">要求：${escHTML(e.requirement || "三输入落在采样范围内")}
+        ｜越界项：${escHTML(JSON.stringify((e.actual !== undefined) ? e.actual : []))}</div></div>`;
+    return;
+  }
+  const o = res.outputs || {};
+  out.innerHTML =
+    `<div class="section-title">预测结果（工艺级过程响应，非脉冲律）</div>
+     <table class="data"><thead><tr><th>输出</th><th>预测</th></tr></thead><tbody>
+       <tr><td>沟槽宽度（μm）</td><td>${(o.width_um ?? 0).toFixed(4)}</td></tr>
+       <tr><td>沟槽深度（μm）</td><td>${(o.depth_um ?? 0).toFixed(4)}</td></tr>
+       <tr><td>Ra（μm）</td><td>${(o.Ra_um ?? 0).toFixed(4)}</td></tr>
+     </tbody></table>
+     ${(res.warnings || []).map((w) => `<div class="watermark">· ${escHTML(w)}</div>`).join("")}
+     <div class="notice warn">该结果<strong>不进主循环、不改变形貌</strong>；
+       形貌预测请用「参数与运行」的逐事件求解。</div>`;
 }
 
 /* 默认选择：优先挑**能真实出物理结果**的材料与匹配的模板。 */

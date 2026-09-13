@@ -1430,6 +1430,143 @@ def assert_dataset_increment_access(record: Mapping[str, Any]) -> None:
     DS.assert_increment_access(record)
 
 
+def build_diamond_evaluator(measured_dir: str | Path):
+    """从实测数据建构金刚石过程响应评估器（U06）。返回 ``None`` 表示数据缺失。
+
+    **每次调用重新拟合**：17 行数据、10 个系数，代价可忽略；
+    缓存反而会引入「数据变了但模型没更新」的隐患。
+    """
+    import csv as _csv
+
+    from .evaluators import ProcessEvaluator
+
+    path = Path(measured_dir) / "diamond_rsm_measured.csv"
+    if not path.exists():
+        return None
+    rows = list(_csv.DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+    if not rows:
+        return None
+    return ProcessEvaluator.from_rows(rows)
+
+
+def diamond_evaluator_summary(measured_dir: str | Path) -> dict[str, Any]:
+    """过程响应评估器的**摘要**：支持范围、指标、门槛判定、留出对照。
+
+    界面用它渲染「数据支持范围 + 预测」面板。
+    **不产生形貌、不求解网格**。
+    """
+    from . import evaluators as EV
+
+    ev = build_diamond_evaluator(measured_dir)
+    if ev is None:
+        return {
+            "available": False,
+            "reason": (
+                "未找到 data/measured/diamond_rsm_measured.csv（U04 未导入）。"
+                "过程响应评估器需要该实测数据才能拟合。"
+            ),
+        }
+
+    # 指标：训练 / 分组五折 / 留出。**三者必须并报** ——
+    # 只报留出会把 3.26% 当成模型水平，而分组五折的深度是 52.42%。
+    import numpy as _np
+
+    from .evaluators import (
+        DEFAULT_ALPHA,
+        GROUPED_CV_SEED,
+        INPUTS,
+        OUTPUTS,
+        QuadraticResponseSurface,
+        design,
+    )
+
+    import csv as _csv
+
+    path = Path(measured_dir) / "diamond_rsm_measured.csv"
+    rows = list(_csv.DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+    train = [r for r in rows if r["split_role"] == "calibration_candidate"]
+    hold = [r for r in rows if r["split_role"] == "held_out_published_confirmation"]
+
+    def _metric(pred, actual):
+        out = {}
+        for j, name in enumerate(OUTPUTS):
+            d = pred[:, j] - actual[:, j]
+            out[name] = {
+                "MAE": float(_np.mean(_np.abs(d))),
+                "RMSE": float(_np.sqrt(_np.mean(d**2))),
+                "MAPE_percent": float(100.0 * _np.mean(_np.abs(d / actual[:, j]))),
+            }
+        return out
+
+    surf = ev.surface
+    assert surf.coef_ is not None
+    x = _np.array([[float(r[k]) for k in INPUTS] for r in train])
+    y = _np.array([[float(r[k]) for k in OUTPUTS] for r in train])
+    train_metrics = _metric(design(x) @ surf.coef_, y)
+
+    # 分组五折（与报告同一 seed、同一划分）
+    groups = _np.array([r["condition_group"] for r in train])
+    unique = _np.unique(groups)
+    rng = _np.random.default_rng(GROUPED_CV_SEED)
+    shuffled = unique.copy()
+    rng.shuffle(shuffled)
+    oof = _np.full_like(y, _np.nan)
+    folds = []
+    for k, vg in enumerate(_np.array_split(shuffled, 5)):
+        va = _np.isin(groups, vg)
+        tr = ~va
+        s = QuadraticResponseSurface(alpha=DEFAULT_ALPHA).fit(x[tr], y[tr])
+        assert s.coef_ is not None
+        oof[va] = design(x[va]) @ s.coef_
+        folds.append({
+            "fold": k,
+            "train_records": int(tr.sum()),
+            "validation_records": int(va.sum()),
+            "train_design_rank": int(_np.linalg.matrix_rank(design(x[tr]))),
+            "validation_groups": [str(g) for g in vg],
+        })
+    grouped_metrics = _metric(oof, y)
+
+    hold_block = None
+    if hold:
+        hx = _np.array([[float(r[k]) for k in INPUTS] for r in hold])
+        hy = _np.array([[float(r[k]) for k in OUTPUTS] for r in hold])
+        hp = design(hx) @ surf.coef_
+        hold_block = {
+            "case_ids": [str(r["case_id"]) for r in hold],
+            "inputs": {k: float(hx[0, j]) for j, k in enumerate(INPUTS)},
+            "measured": {k: float(hy[0, j]) for j, k in enumerate(OUTPUTS)},
+            "predicted": {k: float(hp[0, j]) for j, k in enumerate(OUTPUTS)},
+            "metrics": _metric(hp, hy),
+        }
+
+    depth_mape = grouped_metrics["depth_um"]["MAPE_percent"]
+    return {
+        "available": True,
+        "material_family": ev.material_family,
+        "source_doi": ev.source_doi,
+        "n_training_rows": ev.n_training_rows,
+        "n_distinct_conditions": ev.n_distinct_conditions,
+        "inputs": list(INPUTS),
+        "outputs": list(OUTPUTS),
+        "regularization_alpha": DEFAULT_ALPHA,
+        "grouped_cv_seed": GROUPED_CV_SEED,
+        "support": surf.check_support(x).to_dict() if hasattr(surf, "check_support") else None,
+        "support_bounds": {k: list(v) for k, v in surf.bounds_.items()},
+        "training_metrics": train_metrics,
+        "grouped_cv_metrics": grouped_metrics,
+        "holdout": hold_block,
+        "folds": folds,
+        "gate": ev.validation_verdict(depth_mape),
+        "warnings": list(ev.warnings),
+        "disclaimer": (
+            "**辅助手段，不替代逐事件物理引擎的验证。** "
+            "本面板是工艺级过程响应（宽/深/Ra），不是单脉冲去除律，"
+            "不进主循环、不改变形貌。"
+        ),
+    }
+
+
 def list_runs(base_dir: str | Path, *, max_depth: int = 2) -> list[dict[str, Any]]:
     """列出可读取的运行目录（``runs/<id>`` 与 ``runs/<group>/<id>``）。
 

@@ -53,8 +53,16 @@ const API = {
   curves() { return this.get("/api/curves"); },
   references() { return this.get("/api/references"); },
   runs() { return this.get("/api/runs"); },
-  layers() { return this.get("/api/layers"); },
-  readRun(id) { return this.get("/api/runs/" + encodeURIComponent(id)); },
+    layers() { return this.get("/api/layers"); },
+    readRun(id) { return this.get("/api/runs/" + encodeURIComponent(id)); },
+    /* U05：实测数据集与权限（观测可放、增量必拦）。 */
+    datasets() { return this.get("/api/datasets"); },
+    /* U06：过程响应评估器摘要（支持范围 + 三档指标 + 门槛判定）。 */
+    diamondEvaluator() { return this.get("/api/diamond-evaluator"); },
+    /* U06：工艺三输入 → 过程响应预测。**不触发求解、不产生形貌**。 */
+    evaluatorPredict(power_W, scan_speed_m_s, passes) {
+      return this.post("/api/evaluator-predict", { power_W, scan_speed_m_s, passes });
+    },
   solve(params, label) { return this.post("/api/solve", { params, label: label || "web_run" }); },
   preview(params) { return this.post("/api/preview", { params }); },
   lookup(curve, xs, method, allowOutOfRange) {
@@ -265,6 +273,11 @@ const STORE = {
   curves: [],
   references: [],
   runs: [],
+  /* U05/U06 的辅助数据。**单独加载、失败不拖垮主引导**：
+   * 它们是新增面板，后端老版本没有这两个端点时，主界面仍应可用。 */
+  datasets: null,
+  diamondEvaluator: null,
+  auxErrors: [],
   error: null,
 };
 
@@ -284,6 +297,14 @@ async function bootstrapData() {
   STORE.references = references.cases || [];
   STORE.runs = runs.runs || [];
   STORE.layerMeta = layers;
+
+  /* 辅助面板：**逐个 try**，失败只记原因，不阻断主引导。 */
+  STORE.auxErrors = [];
+  try { STORE.datasets = await API.datasets(); }
+  catch (e) { STORE.datasets = null; STORE.auxErrors.push(`/api/datasets：${e && e.message ? e.message : e}`); }
+  try { STORE.diamondEvaluator = await API.diamondEvaluator(); }
+  catch (e) { STORE.diamondEvaluator = null; STORE.auxErrors.push(`/api/diamond-evaluator：${e && e.message ? e.message : e}`); }
+
   STORE.ready = true;
   return STORE;
 }

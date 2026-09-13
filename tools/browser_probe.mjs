@@ -662,6 +662,35 @@ try {
     }
   } else skip(null, "页面上没有 #t-lookup", "查表不递增求解次数");
 
+  /* ================= 附加：过程响应面板（U06）=================
+   * 这一组**不占 U03 主干路径编号**（U03 的 9 条已定稿），作为附加不变量：
+   * 预测必须走独立通道，**不得**递增求解次数。 */
+  console.log("\n[X] 附加：过程响应面板（U06）");
+  if (await page.$("#pe-run")) {
+    await switchTab("process");
+    const b5 = await chip("chip-solve");
+    actionErrors.length = 0; apiCalls.length = 0;
+
+    const shown = await page.$eval("#pe-summary", (el) => el.textContent || "");
+    ok(/支持范围|采样/.test(shown), null, "面板显示「数据支持范围」",
+      shown.slice(0, 60).replace(/\s+/g, " "));
+    ok(/52\.\d+|分组五折/.test(shown), null, "面板同时给出分组五折误差（不只报留出）");
+    ok(/不替代逐事件物理引擎/.test(shown), null, "面板明确标注「辅助手段，不替代物理引擎验证」");
+
+    const e = await click("#pe-run", "点击「预测」");
+    await settle(1200);
+    if (e) ok(false, null, "点得动「预测」", e);
+    else {
+      const out = await page.$eval("#pe-result", (el) => el.textContent || "");
+      ok(/深度/.test(out) && /宽度/.test(out), null, "给出宽/深预测结果",
+        out.slice(0, 60).replace(/\s+/g, " "));
+      ok((await chip("chip-solve")) === b5,
+        null, `预测后求解次数不变（${b5} → ${await chip("chip-solve")}）`);
+      ok(!apiCalls.some((c) => c.path === "/api/solve"),
+        null, "预测未触发 POST /api/solve（独立通道）");
+    }
+  } else skip(null, "页面上没有 #pe-run", "过程响应面板（U06）");
+
   /* 所有被点击控件的响应性汇总（防止「点不到」被静默吞掉） */
   ok(actionErrors.length === 0, null, "所有被点击的控件都真实响应（无「点不到」）",
     actionErrors.slice(0, 3).join(" | "));

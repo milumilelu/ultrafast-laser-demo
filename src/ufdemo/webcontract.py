@@ -571,6 +571,16 @@ def datasets_payload(measured_dir: str | Path) -> dict[str, Any]:
     return {"schema": "ufdemo.web.datasets/1", **payload}
 
 
+def diamond_evaluator_payload(measured_dir: str | Path) -> dict[str, Any]:
+    """金刚石过程响应评估器摘要（U06）。
+
+    **辅助手段，不替代逐事件物理引擎的验证**；不产生形貌、不求解网格。
+    指标三档并报（训练 / 分组五折 / 留出），避免只报好看的留出数。
+    """
+    payload = U.diamond_evaluator_summary(measured_dir)
+    return {"schema": "ufdemo.web.diamond_evaluator/1", **payload}
+
+
 def _safe_curve_name(curves_dir: str | Path, name: str) -> str:
     """Validate a curve card selector and keep it below ``curves_dir``."""
     if not isinstance(name, str) or not name or Path(name).name != name:

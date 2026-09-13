@@ -284,6 +284,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif path == "/api/datasets":
             # U05：实测数据集与权限。判定与界面同源（datasets.evaluate）。
             self._send_json(W.datasets_payload(ctx.measured_dir))
+        elif path == "/api/diamond-evaluator":
+            # U06：过程响应评估器摘要（支持范围 + 三档指标 + 门槛判定）。
+            self._send_json(W.diamond_evaluator_payload(ctx.measured_dir))
         elif path == "/api/references":
             self._send_json(W.references_payload(ctx.examples_dir))
         elif path == "/api/runs":
@@ -335,6 +338,50 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not isinstance(params, dict):
                 raise HttpError("BAD_REQUEST_BODY", "缺少 params 对象", status=400, field_path="params")
             self._send_json(W.preview_payload(params, project_root=ctx.project_root))
+        elif path == "/api/evaluator-predict":
+            # U06：工艺三输入 → 过程响应预测（宽/深/Ra）。
+            # **不触发求解、不产生形貌**：这是另一条独立通道，不是 /api/solve。
+            body = self._read_body()
+            try:
+                inputs = {
+                    "power_W": float(body["power_W"]),
+                    "scan_speed_m_s": float(body["scan_speed_m_s"]),
+                    "passes": float(body["passes"]),
+                }
+            except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                raise HttpError(
+                    "BAD_REQUEST_BODY",
+                    "需要 power_W / scan_speed_m_s / passes 三个数值",
+                    status=400,
+                    field_path="power_W|scan_speed_m_s|passes",
+                    requirement="三个有限数值",
+                ) from exc
+            import math as _m
+            if not all(_m.isfinite(v) for v in inputs.values()):
+                raise HttpError(
+                    "BAD_REQUEST_BODY", "三个输入都必须是有限数值", status=400,
+                    field_path="power_W|scan_speed_m_s|passes",
+                    requirement="有限实数",
+                )
+            from . import ui_service as _U
+
+            ev = _U.build_diamond_evaluator(ctx.measured_dir)
+            if ev is None:
+                self._send_json({"schema": "ufdemo.web.evaluator_predict/1",
+                                 "available": False,
+                                 "reason": "缺少 data/measured/diamond_rsm_measured.csv"})
+                return
+            try:
+                pred = ev.predict(inputs, strict=True)
+            except UFDemoError as err:
+                # 越界**显式拒绝**（不外推）—— 用结构化错误告诉前端为什么
+                self._send_json({"schema": "ufdemo.web.evaluator_predict/1",
+                                 "available": True, "ok": False,
+                                 "error": err.to_dict(),
+                                 "hint": "工况超出采样范围时不外推；请改用箱内工况。"})
+                return
+            self._send_json({"schema": "ufdemo.web.evaluator_predict/1",
+                             "available": True, "ok": True, **pred.to_dict()})
         elif path == "/api/lookup":
             body = self._read_body()
             curve = body.get("curve")
