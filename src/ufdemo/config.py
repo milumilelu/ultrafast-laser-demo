@@ -11,8 +11,10 @@
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .errors import (
@@ -826,6 +828,11 @@ class SolverConfig:
     #: （`TabulatedEventLaw`），而不是材料卡的解析对数律。
     #: 这是「真实数据 → 真实求解」的唯一入口；留空则维持原行为。
     response_curve: str | None = None
+    #: **标定正增益 a**（C4）。逐事件增量的全局比例：``Δd_cal = a·Δd_base``。
+    #: ⚠️ 它作用在**每个脉冲的几何更新之前**，后续脉冲会按新表面重算被动离焦 ——
+    #: 因此 ``D(a) ≠ a·D(1)``。**不得**改成只在结果页乘系数。
+    #: ``1.0`` = 基线（未标定），这也是默认值。
+    response_gain: float = 1.0
     extra: Mapping[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -898,6 +905,7 @@ class SolverConfig:
             max_cell_block=max_cell_block,
             response_curve=(str(raw["response_curve"]).strip()
                             if str(raw.get("response_curve") or "").strip() else None),
+            response_gain=_require_positive_gain(raw.get("response_gain", 1.0)),
             extra=dict(raw.get("extra", {}) or {}),
         )
 
@@ -921,6 +929,7 @@ class SolverConfig:
             "geometry_drift_limit": self.geometry_drift_limit,
             "max_cell_block": self.max_cell_block,
             "response_curve": self.response_curve,
+            "response_gain": self.response_gain,
         }
 
 
@@ -1496,6 +1505,34 @@ def check_reference_conditions(config: RunConfig, material: Any) -> list[UFDemoE
     return errs
 
 
+def _require_positive_gain(value: Any) -> float:
+    """标定增益必须是**正有限数**。
+
+    为什么不允许 ≤ 0：增益是去除量的比例因子。非正意味着「不去除」或「反向生长」，
+    两者都不是本模型的语义，静默接受会让标定结果失去物理意义。
+    """
+    try:
+        g = float(value)
+    except (TypeError, ValueError) as exc:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "标定增益必须是数值",
+            field_path="solver.response_gain",
+            actual=value,
+            requirement="正有限数",
+        ) from exc
+    if not math.isfinite(g) or g <= 0:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "标定增益必须是正有限数",
+            field_path="solver.response_gain",
+            actual=g,
+            requirement="> 0（1.0 = 未标定基线）",
+            suggestion="增益 ≤ 0 没有物理意义；若基线全为 0，应回对照环节修阈值/光学，而不是调增益。",
+        )
+    return g
+
+
 def validate_run(config: RunConfig, material: Any) -> ValidationReport:
     """执行前的准入校验（细则 5.1 前两步 + 4.2 契约）。"""
     notes: list[str] = []
@@ -2012,3 +2049,187 @@ def load_config(path: str) -> RunConfig:
                     cfg.material_card_file = str(candidate.resolve())
                     break
     return cfg
+
+
+# ===========================================================================
+# 共用实验背景（C1）
+# ===========================================================================
+#
+# 七类材料跑在**同一台设备、同一套光学系统**上，因此功率 / 波长 / NA / M² / 焦点策略
+# 这些**固定项共享**（用户 2026-09-13 确认）。但**不共享**烧蚀阈值与去除尺度 ——
+# 同一平台不等于覆盖原始工况，也不意味着七材料共用一套响应参数。
+#
+# ⚠️ 关键设计：本模块**不改动** `SolverConfig` 的字段默认值。
+# 底层默认仍是 `fixed_geometry`，既有算例（A–I 的逐位一致基准）不受影响；
+# 「业务默认用 axial_defocus」由 `shared_background_patch()` 表达。
+# 这样「业务默认」与「底层默认」分开，改前者不会静默改后者的数值行为。
+
+#: 共享背景文件（相对工程根）。
+SHARED_BACKGROUND_REL = "data/config/shared_experiment_background.json"
+
+
+@dataclass
+class SharedExperimentBackground:
+    """七材料共用的固定实验背景。**不含**阈值 / 去除尺度 / 标定增益。"""
+
+    raw: Mapping[str, Any]
+
+    # -- 功率 ----------------------------------------------------------------
+    @property
+    def post_objective_power_W(self) -> float:
+        """物镜后平均功率 —— 计算单脉冲能量**只能用这个**。"""
+        return float(self.raw["power"]["post_objective_mean_power_W"])
+
+    @property
+    def software_setpoint_W(self) -> float:
+        """软件设定功率，**仅作记录**，不参与脉冲能量计算。"""
+        return float(self.raw["power"]["software_setpoint_W"])
+
+    def pulse_energy_J(self, repetition_rate_Hz: float) -> float:
+        """``E_p = P_物镜后 / f``（把规则写进代码，免得各处各算一遍）。"""
+        if not (math.isfinite(repetition_rate_Hz) and repetition_rate_Hz > 0):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "重复频率必须是正有限数才能算脉冲能量",
+                field_path="laser.repetition_rate_Hz",
+                actual=repetition_rate_Hz,
+                requirement="> 0",
+            )
+        return self.post_objective_power_W / float(repetition_rate_Hz)
+
+    # -- 光学 ----------------------------------------------------------------
+    @property
+    def wavelength_m(self) -> float:
+        return float(self.raw["optics"]["wavelength_nm"]) * 1e-9
+
+    @property
+    def m2(self) -> float:
+        return float(self.raw["optics"]["m2"])
+
+    @property
+    def numerical_aperture(self) -> float:
+        return float(self.raw["optics"]["numerical_aperture"])
+
+    def derived_waist_m(self) -> float:
+        """由 M²、λ、NA 推导 1/e² 束腰半径：``w0 = M²·λ/(π·NA)``。"""
+        return self.m2 * self.wavelength_m / (math.pi * self.numerical_aperture)
+
+    def derived_rayleigh_m(self) -> float:
+        """由 w0 推导瑞利长度：``zR = π·w0²/(M²·λ)``。"""
+        w0 = self.derived_waist_m()
+        return math.pi * w0 * w0 / (self.m2 * self.wavelength_m)
+
+    # -- 焦点 ----------------------------------------------------------------
+    @property
+    def focus_strategy(self) -> str:
+        return str(self.raw["focus"]["focus_strategy"])
+
+    @property
+    def geometry_feedback(self) -> str:
+        return str(self.raw["focus"]["geometry_feedback"])
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.raw)
+
+    # -- 自洽校验 ------------------------------------------------------------
+    def check_self_consistency(self, *, rel_tol: float = 0.01) -> dict[str, Any]:
+        """校验资料给的 nominal 值与公式推导**自洽**。
+
+        为什么值得做：这两个数是整条光路的地基（离焦、能流、覆盖全依赖它们）。
+        若有人手改了其中一个却没改另一个，公式与资料就脱节了 ——
+        这里直接报出来，而不是让它静默参与后面所有计算。
+        """
+        w0_doc = float(self.raw["optics"]["nominal_waist_radius_um"]) * 1e-6
+        zr_doc = float(self.raw["optics"]["nominal_rayleigh_length_um"]) * 1e-6
+        w0_calc, zr_calc = self.derived_waist_m(), self.derived_rayleigh_m()
+        rel_w0 = abs(w0_calc - w0_doc) / w0_doc
+        rel_zr = abs(zr_calc - zr_doc) / zr_doc
+        ok = rel_w0 <= rel_tol and rel_zr <= rel_tol
+        report = {
+            "ok": ok,
+            "waist_doc_um": w0_doc * 1e6,
+            "waist_derived_um": w0_calc * 1e6,
+            "waist_rel_diff": rel_w0,
+            "rayleigh_doc_um": zr_doc * 1e6,
+            "rayleigh_derived_um": zr_calc * 1e6,
+            "rayleigh_rel_diff": rel_zr,
+            "rel_tol": rel_tol,
+        }
+        if not ok:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "共享实验背景的光学参数与公式推导不自洽",
+                field_path="optics.nominal_waist_radius_um|nominal_rayleigh_length_um",
+                actual={"w0_um": w0_calc * 1e6, "zR_um": zr_calc * 1e6},
+                requirement=f"与 w0=M²λ/(πNA)、zR=πw0²/(M²λ) 的相对差 ≤ {rel_tol:.1%}",
+                suggestion="核对背景文件的 nominal 值；两者必须由同一组 M²/λ/NA 推出。",
+            )
+        return report
+
+
+def load_shared_background(path: str | Path | None = None) -> SharedExperimentBackground:
+    """读共享实验背景；默认取工程根的 ``data/config/shared_experiment_background.json``。"""
+    if path is None:
+        # 用 resource_root 而不是 project_root：wheel 安装后后者指向**不存在**的
+        # 目录（包在 site-packages），背景文件会读不到；resource_root 会正确回退。
+        from . import resource_root as _root
+
+        path = _root() / SHARED_BACKGROUND_REL
+    p = Path(path)
+    if not p.exists():
+        raise UFDemoError(
+            CONFIG_INVALID,
+            f"找不到共享实验背景文件：{p}",
+            field_path="shared_experiment_background",
+            actual=str(p),
+            requirement="文件存在",
+            suggestion="确认 data/config/shared_experiment_background.json 已就位。",
+        )
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise UFDemoError(
+            CONFIG_INVALID, "共享实验背景 JSON 解析失败",
+            field_path=str(p), actual=str(exc), suggestion="修正 JSON 语法。",
+        ) from exc
+    bg = SharedExperimentBackground(raw=raw)
+    bg.check_self_consistency()   # 读到就校验，别让错值流进后续计算
+    return bg
+
+
+def shared_background_patch(
+    bg: SharedExperimentBackground, *, repetition_rate_Hz: float,
+) -> dict[str, Any]:
+    """把共享背景映射成可合并进 ``RunConfig`` raw 的 patch。
+
+    这是「业务默认」的载体：调用方把它 merge 到自己的参数 dict 上即可，
+    **无需**另造一套底层配置系统。
+
+    映射（与既有字段一一对应，不新增底层字段）::
+
+        laser.wavelength_m         ← optics.wavelength_nm
+        laser.spot_radius_m        ← 公式推导 w0（不是硬编码的 nominal 数字）
+        laser.m2                   ← optics.m2
+        laser.pulse_energy_J       ← P_物镜后 / f
+        solver.geometry_feedback   ← focus.geometry_feedback（axial_defocus）
+        solver.dynamic_angle       ← focus.dynamic_angle（false）
+    """
+    return {
+        "laser": {
+            "wavelength_m": bg.wavelength_m,
+            "spot_radius_m": bg.derived_waist_m(),
+            "m2": bg.m2,
+            "pulse_energy_J": bg.pulse_energy_J(repetition_rate_Hz),
+            "repetition_rate_Hz": float(repetition_rate_Hz),
+        },
+        "solver": {
+            # ⚠️ 这两个**必须同时**出现：固定焦点（不主动调焦）与保留被动轴向离焦
+            # 是**两件事**。停用动态入射角不得连带停用轴向离焦 —— 分开写清楚。
+            "geometry_feedback": bg.geometry_feedback,
+            "dynamic_angle": bool(bg.raw["focus"]["dynamic_angle"]),
+        },
+        "_shared_background_note": (
+            "以上字段继承自共用实验背景（用户确认，非本次独立测量）；"
+            "各 CSV 的脉宽/频率/速度/间距/遍数**仍按原值**，未被覆盖。"
+        ),
+    }

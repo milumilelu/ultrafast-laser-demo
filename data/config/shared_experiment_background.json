@@ -1,0 +1,63 @@
+{
+  "schema": "ufdemo.shared_experiment_background/1",
+  "note": "七类材料共用的**固定实验背景**（用户 2026-09-13 确认）。这些是同一台设备/同一光学系统的设置，不是各自重新测的；各材料**不共享**烧蚀阈值与去除尺度。",
+  "provenance": {
+    "source": "实验背景资料 + 用户确认适用于各材料",
+    "recorded_on": "2026-09-13",
+    "evidence_status": "literature_reported",
+    "not_an_independent_optical_measurement": "光学尺寸为 nominal 值，不是槽内实测光场；不得升级为本次独立测量。"
+  },
+
+  "power": {
+    "software_setpoint_W": 10.0,
+    "software_setpoint_role": "record_only",
+    "post_objective_mean_power_W": 5.3333,
+    "post_objective_role": "used_for_pulse_energy",
+    "pulse_energy_rule": "E_p = P_post_objective / f",
+    "note": "软件里设的 10 W 只作记录；**计算单脉冲能量必须用物镜后功率**。"
+  },
+
+  "optics": {
+    "wavelength_nm": 1030.0,
+    "numerical_aperture": 0.45,
+    "m2": 1.2,
+    "nominal_waist_radius_um": 0.874,
+    "nominal_rayleigh_length_um": 1.943,
+    "waist_definition": "1/e^2 半径（nominal）",
+    "derivation": "w0 = M²·λ/(π·NA)；zR = π·w0²/(M²·λ)。两个数由公式导出，代码会**校验自洽**而不是盲信。"
+  },
+
+  "focus": {
+    "focus_strategy": "fixed_original_surface",
+    "geometry_feedback": "axial_defocus",
+    "dynamic_angle": false,
+    "layer_refocus": false,
+    "structured_interface": false,
+    "statement": "焦平面恒为加工前原始表面 z0；不随槽底下降调整 Z。但表面下降会产生**被动离焦**（w(d)=w0·sqrt(1+(d/zR)²)），这是几何反馈，不是主动调焦。两者是**不同开关**，停用动态入射角**不得**连带停用轴向离焦。"
+  },
+
+  "processing_region": {
+    "default_rect_um": [200.0, 200.0],
+    "editable": true,
+    "note": "常用矩形区域，规划任务里可按需编辑。"
+  },
+
+  "per_file_variables": {
+    "columns": ["pulse_duration_fs", "repetition_rate_kHz", "scan_speed_mm_s",
+                "hatch_spacing_um", "pass_count"],
+    "rule": "这些按各 CSV **原值逐行读取**；与另一材料的 DOE 水平不同时**不自动改写**。没有脉宽列时才按批次给定值补充。"
+  },
+
+  "inheritance_scope": {
+    "shared": ["power", "optics", "focus", "processing_region"],
+    "NOT_shared": ["threshold", "delta", "calibration_gain"],
+    "why": "七材料共享配置与软件，**不共享**烧蚀阈值或去除尺度；材料牌号可空，按「材料类别 + 数据文件/批次」保存独立标定结果。"
+  },
+
+  "device_path_policy": {
+    "corner_deceleration": "fixed_in_project_settings",
+    "extra_border": "not_known_do_not_invent",
+    "shutter_off_capability": "not_known_do_not_export_assumed",
+    "note": "第一版把设备路径策略固定在项目设置，不给用户一排开关；未确知的额外边框不虚构；转向速度未知时只给理想扫描时间并标「边界未校准」。"
+  }
+}

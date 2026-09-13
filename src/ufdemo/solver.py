@@ -715,6 +715,20 @@ def solve(
                 normal_converted = True
                 geom_diag["normal_thickness_conversions"] += 1
 
+        # --- C4：标定增益 a 作用于**几何更新之前** ---------------------------
+        # Δd_cal = a·Δd_base。位置很关键：
+        #   · 放在这里（候选增量 → 提交表面之前），后续脉冲会按**新表面**重算被动离焦，
+        #     所以 D(a) ≠ a·D(1) —— 标定**真的改变了求解过程**；
+        #   · 若改到结果页去乘，就退化成"给深度乘个系数"，与任务书 §4 的
+        #     明确要求相违（那条要求正是为了防这种假标定）。
+        # a=1.0 时不走分支，既有算例逐位不变。
+        _gain = float(getattr(config.solver, "response_gain", 1.0))
+        if _gain != 1.0:
+            cand_arr = cand_arr * _gain
+            geom_diag.setdefault("gain_applied", 0)
+            geom_diag["gain_applied"] += 1
+            geom_diag["gain_value"] = _gain
+
         # 第 6 步：语义/方向/非负/有限校验已在 IncrementResult.validate() 内完成
         cand_vol = float(np.sum(cand_arr) * surface.grid.dx_m * surface.grid.dy_m)
 
