@@ -1,0 +1,1815 @@
+{
+  "schema": "ufdemo.dataset_registry/1",
+  "note": "由 tools/measured_data_report.py --write-registry 生成，不要手改。observation_access=可浏览/回放；increment_access=可进逐事件核。实测端点语义一律无增量权限。",
+  "observation_semantics": [
+    "cumulative_depth",
+    "mean_depth_per_effective_pulse",
+    "track_or_pass_depth",
+    "volume_per_energy",
+    "threshold_only",
+    "single_pulse_crater_endpoint",
+    "surface_roughness_endpoint",
+    "through_hole_geometry_endpoint"
+  ],
+  "counting_note": "每条记录=已发表条件/结果记录；非独立数据集、非材料卡。",
+  "summary": {
+    "records": 69,
+    "observation_access_true": 69,
+    "increment_access_true": 0,
+    "records_with_risk_notes": 69,
+    "by_output_semantics": {
+      "cumulative_depth": 2,
+      "single_pulse_crater_endpoint": 4,
+      "surface_roughness_endpoint": 14,
+      "through_hole_geometry_endpoint": 25,
+      "track_or_pass_depth": 20,
+      "volume_per_energy": 4
+    }
+  },
+  "files_sha256": {
+    "ceramics_dot_line_measured.csv": "a4a2e952999575f3d6163fdbf377eddbcfbc6f86e8ef5b64db4f04b84bd2a013",
+    "ceramics_laser_roughness_measured.csv": "671e16a540e89983c63c5b68f30815bdf9ac96e48683555e97699ae53b86fc55",
+    "ceramics_nonlaser_controls.csv": "94881bf7eae502f0bae40167db93edd79535154b14cf780eb0776c3b889425f4",
+    "cfrp_efficiency_reported_maxima.csv": "0d94ba049fe6bed2cbd05adcff063e726d987640ce8a30e0ef8af9caf737242e",
+    "dd6_drilling_measured.csv": "e4468cbba5a8c78767d2e85415344fb2891316ff7b9c69d20407e0823754aaaa",
+    "diamond_rsm_measured.csv": "82309c2fbded429a97c8e6bcd7f89990fb9425ff203f60eb199f0dd5e33dcec8",
+    "sic_single_pulse_measured.csv": "9f4bbf3382d34ab0a0750d9528b9dac22dd16d9b948bef219fd7ca43c02617ff"
+  },
+  "datasets": [
+    {
+      "case_id": "D02-glass_dot",
+      "file": "ceramics_dot_line_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "cumulative_depth",
+      "output_semantics_zh": "某一完整照射协议的累计深度（不可重复累加）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-zirconia_dot",
+      "file": "ceramics_dot_line_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "cumulative_depth",
+      "output_semantics_zh": "某一完整照射协议的累计深度（不可重复累加）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-glass_cross",
+      "file": "ceramics_dot_line_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-zirconia_cross",
+      "file": "ceramics_dot_line_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_dot_14",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_dot_14",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_dot_20",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_dot_20",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_dot_40",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_dot_40",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_crossed_line_20",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_crossed_line_20",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_crossed_line_40",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_crossed_line_40",
+      "file": "ceramics_laser_roughness_measured.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_as_sintered_None",
+      "file": "ceramics_nonlaser_controls.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_as_sintered_None",
+      "file": "ceramics_nonlaser_controls.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D02-微晶玻璃_sandblast_Al2O3_None",
+      "file": "ceramics_nonlaser_controls.csv",
+      "material_family": "微晶玻璃",
+      "grade": null,
+      "material_name": "IPS e.max CAD HT lithium-disilicate glass-ceramic",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D02-氧化锆_sandblast_Al2O3_None",
+      "file": "ceramics_nonlaser_controls.csv",
+      "material_family": "氧化锆",
+      "grade": null,
+      "material_name": "KATANA UTML 6Y-PSZ",
+      "source_id": "D02",
+      "source_doi": "10.3390/ma15103614",
+      "source_locator": "Table 3",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "surface_roughness_endpoint",
+      "output_semantics_zh": "表面粗糙度端点（Sa/Ra），不是去除深度",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D04-1",
+      "file": "cfrp_efficiency_reported_maxima.csv",
+      "material_family": "CFRP",
+      "grade": null,
+      "material_name": "CFRP + 1 wt% CuHAp",
+      "source_id": "D04",
+      "source_doi": "10.3390/polym18111284",
+      "source_locator": "Figure 3a / Section 3.1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "volume_per_energy",
+      "output_semantics_zh": "总体体积效率（不可唯一确定局部坑形）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "原始转录已标记异常：Mixture maxima in body differ from abstract (abstract says 6.06). Preserve body values, flag conflict. Cutting uses different 24 um optics and is NOT merged with efficiency dataset."
+      ]
+    },
+    {
+      "case_id": "D04-2",
+      "file": "cfrp_efficiency_reported_maxima.csv",
+      "material_family": "CFRP",
+      "grade": null,
+      "material_name": "CFRP + 5 wt% CuHAp",
+      "source_id": "D04",
+      "source_doi": "10.3390/polym18111284",
+      "source_locator": "Figure 3b / Section 3.1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "volume_per_energy",
+      "output_semantics_zh": "总体体积效率（不可唯一确定局部坑形）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "原始转录已标记异常：Mixture maxima in body differ from abstract (abstract says 6.06). Preserve body values, flag conflict. Cutting uses different 24 um optics and is NOT merged with efficiency dataset."
+      ]
+    },
+    {
+      "case_id": "D04-3",
+      "file": "cfrp_efficiency_reported_maxima.csv",
+      "material_family": "CFRP",
+      "grade": null,
+      "material_name": "CFRP + 5 wt% total CuHAp:CaHAp 75:25",
+      "source_id": "D04",
+      "source_doi": "10.3390/polym18111284",
+      "source_locator": "Figure 4a / Section 3.1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "volume_per_energy",
+      "output_semantics_zh": "总体体积效率（不可唯一确定局部坑形）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "原始转录已标记异常：Mixture maxima in body differ from abstract (abstract says 6.06). Preserve body values, flag conflict. Cutting uses different 24 um optics and is NOT merged with efficiency dataset."
+      ]
+    },
+    {
+      "case_id": "D04-4",
+      "file": "cfrp_efficiency_reported_maxima.csv",
+      "material_family": "CFRP",
+      "grade": null,
+      "material_name": "CFRP + 5 wt% total CuHAp:CaHAp 50:50",
+      "source_id": "D04",
+      "source_doi": "10.3390/polym18111284",
+      "source_locator": "Figure 4b / Section 3.1",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "volume_per_energy",
+      "output_semantics_zh": "总体体积效率（不可唯一确定局部坑形）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz",
+        "spot_diameter"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "原始转录已标记异常：Mixture maxima in body differ from abstract (abstract says 6.06). Preserve body values, flag conflict. Cutting uses different 24 um optics and is NOT merged with efficiency dataset."
+      ]
+    },
+    {
+      "case_id": "D05-01",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-02",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-03",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-04",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-05",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-06",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-07",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-08",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-09",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-10",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出",
+        "原始转录已标记异常：FLAG: source discusses poor exit formation; retain observed row10, do not silently remove."
+      ]
+    },
+    {
+      "case_id": "D05-11",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-12",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-13",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-14",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出",
+        "原始转录已标记异常：FLAG: row14 printed taper inconsistent with reported diameters; preserve both; exclude reported taper from fitting pending verification."
+      ]
+    },
+    {
+      "case_id": "D05-15",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-16",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-17",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-18",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-19",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-20",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-21",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-22",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-23",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-24",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D05-25",
+      "file": "dd6_drilling_measured.csv",
+      "material_family": "高温合金",
+      "grade": null,
+      "material_name": "DD6 single-crystal nickel-based superalloy",
+      "source_id": "D05",
+      "source_doi": "10.3390/met13020333",
+      "source_locator": "Table 3; level mapping from Table 2",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "through_hole_geometry_endpoint",
+      "output_semantics_zh": "贯穿孔端点几何（进/出口直径），非浅表 2.5D 形貌",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs",
+        "repetition_rate_Hz",
+        "spot_diameter",
+        "wavelength_nm"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出：不得据此反推峰值强度或通量",
+        "重复频率未给出",
+        "光斑定义缺失：只能用原文能流查表，**不得**换算成脉冲能量",
+        "波长未给出"
+      ]
+    },
+    {
+      "case_id": "D01-01",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-02",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-03",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-04",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-05",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-06",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-07",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-08",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-09",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-10",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-11",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-12",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-13",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-14",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-15",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-16",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-17",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "Table 4",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D01-18",
+      "file": "diamond_rsm_measured.csv",
+      "material_family": "金刚石",
+      "grade": null,
+      "material_name": "HTHP single-crystal diamond",
+      "source_id": "D01",
+      "source_doi": "10.3390/machines12090614",
+      "source_locator": "optimized-condition independent experiment",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "track_or_pass_depth",
+      "output_semantics_zh": "单轨/单遍加工结果（不可再按脉冲重复应用）",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "pulse_duration_fs"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "脉宽未给出；原文只给设备最小脉宽 250 fs —— **不得**把设备最小值当作实际脉宽，也不得据此反推峰值强度"
+      ]
+    },
+    {
+      "case_id": "D03-1",
+      "file": "sic_single_pulse_measured.csv",
+      "material_family": "SiC",
+      "grade": null,
+      "material_name": "monocrystalline 4H-SiC",
+      "source_id": "D03",
+      "source_doi": "10.3390/mi15050573",
+      "source_locator": "Experimental values in Results text for Figures 3 and 7",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "single_pulse_crater_endpoint",
+      "output_semantics_zh": "单脉冲坑的端点几何（坑径/坑深），非逐事件增量",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出"
+      ]
+    },
+    {
+      "case_id": "D03-2",
+      "file": "sic_single_pulse_measured.csv",
+      "material_family": "SiC",
+      "grade": null,
+      "material_name": "monocrystalline 4H-SiC",
+      "source_id": "D03",
+      "source_doi": "10.3390/mi15050573",
+      "source_locator": "Experimental values in Results text for Figures 3 and 7",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "single_pulse_crater_endpoint",
+      "output_semantics_zh": "单脉冲坑的端点几何（坑径/坑深），非逐事件增量",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出"
+      ]
+    },
+    {
+      "case_id": "D03-3",
+      "file": "sic_single_pulse_measured.csv",
+      "material_family": "SiC",
+      "grade": null,
+      "material_name": "monocrystalline 4H-SiC",
+      "source_id": "D03",
+      "source_doi": "10.3390/mi15050573",
+      "source_locator": "Experimental values in Results text for Figures 3 and 7",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "single_pulse_crater_endpoint",
+      "output_semantics_zh": "单脉冲坑的端点几何（坑径/坑深），非逐事件增量",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出"
+      ]
+    },
+    {
+      "case_id": "D03-4",
+      "file": "sic_single_pulse_measured.csv",
+      "material_family": "SiC",
+      "grade": null,
+      "material_name": "monocrystalline 4H-SiC",
+      "source_id": "D03",
+      "source_doi": "10.3390/mi15050573",
+      "source_locator": "Experimental values in Results text for Figures 3 and 7",
+      "data_kind": "published_experimental_result",
+      "output_semantics": "single_pulse_crater_endpoint",
+      "output_semantics_zh": "单脉冲坑的端点几何（坑径/坑深），非逐事件增量",
+      "observation_access": true,
+      "increment_access": false,
+      "missing_fields": [
+        "grade",
+        "repetition_rate_Hz"
+      ],
+      "risk_notes": [
+        "牌号未提供/未确认：可浏览与回放，但不得声称代表用户实际工件",
+        "重复频率未给出"
+      ]
+    }
+  ]
+}

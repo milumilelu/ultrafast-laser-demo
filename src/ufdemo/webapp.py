@@ -135,6 +135,7 @@ class AppContext:
         curves_dir: Path,
         material_dir: Path,
         examples_dir: Path,
+        measured_dir: Path | None = None,
     ) -> None:
         self.project_root = project_root
         self.webui_dir = webui_dir
@@ -142,6 +143,10 @@ class AppContext:
         self.curves_dir = curves_dir
         self.material_dir = material_dir
         self.examples_dir = examples_dir
+        # U05：实测数据集目录。默认 None → 用随包资源；显式传入便于测试隔离。
+        from . import default_measured_dir as _dmd
+
+        self.measured_dir = Path(measured_dir) if measured_dir is not None else _dmd()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -152,6 +157,7 @@ class AppContext:
             "curvesDir": str(self.curves_dir),
             "materialDir": str(self.material_dir),
             "examplesDir": str(self.examples_dir),
+            "measuredDir": str(self.measured_dir),
         }
 
 
@@ -275,6 +281,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_json(W.example_payload(ctx.examples_dir, name))
         elif path == "/api/curves":
             self._send_json(W.curves_payload(ctx.curves_dir))
+        elif path == "/api/datasets":
+            # U05：实测数据集与权限。判定与界面同源（datasets.evaluate）。
+            self._send_json(W.datasets_payload(ctx.measured_dir))
         elif path == "/api/references":
             self._send_json(W.references_payload(ctx.examples_dir))
         elif path == "/api/runs":
@@ -436,6 +445,7 @@ def build_context(
     project_root: Path | None = None,
     runs_dir: str | Path | None = None,
     webui_dir: Path | None = None,
+    measured_dir: str | Path | None = None,
 ) -> AppContext:
     """构造服务上下文。``runs_dir`` 缺省跟随 ``UFDEMO_RUNS_DIR``（与界面同源）。
 
@@ -448,6 +458,7 @@ def build_context(
         default_curves_dir,
         default_examples_dir,
         default_material_dir,
+        default_measured_dir,
         default_runs_dir,
         default_webui_dir,
         project_root as _pr,
@@ -463,6 +474,7 @@ def build_context(
         curves_dir=default_curves_dir(),
         material_dir=default_material_dir(),
         examples_dir=default_examples_dir(),
+        measured_dir=default_measured_dir() if measured_dir is None else Path(measured_dir),
     )
 
 
@@ -479,9 +491,10 @@ def serve(
     port: int = 8787,
     runs_dir: str | Path | None = None,
     webui_dir: Path | None = None,
+    measured_dir: str | Path | None = None,
     quiet: bool = False,
 ) -> None:
-    ctx = build_context(runs_dir=runs_dir, webui_dir=webui_dir)
+    ctx = build_context(runs_dir=runs_dir, webui_dir=webui_dir, measured_dir=measured_dir)
     if not ctx.webui_dir.exists():
         raise SystemExit(
             f"前端目录不存在：{ctx.webui_dir}\n"

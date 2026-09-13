@@ -132,6 +132,17 @@ def default_curves_dir() -> Path:
     return _resource_dir(("data", "curves"))
 
 
+def default_measured_dir() -> Path:
+    """实测数据集目录（U04 导入的审计数据包 + U05 权限注册表）。
+
+    可用 ``UFDEMO_MEASURED_DIR`` 覆写（优先于随包资源）。
+    """
+    override = os.environ.get("UFDEMO_MEASURED_DIR")
+    if override:
+        return Path(override)
+    return _resource_dir(("data", "measured"))
+
+
 def default_webui_dir() -> Path:
     """前端静态文件目录（本地 Web 界面用）。"""
     override = os.environ.get("UFDEMO_WEBUI_DIR")

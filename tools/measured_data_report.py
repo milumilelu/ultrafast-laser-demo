@@ -244,6 +244,38 @@ def check() -> list[Row]:
     add("语义红线", "导入数据不含 event_depth_increment（累计/体积等不得改名混入逐事件主循环）",
         "不含", "不含" if not banned else str(banned), not banned, "、".join(sem))
 
+    # --- 9. 数据集权限注册表（U05）------------------------------------------
+    try:
+        from ufdemo import datasets as DS  # noqa: PLC0415
+
+        reg = DS.load_registry(MEASURED)
+        if not reg.get("datasets"):
+            add("权限注册表", "registry.json 存在且非空", "非空", "缺失/为空", False,
+                "运行 tools/measured_data_report.py --write-registry 生成")
+        else:
+            n_ds = len(reg["datasets"])
+            add("权限注册表", "注册表条目数 = 实测记录数（65+4）",
+                "69", str(n_ds), n_ds == 69)
+            n_obs = sum(1 for d in reg["datasets"] if d.get("observation_access"))
+            add("权限注册表", "全部记录均有 observation_access（可浏览/回放）",
+                "全部", f"{n_obs}/{n_ds}", n_obs == n_ds)
+            n_inc = sum(1 for d in reg["datasets"] if d.get("increment_access"))
+            add("权限注册表", "无任何记录取得 increment_access（实测端点语义不是逐事件增量）",
+                "0", str(n_inc), n_inc == 0)
+            # 生成一份**当前数据**的注册表与已存盘逐字段比对 → 防止各自漂移
+            try:
+                fresh = DS.build_registry(MEASURED)
+                same = (fresh["datasets"] == reg["datasets"]
+                        and fresh["files_sha256"] == reg.get("files_sha256"))
+                add("权限注册表", "registry.json 与当前数据一致（无漂移）",
+                    "一致", "一致" if same else "**不一致**", same,
+                    "不一致说明数据变了但注册表没重生成；重跑 --write-registry")
+            except Exception as err:  # noqa: BLE001
+                add("权限注册表", "注册表可重新生成", "可", f"失败：{err}", False)
+    except Exception as err:  # noqa: BLE001
+        add("权限注册表", "可导入 ufdemo.datasets", "可", f"失败：{err}", False,
+            "需要 PYTHONPATH=src")
+
     return out
 
 
@@ -291,6 +323,26 @@ def write_reports(rows: list[Row]) -> tuple[Path, Path]:
 
 
 def main() -> int:
+    if "--write-registry" in sys.argv:
+        # 生成数据集权限注册表（U05）。注册表是**产物**：
+        # 从实测 CSV + 权限纯函数推导，避免与数据各自漂移。
+        try:
+            from ufdemo import datasets as DS  # noqa: PLC0415
+        except Exception as err:  # noqa: BLE001
+            print(f"无法导入 ufdemo.datasets（需 PYTHONPATH=src）：{err}")
+            return 2
+        reg = DS.build_registry(MEASURED)
+        out = DS.registry_path(MEASURED)
+        out.write_text(json.dumps(reg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        s = reg["summary"]
+        print(f"已写出 {out}")
+        print(f"  记录 {s['records']}｜observation_access={s['observation_access_true']}"
+              f"｜increment_access={s['increment_access_true']}"
+              f"｜有风险提示 {s['records_with_risk_notes']}")
+        print(f"  语义分布：{s['by_output_semantics']}")
+        if "--check" not in sys.argv:
+            return 0
+
     rows = check()
     csv_path, md_path = write_reports(rows)
     n_fail = sum(1 for r in rows if r["status"] != "通过")

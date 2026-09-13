@@ -1381,6 +1381,55 @@ def material_entry_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def list_measured_datasets(measured_dir: str | Path) -> dict[str, Any]:
+    """列出实测数据集及其**权限判定**（U05）。
+
+    **权限判定复用 `datasets.evaluate`** —— 界面与接口层不得各写一套判定，
+    否则两处会漂移（一处放宽、一处收紧，用户看到的行为无法解释）。
+
+    只读注册表 + 逐条判定；**不求解、不插值**。
+    注册表缺失时返回 `available=False` 与原因，**不抛异常、不伪造数据**。
+    """
+    from . import datasets as DS
+
+    measured = Path(measured_dir)
+    reg = DS.load_registry(measured)
+    datasets = reg.get("datasets") or []
+    if not datasets:
+        return {
+            "available": False,
+            "reason": (
+                "未找到数据集注册表（data/measured/registry.json）。"
+                "运行 tools/measured_data_report.py --write-registry 生成。"
+            ),
+            "datasets": [],
+            "summary": None,
+            "observation_semantics": list(DS.OBSERVATION_SEMANTICS),
+        }
+    return {
+        "available": True,
+        "path": str(measured),
+        "schema": reg.get("schema"),
+        "counting_note": reg.get("counting_note"),
+        "observation_semantics": list(DS.OBSERVATION_SEMANTICS),
+        "semantics_zh": dict(DS.OBSERVATION_SEMANTICS_ZH),
+        "summary": reg.get("summary"),
+        "datasets": datasets,
+    }
+
+
+def assert_dataset_increment_access(record: Mapping[str, Any]) -> None:
+    """请求把某条实测记录用作**逐事件增量**时的闸门（U05）。
+
+    直接委派 `datasets.assert_increment_access`，后者又委派既有闸门
+    `response.assert_increment_semantics` —— **抛既定错误码
+    ``RESPONSE_SEMANTICS_INVALID``**，不新造码。
+    """
+    from . import datasets as DS
+
+    DS.assert_increment_access(record)
+
+
 def list_runs(base_dir: str | Path, *, max_depth: int = 2) -> list[dict[str, Any]]:
     """列出可读取的运行目录（``runs/<id>`` 与 ``runs/<group>/<id>``）。
 

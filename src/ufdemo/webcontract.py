@@ -559,6 +559,18 @@ def curves_payload(curves_dir: str | Path) -> dict[str, Any]:
     return {"schema": "ufdemo.web.curves/1", "curves": out}
 
 
+def datasets_payload(measured_dir: str | Path) -> dict[str, Any]:
+    """实测数据集清单与**权限**（U05）。
+
+    权限判定**复用 `ui_service.list_measured_datasets`**，后者又复用
+    `datasets.evaluate` —— 全链路只有**一套**判定，界面与接口不会漂移。
+
+    注册表缺失时返回 `available=False` + 原因，**不抛、不伪造**。
+    """
+    payload = U.list_measured_datasets(measured_dir)
+    return {"schema": "ufdemo.web.datasets/1", **payload}
+
+
 def _safe_curve_name(curves_dir: str | Path, name: str) -> str:
     """Validate a curve card selector and keep it below ``curves_dir``."""
     if not isinstance(name, str) or not name or Path(name).name != name:
