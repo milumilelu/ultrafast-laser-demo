@@ -61,6 +61,61 @@ class HttpError(Exception):
             "suggestion": self.extra.get("suggestion"),
         }
 
+
+# ---------------------------------------------------------------------------
+# 异常 → HTTP 错误体：**唯一**转换点
+#
+# 历史教训（审查缺陷 F01）：曾写成
+#     self._send_error_json(err.code, err.message, status=400, **err.to_dict())
+# 而 ``to_dict()`` 已含 ``code``/``message`` → ``TypeError: got multiple values
+# for argument 'code'``。该异常在 ``_send_error_json`` 执行**之前**抛出，
+# 于是一个响应都发不出去，客户端只看到连接被关（``RemoteDisconnected``）。
+# 当时 ``ContractError``/``HttpError`` 分支已过滤，只有 ``UFDemoError`` 漏改，
+# 因此是**间歇性**故障。现在收敛为一处，杜绝再次漂移。
+# ---------------------------------------------------------------------------
+
+# 已由位置参数占用的键：展开 extra 时必须剔除，否则重复传参。
+_RESERVED_ERROR_KEYS: tuple[str, ...] = ("code", "message")
+
+
+def _json_safe(value: Any) -> Any:
+    """JSON 安全化 —— 直接复用契约层的 :func:`webcontract.jsonable`。
+
+    **不在这里另写一份规则**：``jsonable`` 已是本工程「什么能写进 JSON」的
+    唯一权威（``NaN``/``±Inf`` → ``None``、ndarray → list、dataclass → dict、
+    ``bool`` 先于 ``int``）。两份实现迟早漂移，而漂移的代价是
+    **响应发出不去**（``allow_nan=False`` 抛 ``ValueError``）。
+
+    为什么在这层还要再过一遍：契约层绝大多数出口已 ``jsonable`` 过，
+    但 ``lookup_payload`` 等分支会把 ``err.to_dict()`` 直接塞进 **success**
+    payload（``ok=False``）；一旦其中含 NaN，序列化就会在响应写出**前**失败。
+    这层是「绝不丢失响应」的最后一道网。
+    """
+    return W.jsonable(value)
+
+
+def error_response(err: BaseException) -> tuple[str, str, int, dict[str, Any]]:
+    """异常 → ``(code, message, status, extra)``。
+
+    ``extra`` 里**不含** ``code`` / ``message``，可直接展开传给
+    :meth:`WebAppHandler._send_error_json`。
+
+    状态码沿用各异常既有语义，**不统一压平**：
+    ``ContractError`` / ``HttpError`` 用自带 ``status``（如 404 / 413），
+    ``UFDemoError`` 映射 400，其余兜底 500。
+    """
+    if isinstance(err, (ContractError, HttpError)):
+        status = int(getattr(err, "status", 400))
+    elif isinstance(err, UFDemoError):
+        status = 400  # 材料/求解语义错误 ⇒ 客户端请求不合法
+    else:
+        return "INTERNAL_ERROR", f"{type(err).__name__}: {err}", 500, {}
+
+    body = _json_safe(err.to_dict())
+    extra = {k: v for k, v in body.items() if k not in _RESERVED_ERROR_KEYS}
+    return str(err.code), str(err.message), status, extra
+
+
 # 单次请求体上限（8 MB）：解算参数是纯 JSON，超过即视为异常请求
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
@@ -114,7 +169,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
         sys.stderr.write(f"[web] {self.address_string()} {fmt % args}\n")
 
     def _send_json(self, payload: Any, status: int = 200) -> None:
-        body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        # ``allow_nan=False``：JSON 没有 NaN/Inf，写出去前端会解析失败。
+        # 这里再过一遍 ``_json_safe`` 作为**最后一道网** —— 契约层若有哪条
+        # 分支漏了归一化（例如把 raw 错误体塞进 success payload），
+        # 也绝不能让整个响应丢失、把连接断掉。
+        body = json.dumps(
+            _json_safe(payload), ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -123,16 +184,21 @@ class WebAppHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_error_json(self, code: str, message: str, status: int = 400, **extra: Any) -> None:
-        self._send_json(
-            {
-                "code": code,
-                "message": message,
-                "field_path": extra.get("field_path"),
-                "requirement": extra.get("requirement"),
-                "suggestion": extra.get("suggestion"),
-            },
-            status=status,
+        payload: dict[str, Any] = {"code": code, "message": message}
+        payload.update(
+            {k: v for k, v in extra.items() if k not in _RESERVED_ERROR_KEYS}
         )
+        # 三个常用键始终存在（可为 None），前端无需做存在性判断
+        for key in ("field_path", "requirement", "suggestion"):
+            payload.setdefault(key, None)
+        self._send_json(_json_safe(payload), status=status)
+
+    def _send_exception(self, err: BaseException) -> None:
+        """**唯一**异常出口：任何异常都变成可解析 JSON，绝不静默断连。"""
+        code, message, status, extra = error_response(err)
+        if status >= 500:
+            traceback.print_exc()
+        self._send_error_json(code, message, status=status, **extra)
 
     def _read_body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length") or 0)
@@ -177,38 +243,19 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._handle_api_get(path)
             else:
                 self._serve_static(path)
-        except (ContractError, HttpError) as err:
-            # 注意：to_dict() 已含 code/message，展开会与位置参数**重复传参**
-            # （TypeError: got multiple values for argument 'code'），
-            # 结果是一个响应都发不出去、客户端只看到连接被关。
-            self._send_error_json(
-                err.code, err.message, status=err.status,
-                **{k: v for k, v in err.to_dict().items() if k not in ("code", "message")},
-            )
-        except UFDemoError as err:
-            self._send_error_json(err.code, err.message, status=400, **err.to_dict())
         except Exception as err:  # noqa: BLE001 - 兜底，避免服务因单个请求崩掉
-            traceback.print_exc()
-            self._send_error_json("INTERNAL_ERROR", f"{type(err).__name__}: {err}", status=500)
+            # 统一出口：ContractError / HttpError / UFDemoError / 未预期异常
+            # 一律转成 JSON 错误体。**不要再分多个 except 分支**——那正是
+            # F01 的成因（某一分支漏过滤 code/message 就整条路径失效）。
+            self._send_exception(err)
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
         try:
             self._handle_api_post(path)
-        except (ContractError, HttpError) as err:
-            # 注意：to_dict() 已含 code/message，展开会与位置参数**重复传参**
-            # （TypeError: got multiple values for argument 'code'），
-            # 结果是一个响应都发不出去、客户端只看到连接被关。
-            self._send_error_json(
-                err.code, err.message, status=err.status,
-                **{k: v for k, v in err.to_dict().items() if k not in ("code", "message")},
-            )
-        except UFDemoError as err:
-            self._send_error_json(err.code, err.message, status=400, **err.to_dict())
         except Exception as err:  # noqa: BLE001
-            traceback.print_exc()
-            self._send_error_json("INTERNAL_ERROR", f"{type(err).__name__}: {err}", status=500)
+            self._send_exception(err)
 
     # -- API ----------------------------------------------------------------
 
@@ -278,7 +325,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             params = body.get("params")
             if not isinstance(params, dict):
                 raise HttpError("BAD_REQUEST_BODY", "缺少 params 对象", status=400, field_path="params")
-            self._send_json(W.preview_payload(params))
+            self._send_json(W.preview_payload(params, project_root=ctx.project_root))
         elif path == "/api/lookup":
             body = self._read_body()
             curve = body.get("curve")
@@ -291,28 +338,39 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     field_path="curve|xs",
                     requirement="curve 为曲线卡名，xs 为数值数组",
                 )
-            self._send_json(
-                W.lookup_payload(
-                    ctx.curves_dir,
-                    str(curve),
-                    [float(v) for v in xs],
+            try:
+                values = [float(v) for v in xs]
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise HttpError(
+                    "BAD_REQUEST_BODY", "xs 必须是有限数值数组", status=400,
+                    field_path="xs", requirement="每个元素可转换为有限浮点数",
+                ) from exc
+            import math
+            if not all(math.isfinite(v) for v in values):
+                # 非有限查询点属于查表语义错误：保持契约层的 200/ok=false
+                # 形状，让前端可以展示 NUMERIC_NONFINITE，而不是把它误报成
+                # HTTP 协议失败。
+                self._send_json(W.lookup_payload(ctx.curves_dir, str(curve), values,
                     method=str(body.get("method") or "linear"),
-                    allow_out_of_range=bool(body.get("allowOutOfRange", False)),
-                )
-            )
+                    allow_out_of_range=bool(body.get("allowOutOfRange", False))))
+                return
+            self._send_json(W.lookup_payload(ctx.curves_dir, str(curve), values,
+                method=str(body.get("method") or "linear"),
+                allow_out_of_range=bool(body.get("allowOutOfRange", False))))
         elif path == "/api/curve-grid":
             body = self._read_body()
             curve = body.get("curve")
             if not curve:
                 raise HttpError("BAD_REQUEST_BODY", "缺少 curve", status=400, field_path="curve")
-            self._send_json(
-                W.curve_grid_payload(
-                    ctx.curves_dir,
-                    str(curve),
-                    n=int(body.get("n") or 200),
-                    method=str(body.get("method") or "linear"),
-                )
-            )
+            raw_n = body.get("n", 200)
+            try:
+                n = int(raw_n)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise HttpError("BAD_REQUEST_BODY", "n 必须是整数", status=400, field_path="n") from exc
+            if isinstance(raw_n, bool) or (isinstance(raw_n, float) and raw_n != n):
+                raise HttpError("BAD_REQUEST_BODY", "n 必须是整数", status=400, field_path="n")
+            self._send_json(W.curve_grid_payload(ctx.curves_dir, str(curve), n=n,
+                method=str(body.get("method") or "linear")))
         elif path == "/api/guard-depth-export":
             body = self._read_body()
             self._send_json(
@@ -379,11 +437,24 @@ def build_context(
     runs_dir: str | Path | None = None,
     webui_dir: Path | None = None,
 ) -> AppContext:
-    """构造服务上下文。``runs_dir`` 缺省跟随 ``UFDEMO_RUNS_DIR``（与界面同源）。"""
-    from . import default_curves_dir, default_material_dir, default_runs_dir, project_root as _pr
+    """构造服务上下文。``runs_dir`` 缺省跟随 ``UFDEMO_RUNS_DIR``（与界面同源）。
+
+    ``webui_dir`` / ``examples_dir`` 缺省走 :mod:`ufdemo` 的**资源解析**
+    （``default_webui_dir()`` / ``default_examples_dir()``），而不是
+    ``project_root() / "webui"`` —— 后者在 wheel 安装后指向不存在的目录，
+    会让界面启动即 ``SystemExit``。
+    """
+    from . import (
+        default_curves_dir,
+        default_examples_dir,
+        default_material_dir,
+        default_runs_dir,
+        default_webui_dir,
+        project_root as _pr,
+    )
 
     root = Path(project_root) if project_root is not None else _pr()
-    webui = Path(webui_dir) if webui_dir is not None else (root / "webui")
+    webui = Path(webui_dir) if webui_dir is not None else default_webui_dir()
     runs = Path(runs_dir) if runs_dir is not None else default_runs_dir()
     return AppContext(
         project_root=root,
@@ -391,7 +462,7 @@ def build_context(
         runs_dir=runs,
         curves_dir=default_curves_dir(),
         material_dir=default_material_dir(),
-        examples_dir=root / "examples",
+        examples_dir=default_examples_dir(),
     )
 
 

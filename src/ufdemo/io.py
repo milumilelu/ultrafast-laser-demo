@@ -104,13 +104,21 @@ def _write_atomic(path: Path, data: str | bytes) -> None:
 def code_version(project_root: str | Path) -> dict[str, Any]:
     """代码版本：优先 git 提交；非 git 环境保存源码清单哈希，不伪造提交号。
 
-    另含 ``ufdemo_version``：即使脱离 git（源码清单哈希也变了），
-    也能从运行目录直接读出产生该结果的软件版本。
+    另含：
+
+    * ``ufdemo_version``：即使脱离 git（源码清单哈希也变了），
+      也能从运行目录直接读出产生该结果的软件版本；
+    * ``build_batch``：交付批次。批次**不写进版本号**（``0.9.0-k1``
+      不是合法 PEP 440，会让构建失败），由独立元数据承载。
     """
-    from . import __version__
+    from . import __version__, BUILD_BATCH
 
     root = Path(project_root)
-    info: dict[str, Any] = {"git_available": False, "ufdemo_version": __version__}
+    info: dict[str, Any] = {
+        "git_available": False,
+        "ufdemo_version": __version__,
+        "build_batch": BUILD_BATCH,
+    }
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True, text=True, timeout=10
@@ -344,6 +352,11 @@ def save_run(result: RunResult, output_dir: str | Path, *, project_root: str | P
 
     # metadata.json 最后写，状态在此刻才置为 completed
     metadata = dict(result.metadata)
+    # metadata.json itself is part of the manifest.  Include it before
+    # serialising so the on-disk manifest and SavedRun.written_files agree.
+    manifest_files = list(written)
+    if "metadata.json" not in manifest_files:
+        manifest_files.append("metadata.json")
     metadata.update(
         {
             "run_id": result.run_id,
@@ -353,7 +366,7 @@ def save_run(result: RunResult, output_dir: str | Path, *, project_root: str | P
             "events_processed": result.events_processed,
             "code": dict(code_info) if code_info is not None else code_version(project_root or Path.cwd()),
             "environment": environment_info(),
-            "written_files": written,
+            "written_files": manifest_files,
             "written_at_utc": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -363,7 +376,7 @@ def save_run(result: RunResult, output_dir: str | Path, *, project_root: str | P
             "不代表成功的最终加工输出，不得与成功结果混用。"
         )
     _write_atomic(out / "metadata.json", stable_json(metadata))
-    written.append("metadata.json")
+    written = manifest_files
 
     return SavedRun(run_id=result.run_id, run_dir=str(out), status=result.status, config_sha256=cfg_hash, written_files=written)
 

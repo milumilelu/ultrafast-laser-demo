@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ufdemo"
-version = "0.9.0-k1"
+version = "0.9.1"
 description = "七种材料超快激光加工 Demo：逐脉冲事件引擎 + 2.5D 表面高度场（M0 + T07 参考评估器 + T09 界面 + T10 查表 + T11 分相结构 + T14 受限阈值协议 + T16/T17 冻结几何批量 + T18 斜入射与可见性 + 本地 Web 界面）"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,14 @@ dependencies = [
   "numpy>=1.24,<3",
 ]
 
+# 批次信息 **不放进制版本号**：`0.9.0-k1` 不是合法 PEP 440 版本，
+# 会让 `pip install` / `python -m build` 直接失败
+# （实测：`project.version must be pep440`）。
+# 批次改由独立元数据承载，运行时经 ``ufdemo.BUILD_BATCH`` 与
+# ``io.code_version()["build_batch"]`` 读出。
+[tool.ufdemo]
+build_batch = "L"
+
 [project.optional-dependencies]
 table = ["scipy>=1.10"]          # 批次 F（T10）查表与 PCHIP
 ui = ["streamlit>=1.30", "plotly>=5.18"]   # 批次 E（T09）
@@ -22,6 +30,24 @@ dev = ["pytest>=7", "openpyxl>=3.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# 随包只读资源：材料卡 / 曲线卡 / 参考快照 / 前端静态文件 / 示例配置。
+#
+# 为什么用 data-files 而不是把资源搬进 src/ufdemo/_resources：
+# 仓库根目录的 data/、webui/、examples/ 是**唯一权威副本**，
+# 被 tests/、tools/、docs/ 与材料卡的 cardPath 共同引用。
+# 搬进包内需要同步改动约 20 处引用，且会让运行记录里的路径发生变化
+# ——为修一个分发问题引入回归风险不划算。data-files 让「一份源文件」
+# 同时进 wheel，运行时由 ufdemo.resource_root() 解析 <prefix>/share/ufdemo。
+[tool.setuptools.data-files]
+"share/ufdemo/data/materials" = ["data/materials/*.json"]
+"share/ufdemo/data/curves" = ["data/curves/*.json", "data/curves/*.csv"]
+"share/ufdemo/data/references" = ["data/references/*"]
+"share/ufdemo/webui" = ["webui/index.html", "webui/README.md"]
+"share/ufdemo/webui/css" = ["webui/css/*.css"]
+"share/ufdemo/webui/js" = ["webui/js/*.js"]
+"share/ufdemo/webui/test" = ["webui/test/*.mjs"]
+"share/ufdemo/examples" = ["examples/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

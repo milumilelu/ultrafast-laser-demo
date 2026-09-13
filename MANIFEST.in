@@ -1,0 +1,14 @@
+# sdist 需要显式带上随包只读资源，否则
+# `python -m build --sdist` → 再从 sdist 构建 wheel 时会缺文件
+# （data_files 的来源文件在 sdist 里必须已存在）。
+#
+# 这些目录是**唯一权威副本**，不搬进 src/ufdemo/；见 pyproject.toml 的说明。
+include README.md
+include pyproject.toml
+include requirements.lock
+recursive-include src/ufdemo *.py
+recursive-include data *.json *.csv *.sha256
+recursive-include examples *.json
+recursive-include webui *.html *.css *.js *.mjs *.md
+recursive-include docs *.md *.csv
+recursive-include tools *.py *.mjs

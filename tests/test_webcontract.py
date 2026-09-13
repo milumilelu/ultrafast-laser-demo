@@ -356,3 +356,274 @@ def test_http_unknown_endpoint_404(live_server):
     status, body = _get(live_server, "/api/nope")
     assert status == 404
     assert body["code"] == "NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# 业务错误必须返回 JSON（审查缺陷 F01 / 升级任务 U01）
+#
+# 回归背景：``except UFDemoError`` 分支写成
+# ``self._send_error_json(err.code, err.message, status=400, **err.to_dict())``，
+# 而 ``to_dict()`` 已含 ``code``/``message`` → ``TypeError: got multiple values
+# for argument 'code'``。异常在 ``_send_error_json`` **执行之前**抛出，
+# 于是一个响应都发不出去，客户端只看到连接被关（``RemoteDisconnected``）。
+#
+# 相邻的 ``ContractError``/``HttpError`` 分支当时已过滤，只有 ``UFDemoError``
+# 漏改 → **不是所有错误都触发**，属间歇性故障，更难排查。
+# ---------------------------------------------------------------------------
+
+
+def test_error_response_is_single_conversion_point():
+    """唯一错误→HTTP 转换点：三类异常都不产生重复关键字参数。"""
+    from ufdemo import webapp
+
+    cases = [
+        UFDemoError("TABLE_OUT_OF_RANGE", "越界", field_path="x", actual=1.0),
+        W.ContractError("RUN_NOT_FOUND", "没有该运行", status=404, field_path="run_dir"),
+        webapp.HttpError("BAD_REQUEST_BODY", "请求体不合法", status=400, field_path="body"),
+        RuntimeError("兜底"),
+    ]
+    for err in cases:
+        code, message, status, extra = webapp.error_response(err)
+        assert isinstance(code, str) and code
+        assert isinstance(message, str) and message
+        assert isinstance(status, int)
+        # 关键：extra 里不得再出现位置参数已占用的键
+        assert "code" not in extra, f"{type(err).__name__} 的 extra 泄漏了 code"
+        assert "message" not in extra, f"{type(err).__name__} 的 extra 泄漏了 message"
+        # 能真的序列化出去（与 _send_error_json 同一口径）
+        json.dumps({"code": code, "message": message, **extra},
+                   ensure_ascii=False, allow_nan=False)
+
+
+def test_error_response_preserves_status_and_zh_code():
+    """三类异常的既有状态码与中文原因不得被统一化抹掉。"""
+    from ufdemo import webapp
+
+    _, _, status, _ = webapp.error_response(
+        W.ContractError("RUN_NOT_FOUND", "没有该运行", status=404))
+    assert status == 404, "ContractError 自带 404，不得被改成 400"
+
+    _, _, status, _ = webapp.error_response(
+        webapp.HttpError("REQUEST_TOO_LARGE", "过大", status=413))
+    assert status == 413
+
+    _, message, status, extra = webapp.error_response(
+        UFDemoError("CONFIG_INVALID", "配置无效", field_path="grid.nx"))
+    assert status == 400, "UFDemoError 映射 400"
+    assert extra.get("field_path") == "grid.nx", "字段路径必须保留"
+    assert extra.get("code_zh") == "配置无效", "UFDemoError 应带上中文码"
+
+
+def test_error_response_survives_nonfinite_actual():
+    """``actual`` 为 NaN/Inf 时也必须能发出 JSON（allow_nan=False 会拒绝 NaN）。"""
+    from ufdemo import webapp
+
+    _, _, _, extra = webapp.error_response(
+        UFDemoError("NUMERIC_NONFINITE", "非有限", actual=float("nan")))
+    json.dumps(extra, ensure_ascii=False, allow_nan=False)  # 不得抛 ValueError
+
+
+@pytest.mark.slow
+def test_http_business_error_returns_json_and_keeps_connection(live_server):
+    """F01 核心验收：业务错误必须返回可解析 JSON，且**不断开连接**。
+
+    分两类，因为本工程的错误出口有**两条**，行为不同（这本身是正确设计）：
+
+    * **HTTP 层拒绝** —— 异常冒泡到 ``do_GET``/``do_POST``，返回 4xx + JSON。
+      这些正是原先 ``except UFDemoError`` 漏改的分支。
+    * **契约层优雅拒绝** —— ``solve_payload`` 内部 ``try/except`` 后返回
+      ``200 + ok=False + errors[]``（前端逐条显示校验报告，而不是把它当网络错误）。
+      这类**不应该**变成 500，也不应该断连。
+
+    两类都断言同一件事：**连接没被关、响应是 JSON**。
+    """
+    # -- A. HTTP 层拒绝：必须 4xx + JSON --
+    http_layer_rejects: list[tuple[str, dict[str, Any]]] = [
+        ("/api/lookup", {"curve": "__no_such_curve__", "xs": [1.0]}),
+        ("/api/curve-grid", {"curve": "__no_such_curve__"}),
+        ("/api/reference", {"case": "__no_such_case__"}),
+    ]
+    for path, body in http_layer_rejects:
+        # 关键：不捕获连接异常 —— 若连接被关，测试直接抛错失败
+        status, payload = _post(live_server, path, body)
+        assert 400 <= status < 500, f"{path} 期望 4xx，实际 {status}：{payload!r}"
+        assert isinstance(payload, dict), f"{path} 未返回 JSON 对象：{payload!r}"
+        assert payload.get("code"), f"{path} 缺少 code：{payload!r}"
+        assert payload.get("message"), f"{path} 缺少 message：{payload!r}"
+
+    # -- A2. 非有限输入（NaN）同样走 UFDemoError 分支 --
+    status, payload = _post(
+        live_server, "/api/lookup", {"curve": "__no_such_curve__", "xs": ["nan"]})
+    assert 400 <= status < 500, f"NaN 输入期望 4xx，实际 {status}"
+    assert payload.get("code"), payload
+
+    # NaN 打到**真实存在**的曲线：越界/语义错误也必须给出 JSON，而不是断连
+    status, curves = _get(live_server, "/api/curves")
+    assert curves["curves"], "应至少有一条曲线"
+    real_curve = curves["curves"][0]["name"]
+    status, payload = _post(
+        live_server, "/api/lookup", {"curve": real_curve, "xs": [float("nan")]})
+    assert isinstance(payload, dict), f"NaN 打到真实曲线时未返回 JSON：{payload!r}"
+    assert payload.get("code") or payload.get("ok") is not None, payload
+
+    # -- B. 契约层优雅拒绝：200 + status="failed" + errors[]，且不是断连 --
+    graceful: list[dict[str, Any]] = [
+        {"material_card_file": "data/materials/__no_such_card__.json"},
+        {"grid": {"nx": 1, "ny": 1}},  # 非法几何
+    ]
+    base = json.loads(TEN_PULSES.read_text(encoding="utf-8"))
+    for override in graceful:
+        params = {**base, **override}
+        if "grid" in override:
+            params["grid"] = {**base["grid"], **override["grid"]}
+        status, payload = _post(live_server, "/api/solve", {"params": params})
+        assert status == 200, f"契约层拒绝应返回 200（不是 500/断连），实际 {status}"
+        # 契约层用 status="failed" 表达失败（见 webcontract._failure → run_to_payload），
+        # 不用 ok=False 那种形状；两种都接受，但必须明确是失败且带 errors。
+        assert payload.get("status") == "failed" or payload.get("ok") is False, \
+            f"应优雅失败：{payload!r}"
+        errs = payload.get("errors") or []
+        assert errs, f"失败必须带 errors：{payload!r}"
+        assert errs[0].get("code"), f"errors[0] 缺 code：{errs[0]!r}"
+        assert errs[0].get("message"), f"errors[0] 缺 message：{errs[0]!r}"
+        json.dumps(payload, allow_nan=False)  # 失败响应体也必须无 NaN
+
+
+@pytest.mark.slow
+def test_http_malformed_params_never_kills_connection(live_server):
+    """畸形 params 也必须得到 JSON —— 哪怕内部抛的是未预期异常。"""
+    # ``grid`` 类型完全错误：RunConfig 可能抛非 UFDemoError。无论哪种，
+    # 统一出口都应把它变成 JSON，而不是让连接静默关闭。
+    for bad in ({"grid": "not-an-object"}, {"laser": None}, {"path": 42}):
+        status, payload = _post(live_server, "/api/solve", {"params": bad})
+        assert isinstance(payload, dict), f"{bad} 未返回 JSON：{payload!r}"
+        assert payload.get("code") or payload.get("errors") or payload.get("ok") is not None
+
+
+@pytest.mark.slow
+def test_http_error_paths_do_not_kill_server(live_server):
+    """连发多个坏请求后，服务仍能正常响应 —— 证明单请求失败不拖垮服务。"""
+    for _ in range(3):
+        try:
+            _post(live_server, "/api/lookup", {"curve": "__no_such_curve__", "xs": [1.0]})
+        except Exception:  # noqa: BLE001
+            # 故意吞掉：本测试只关心「服务还活着」，单次请求的失败原因
+            # 由 test_http_business_error_returns_json_and_keeps_connection 断言。
+            pass
+    status, body = _get(live_server, "/api/health")
+    assert status == 200 and body["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# 非有限数值不得让任何出口失败（U01 连带发现）
+#
+# 三处出口全部用 ``allow_nan=False``：``io.stable_json``、``webapp._send_json``、
+# 以及 CLI。若 ``UFDemoError.to_dict()`` 原样保留 NaN 的 ``actual``，
+# 就会在**错误处理路径上再抛异常** —— 诊断文件写不出来、HTTP 错误响应发不出去。
+# 归一化放在 ``errors._jsonable``（源头），webapp 再兜一道网。
+# ---------------------------------------------------------------------------
+
+
+def test_ufdemo_error_to_dict_is_json_safe_with_nonfinite_actual():
+    """``to_dict()`` 必须能直接喂给 ``json.dumps(allow_nan=False)``。"""
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        err = UFDemoError("NUMERIC_NONFINITE", "非有限数值", field_path="x", actual=bad)
+        d = err.to_dict()
+        assert d["actual"] is None, f"actual={bad!r} 应归一化为 None，实际 {d['actual']!r}"
+        json.dumps(d, ensure_ascii=False, allow_nan=False)  # 不得抛 ValueError
+        # 属性本身保持原值（只改序列化结果，不改语义）
+        assert isinstance(err.actual, float)
+
+
+def test_ufdemo_error_to_dict_nested_nonfinite_is_safe():
+    """``actual`` 是容器时也要逐层归一化（如数组形式的非法输入）。"""
+    err = UFDemoError(
+        "NUMERIC_NONFINITE", "非有限数值",
+        actual={"xs": [1.0, float("nan"), {"deep": float("inf")}]},
+    )
+    d = err.to_dict()
+    json.dumps(d, ensure_ascii=False, allow_nan=False)
+    assert d["actual"] == {"xs": [1.0, None, {"deep": None}]}
+
+
+def test_stable_json_accepts_error_dict_with_nan_actual(tmp_path):
+    """落盘路径同样不得因 NaN 崩溃（``io.stable_json`` 用 allow_nan=False）。"""
+    from ufdemo.io import stable_json
+
+    err = UFDemoError("NUMERIC_NONFINITE", "非有限数值", actual=float("nan"))
+    text = stable_json({"errors": [err.to_dict()]})
+    assert "NaN" not in text and "Infinity" not in text
+    assert json.loads(text)["errors"][0]["actual"] is None
+
+
+def test_webapp_and_error_sanitizers_agree():
+    """``webapp._json_safe`` 与 ``errors._jsonable`` 语义必须一致（防漂移）。"""
+    from ufdemo import webapp
+    from ufdemo.errors import _jsonable
+
+    samples: list[Any] = [
+        float("nan"), float("inf"), float("-inf"), 1.5, True, False,
+        None, "x", [1.0, float("nan")], {"a": float("inf"), "b": [float("nan")]},
+    ]
+    for s in samples:
+        assert webapp._json_safe(s) == _jsonable(s), f"两者对 {s!r} 处理不一致"
+
+
+@pytest.mark.slow
+def test_http_nonfinite_query_returns_json_not_error(live_server):
+    """真实曲线 + NaN 查询：契约层优雅拒绝（``ok=False``），不得变成 500。"""
+    status, curves = _get(live_server, "/api/curves")
+    name = curves["curves"][0]["name"]
+    status, payload = _post(live_server, "/api/lookup", {"curve": name, "xs": [float("nan")]})
+    assert status == 200, f"应为契约层优雅拒绝（200），实际 {status}：{payload!r}"
+    assert payload.get("ok") is False, payload
+    errs = payload.get("errors") or []
+    assert errs and errs[0].get("code"), payload
+    json.dumps(payload, allow_nan=False)  # 响应体内不得留 NaN
+
+
+@pytest.mark.slow
+def test_http_history_readback_keeps_grid_and_snapshot_meta(live_server):
+    """**读历史必须带回网格与快照元信息**（U03-8 暴露的缺陷，非 F01–F08 之一）。
+
+    背景：``run_to_payload`` 的 ``grid`` 取自 ``frozen.surface()``，
+    而读历史路径 ``result is None`` → ``grid`` 变空字典。后果只在**读历史**
+    这条路径出现：
+
+    * 时间轴 ``drawHeatmap(..., f.grid.nx, f.grid.ny)`` 收到 ``undefined``；
+    * ``createImageData(undefined, undefined)`` 抛
+      ``Value is not of type 'long'`` → 回放画布永远空白；
+    * 截面 ``Array.from(f.grid.xs)`` 也拿不到坐标。
+
+    快照元信息同理：契约把它嵌在 ``label`` 子对象里、键名 snake_case
+    （``event_index`` / ``time_s`` / ``pass_id``），前端若读顶层 camelCase
+    就会显示 “事件 undefined”。
+    """
+    raw = json.loads(TEN_PULSES.read_text(encoding="utf-8"))
+    status, out = _post(live_server, "/api/solve", {"params": raw, "label": "grid_hist"})
+    assert status == 200 and out["status"] == "completed"
+    run_id = out["runId"]
+
+    live_grid = out["grid"]
+    assert live_grid.get("nx") and live_grid.get("ny"), "实时提交必须带网格"
+
+    status, back = _get(live_server, "/api/runs/" + run_id)
+    assert status == 200 and back["readFromDisk"] is True
+
+    g = back.get("grid") or {}
+    assert g.get("nx") == live_grid["nx"], f"读历史 nx 丢失：{g}"
+    assert g.get("ny") == live_grid["ny"], f"读历史 ny 丢失：{g}"
+    assert g.get("reconstructedFromDisk") is True, "读历史应标注网格来自盘上重建"
+    assert len(g.get("xs") or []) == g["nx"], "读历史应带回 x 坐标"
+    assert len(g.get("ys") or []) == g["ny"], "读历史应带回 y 坐标"
+
+    snaps = back.get("snapshots") or []
+    assert snaps, "应有快照"
+    label = snaps[-1].get("label") or {}
+    for key in ("event_index", "time_s", "pass_id"):
+        assert key in label, f"快照 label 缺 {key}：{label}"
+        assert label[key] is not None, f"快照 {key} 为 None：{label}"
+    # 前端渲染读的正是 label 里的这三个键（snake_case），不是顶层 camelCase
+    assert not any(k in snaps[-1] for k in ("eventIndex", "timeS", "passId")), (
+        "契约不应同时提供顶层 camelCase 别名，否则前端会读错分支"
+    )

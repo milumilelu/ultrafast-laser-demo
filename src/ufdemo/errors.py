@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # --- 执行细则 11.2 规定的错误码 -------------------------------------------------
@@ -126,6 +127,24 @@ class UFDemoError(Exception):
 
 
 def _jsonable(value: Any) -> Any:
+    """转成 JSON 安全的形状。
+
+    **非有限浮点一律转 ``None``**：本工程的 JSON 写出端全部用
+    ``allow_nan=False``（``io.stable_json``、``webapp._send_json``），
+    因为 JSON 规范没有 NaN/Inf。若把 NaN 原样放进 ``to_dict()``，会在这两处
+    抛出 ``ValueError: Out of range float values are not JSON compliant``
+    —— 也就是说，**在错误处理路径上再抛异常**：
+    诊断文件写不出来、HTTP 错误响应发不出去（客户端只看到连接被关）。
+
+    ``actual`` 为 NaN 是真实会发生的（如 ``NUMERIC_NONFINITE`` 错误记录
+    实际读到 ``nan``），因此这里必须归一化。
+
+    语义上与 ``webcontract.jsonable`` 保持一致：``None`` = 缺失/不可表示。
+    注意只影响**序列化结果**；``UFDemoError.actual`` 属性本身保持原值，
+    ``format_human()`` 仍会打印 ``nan``。
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, (list, tuple)):
