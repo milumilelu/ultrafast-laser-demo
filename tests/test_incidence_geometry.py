@@ -306,6 +306,69 @@ def test_tilted_plane_normal_conversion_end_to_end():
     assert any("Δh=-a_n/n_z" in a for a in res.metadata["approximations"])
 
 
+def test_tilted_plane_axial_beam_without_dynamic_angle_uses_analytic_normal():
+    """轴向光束 + 初始斜面 + ``dynamic_angle=False``：**不得**按水平面算。
+
+    回归背景（F11）：`beam.py` 的快捷分支写的是 ``if axial and not dynamic: mu = None``，
+    隐含假设「轴向光束 ⇒ 表面水平 ⇒ μ=1」。但 ``surface.initialize`` **确实支持**
+    ``initial_surface="tilted_plane"``，此时
+    **「光束沿全局 z 轴」≠「光束垂直于工件表面」**；
+    关闭 ``dynamic_angle`` 只应表示「不随形貌演化更新法向」，**不等于初始坡度不存在**。
+
+    端到端实测（修复前）复现出的错误值恰为 ``ln(2)·δ``，即完全按水平面算；
+    正确值应为 ``ln(√2)·√2·δ``（先按 μ=1/√2 投影，再按 Δh=a_n/n_z 换算）。
+
+    注意既有 tilted 测试**全部用 ``dynamic_angle=True``**，所以这一格长期零覆盖。
+    """
+    raw = _raw()
+    # 解析夹具（tests/fixtures/analytic_fixture.json）**声明的**物理量。
+    # 这里硬编码而**不**从实现里读 —— 期望值必须独立，否则实现与期望同源、测试恒真。
+    ana_fth, ana_delta, ana_w0 = 1.0e4, 1.0e-7, 1.0e-5  # J/m^2, m, m
+    card_probe = _card(raw)
+    assert card_probe.response["threshold_internal"] == pytest.approx(ana_fth, rel=1e-12)
+    assert card_probe.response["delta_internal"] == pytest.approx(ana_delta, rel=1e-12)
+    assert float(raw["laser"]["spot_radius_m"]) == pytest.approx(ana_w0, rel=1e-12)
+
+    f = float(raw["laser"]["repetition_rate_Hz"])
+    raw["path"]["segments"][0]["end_s"] = 1.0 / f
+    raw["grid"]["initial_surface"] = "tilted_plane"
+    raw["grid"]["initial_slope_x"] = 1.0  # 45°
+    raw["grid"]["initial_slope_y"] = 0.0
+    raw["grid"]["nx"] = 161
+    raw["grid"]["ny"] = 161
+    # 轴向光束 + 关闭动态角度
+    raw["laser"]["direction_unit"] = [0.0, 0.0, 1.0]
+    raw["solver"]["dynamic_angle"] = False
+    raw["solver"]["geometry_feedback"] = "fixed_geometry"
+    # 使中心 F_perp 恰好等于 2·F_th：peak = 2E/(π w²) = 2F_th ⇒ E = F_th·π·w²
+    raw["laser"]["pulse_energy_J"] = ana_fth * math.pi * ana_w0 * ana_w0
+
+    cfg = RunConfig.from_dict(raw)
+    res = solve(cfg, _card(raw))
+    assert res.status == "completed"
+
+    nz = 1.0 / math.sqrt(1.0 + 1.0 * 1.0 + 0.0 * 0.0)  # = 1/√2
+    mu = nz  # 轴向 k=(0,0,1)，斜面法向 n ⇒ μ = k·n = n_z
+    a_n = ana_delta * math.log(2.0 * mu)  # F_s/F_th = μ·F_perp/F_th = 2μ
+    predicted_drop = a_n / nz  # Δh = a_n/n_z
+    assert predicted_drop == pytest.approx(0.490129e-7, rel=1e-4)
+
+    measured = float(res.surface.initial_height[80, 80] - res.surface.height[80, 80])
+    buggy = ana_delta * math.log(2.0)  # 0.693147e-7：完全按水平面算会给的值
+    assert measured != pytest.approx(buggy, rel=1e-6), (
+        "中心下降等于 ln(2)·δ ⇒ 又把斜面当水平面算了（F11 回归）"
+    )
+    assert measured == pytest.approx(predicted_drop, rel=2e-2), (
+        f"实测中心下降 {measured:.6e} vs 解析预测 {predicted_drop:.6e}"
+    )
+
+    # 斜面必须真的发生了法向换算（修复前该计数为 0）
+    g = res.diagnostics["geometry"]
+    assert g["normal_thickness_conversions"] >= 1, (
+        f"斜面的法向厚度换算未发生：{g}"
+    )
+
+
 def test_tilted_plane_volume_consistency():
     """斜平面的体积一致性：**投影面积元**与**真实表面积**两套口径不得混用。
 

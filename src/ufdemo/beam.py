@@ -190,6 +190,32 @@ def oblique_window_radius(r_cut: float, k: Any, axial_span: float, *, min_mu: fl
     return (float(r_cut) + lateral) / mu_floor
 
 
+def is_flat_initial_surface(grid: Any) -> bool:
+    """初始面是否为**真正平面**（面法向 = ``(0,0,1)``）。
+
+    为什么需要它：``beam_patch`` 里有一条「轴向光束 + 关闭动态角度」的快捷路径，
+    直接 ``μ=None``、``F=F_perp``。这条路径的隐含假设是
+    **「光束沿全局 z 轴」⇒「表面水平」⇒ μ=1**。
+
+    但 ``SurfaceState.initialize`` 支持 ``initial_surface="tilted_plane"``，
+    此时**轴向 ≠ 垂直**：斜面法向不是 z 轴，仍需要按 μ 做投影、并按
+    ``Δh = -a_n/n_z`` 做法向厚度换算。关闭 ``dynamic_angle`` 只应表示
+    「不随形貌演化更新法向」，**不等于初始坡度不存在**。
+
+    端到端实测（修复前）：轴向光束 + 45° 斜面 + ``dynamic_angle=False``，
+    中心列高下降恰好等于 ``ln(2)·δ``（= 完全按水平面算），
+    正确值应为 ``ln(√2)·√2·δ``，**高估 41.42%**。
+
+    所以快捷路径只对真正平面成立；斜面落到常规分支 —— 该分支在
+    ``dynamic=False`` 时本来就用 ``geometry.analytic_plane_normal()`` 的解析法向，
+    语义正好是「固定角度、不随形变更新」。
+    """
+    if str(getattr(grid, "initial_surface", "flat")) != "tilted_plane":
+        return True
+    sx, sy = getattr(grid, "initial_slope", (0.0, 0.0))
+    return abs(float(sx)) <= 0.0 and abs(float(sy)) <= 0.0
+
+
 def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any]) -> FluencePatch:
     """计算某事件在表面上的局部能流入射。
 
@@ -326,7 +352,13 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
         notes.append("固定几何解析基准：本事件使用初始表面高度计算离焦，忽略当前高度变化。")
 
     # --- 批次 J：投影（F_s = μ F_perp）与可见性 ----------------------------
-    if axial and not dynamic:
+    # 快捷路径**只对真正平面**成立（轴向光束 ≠ 垂直于倾斜工件）：
+    # 斜面即使关闭动态角度也必须做 μ 投影与法向厚度换算，见 is_flat_initial_surface()。
+    # 这个判据在下面构造 FluencePatch 时**还要用一次**（决定 nz 是否上报），
+    # 所以只算一次、两处共用 —— 避免像旧代码那样在三处各写一遍「axial and not dynamic」，
+    # 而其中两处漏了斜面情形。
+    axial_flat_shortcut = axial and not dynamic and is_flat_initial_surface(surface.grid)
+    if axial_flat_shortcut:
         mu = None
         mask = geom_mask
         F = F_perp
@@ -406,7 +438,10 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
         oblique=not axial,
         dynamic_angle=dynamic,
         mu=mu,
-        nz=(None if (axial and not dynamic) else n_z),
+          # nz 只在**真正平面**的轴向快捷路径上可以缺省（n_z ≡ 1，恒等转换）。
+          # 斜面即使是轴向光束 + 关闭动态角度，也必须上报 n_z，
+          # 否则 solver 端的 Δh=a_n/n_z 换算会被跳过（实测高估 41.42%）。
+          nz=(None if axial_flat_shortcut else n_z),
         visibility=vis_stats,
         intercepted_energy_plane_J=total_plane,
     )

@@ -393,10 +393,18 @@ def solve(
         and abs(config.laser.direction_unit[1]) < 1e-15
         and abs(config.laser.direction_unit[2] - 1.0) < 1e-15
     )
+    # 「几何修正是否启用」不能只看「非轴向 or 动态角度」：
+    # **轴向光束 + 初始斜面 + 关闭动态角度**同样需要投影与法向厚度换算
+    # ——轴向 ≠ 垂直于倾斜工件。旧判据在这格上把几何修正报成「未启用」，
+    # 与 beam_patch 的快捷路径同源（F11）。判据与 beam.is_flat_initial_surface 对齐。
+    _tilted_initial = str(getattr(config.grid, "initial_surface", "flat")) == "tilted_plane" and (
+        max(abs(float(v)) for v in getattr(config.grid, "initial_slope", (0.0, 0.0))) > 0.0
+    )
     geom_diag: dict[str, Any] = {
-        "enabled": (not _axial_dir) or bool(config.solver.dynamic_angle),
+        "enabled": (not _axial_dir) or bool(config.solver.dynamic_angle) or _tilted_initial,
         "oblique_incidence": not _axial_dir,
         "dynamic_angle": bool(config.solver.dynamic_angle),
+        "tilted_initial_surface": _tilted_initial,
         "direction_unit": list(config.laser.direction_unit),
         "incidence_deg_axial": (
             math.degrees(math.acos(min(1.0, max(-1.0, float(config.laser.direction_unit[2])))))
