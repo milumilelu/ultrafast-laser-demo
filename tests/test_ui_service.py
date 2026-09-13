@@ -587,6 +587,58 @@ def test_list_curve_cards_lists_examples():
     assert all(c["curve_id"] for c in cards)
 
 
+def test_list_curve_cards_reports_entry_class():
+    """入口分层（U04）：每张卡都要带 ``entry_class``，缺字段时按 fixture 处理。
+
+    为什么必须有这个字段：默认入口应展示**真实实验数据**，而历史上三张卡
+    都是「公式重算 / 人工解析 / 合成」，却在默认下拉里以「YSZ」等名字出现，
+    容易被读成材料实测数据。
+    """
+    cards = U.list_curve_cards(CURVES_DIR)
+    assert cards
+    for c in cards:
+        assert c["entry_class"] in ("measured", "fixture"), f"未分类：{c}"
+        # 缺字段/读不出时必须落到 fixture（保守：不给默认入口）
+        assert c["entry_class"] == "fixture" or c["entry_class"] == "measured"
+
+
+def test_entry_class_defaults_to_fixture_when_absent(tmp_path):
+    """卡片**没有** ``entry_class`` 字段时，必须按 ``fixture`` 处理。
+
+    若默认成 ``measured``，任何漏标字段的数据都会自动占据默认入口 ——
+    正是要避免的那种「未经核实就像实测」的状态。
+    """
+    import json as _json
+
+    src = CURVES_DIR / "analytic_fixture_depth_vs_fluence.curve.json"
+    raw = _json.loads(src.read_text(encoding="utf-8"))
+    raw.pop("entry_class", None)  # 去掉分类字段
+    (tmp_path / "unclassified.curve.json").write_text(
+        _json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    cards = U.list_curve_cards(tmp_path)
+    assert [c["entry_class"] for c in cards] == ["fixture"]
+
+
+def test_analytic_fixture_curve_is_marked_fixture():
+    """解析 fixture 卡必须是 ``fixture``，且**不再**带「YSZ」字样。
+
+    回归背景：该卡曾被命名为 ``ysz_analytic_depth_vs_fluence``，
+    而其 ``material_id`` 是 ``analytic_fixture_not_a_material``、来源是
+    ``analytic_test_definition`` —— 名字与实质不符，易被读成氧化锆实测曲线。
+    """
+    import json as _json
+
+    p = CURVES_DIR / "analytic_fixture_depth_vs_fluence.curve.json"
+    assert p.exists(), "解析 fixture 卡应存在（已由 make_curves.py 改名生成）"
+    raw = _json.loads(p.read_text(encoding="utf-8"))
+    assert raw["entry_class"] == "fixture"
+    assert raw["material_id"] == "analytic_fixture_not_a_material"
+    assert raw["source_type"] == "analytic_test_definition"
+    assert "ysz" not in raw["curve_id"].lower()
+    # 旧名不得再出现于曲线目录
+    assert not (CURVES_DIR / "ysz_analytic_depth_vs_fluence.curve.json").exists()
+
+
 def test_list_curve_cards_on_missing_dir_returns_empty(tmp_path):
     assert U.list_curve_cards(tmp_path / "nope") == []
 

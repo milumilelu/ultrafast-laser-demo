@@ -104,7 +104,7 @@ def collect_error_rows() -> list[dict[str, Any]]:
             rows.append(_row(name, "card_schema", expected, type(err).__name__, "失败", repr(err)))
 
     # --- 2) 行为级拒收 -----------------------------------------------------
-    ysz = T.load_curve(CURVES_DIR / "ysz_analytic_depth_vs_fluence.curve.json")
+    ysz = T.load_curve(CURVES_DIR / "analytic_fixture_depth_vs_fluence.curve.json")
     sic = T.load_curve(CURVES_DIR / "sic_threshold_vs_effective_n.curve.json")
     vol = T.load_curve(CURVES_DIR / "synthetic_volume_per_energy.curve.json")
 
@@ -340,8 +340,8 @@ def write_markdown(
         "```bash",
         "python tools/make_curves.py",
         "python tools/table_report.py",
-        "python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5",
-        "python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 2.5 --method pchip",
+        "python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 5",
+        "python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 2.5 --method pchip",
         "python -m pytest -q -m g09",
         "```",
         "",

@@ -532,15 +532,15 @@ def main() -> int:
             "数值实现验证", r["detail"])
 
     # 越界不返回 0 / 不外推 / 端点包含
-    ysz_curve = _T.load_curve(ROOT / "data" / "curves" / "ysz_analytic_depth_vs_fluence.curve.json")
+    ysz_curve = _T.load_curve(ROOT / "data" / "curves" / "analytic_fixture_depth_vs_fluence.curve.json")
     lo, hi = ysz_curve.valid_range
     oor = _T.lookup(ysz_curve, lo - 1.0, allow_out_of_range=True)
     inr = _T.lookup(ysz_curve, [lo, hi])
     ok_oor = (oor.values[0] is None) and (oor.values[0] != 0.0)
-    add("G09-table", "ysz_analytic_depth_vs_fluence", "", "越界查询返回值",
+    add("G09-table", "analytic_fixture_depth_vs_fluence", "", "越界查询返回值",
         "None（不是 0，也不外推）", f"越界={oor.values}｜状态={oor.status}", "", "值必须为 None",
         ok_oor, str(table_err_csv), "数值实现验证", "低于量测区间不等于无去除")
-    add("G09-table", "ysz_analytic_depth_vs_fluence", "", "端点包含性", "含端点（闭区间）",
+    add("G09-table", "analytic_fixture_depth_vs_fluence", "", "端点包含性", "含端点（闭区间）",
         f"[{lo}, {hi}] 查值状态={inr.status}", "", "status==ok", inr.status == "ok",
         str(table_interp_csv), "数值实现验证", "端点不因浮点被判越界")
 
@@ -913,7 +913,7 @@ def main() -> int:
         "python -m ufdemo reference examples/sic_reference_case.json --out runs/g05_sic_reference",
         "python -m ufdemo run examples/alsic_particle_composite.json --out runs/g06_alsic_particles --force-new-suffix",
         "python -m ufdemo run examples/cfrp_laminated_ply.json --out runs/g06_cfrp_plies --force-new-suffix",
-        "python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5",
+        "python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 5",
         "python tools/make_curves.py",
         "python tools/table_report.py",
         "python tools/structure_report.py",

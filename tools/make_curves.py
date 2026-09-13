@@ -7,7 +7,7 @@
 
 1. ``data/curves/`` —— 三条**示例曲线**（各一张 ``.curve.json`` + 一个 ``.points.csv``）：
 
-   * ``ysz_analytic_depth_vs_fluence`` —— 来自解析 fixture 的逐事件增量曲线
+   * ``analytic_fixture_depth_vs_fluence`` —— 来自解析 fixture 的逐事件增量曲线
      ``a(F) = delta * max(ln(F/Fth), 0)``，可与人解析公式逐点对照；
    * ``sic_threshold_vs_effective_n`` —— 由 SiC 材料卡**拟合参数**按式(6)
      重算的阈值曲线，可与 ``ufdemo.references.sic_threshold_fluence`` 对照；
@@ -70,8 +70,8 @@ def _dump(path: Path, obj: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def make_ysz_analytic() -> None:
-    cid = "ysz_analytic_depth_vs_fluence"
+def make_analytic_fixture() -> None:
+    cid = "analytic_fixture_depth_vs_fluence"
     fluences = [1.0, 1.5, 2.0, 3.0, 5.0, math.exp(2.0), 10.0, 20.0, 40.0]
     rows = [(F, DELTA_M * max(math.log(F / FTH_J_CM2), 0.0)) for F in fluences]
     # 校验：e^2 处应恰好等于 2*delta = 200 nm
@@ -86,6 +86,7 @@ def make_ysz_analytic() -> None:
         {
             "schema_version": "1.0",
             "curve_id": cid,
+            "entry_class": "fixture",
             "material_id": "analytic_fixture_not_a_material",
             "material_identity": {
                 "family": "mathematical_fixture",
@@ -166,6 +167,7 @@ def make_sic_threshold() -> None:
         {
             "schema_version": "1.0",
             "curve_id": cid,
+            "entry_class": "fixture",
             "material_id": "sic_4h_cface_1035nm_multishot",
             "material_identity": {
                 "family": "SiC",
@@ -241,6 +243,7 @@ def make_synthetic_volume() -> None:
         {
             "schema_version": "1.0",
             "curve_id": cid,
+            "entry_class": "fixture",
             "material_id": "synthetic_demo_isotropic",
             "material_identity": {
                 "family": "synthetic_demo",
@@ -412,7 +415,7 @@ def make_invalid_fixtures() -> None:
 
 
 def main() -> int:
-    make_ysz_analytic()
+    make_analytic_fixture()
     make_sic_threshold()
     make_synthetic_volume()
     make_invalid_fixtures()

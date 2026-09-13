@@ -105,9 +105,9 @@ python -m ufdemo reference examples/ysz_reference_case.json --out runs/g05_ysz_r
 python -m ufdemo reference examples/sic_reference_case.json --out runs/g05_sic_reference
 
 # 7) 查表（批次 F）：读曲线卡、插值、越界处理；不求解网格
-python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5
-python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 2.5 --method pchip
-python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 1e3 --allow-out-of-range --json
+python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 5
+python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 2.5 --method pchip
+python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 1e3 --allow-out-of-range --json
 python -m ufdemo table --all-curves
 
 # 8) 全部测试
@@ -188,8 +188,8 @@ python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
 
 ```text
 data/curves/
-├── ysz_analytic_depth_vs_fluence.curve.json   # event_depth_increment → 事件核
-├── ysz_analytic_depth_vs_fluence.points.csv
+├── analytic_fixture_depth_vs_fluence.curve.json   # event_depth_increment → 事件核
+├── analytic_fixture_depth_vs_fluence.points.csv
 ├── sic_threshold_vs_effective_n.curve.json    # threshold_only → 评估器
 ├── sic_threshold_vs_effective_n.points.csv
 ├── synthetic_volume_per_energy.curve.json     # volume_per_energy → 评估器

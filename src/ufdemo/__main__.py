@@ -5,7 +5,7 @@
     python -m ufdemo validate  examples/analytic_single_pulse.json
     python -m ufdemo run       examples/analytic_single_pulse.json --out runs/analytic_001
     python -m ufdemo reference examples/sic_reference_case.json --out runs/sic_ref_001
-    python -m ufdemo table     data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5
+    python -m ufdemo table     data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 5
     python -m ufdemo materials
     python -m ufdemo inspect   runs/analytic_001
 

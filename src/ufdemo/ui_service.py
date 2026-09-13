@@ -1258,13 +1258,36 @@ def iter_layer_names() -> Iterable[str]:
 def list_curve_cards(curves_dir: str | Path) -> list[dict[str, Any]]:
     """列出曲线卡（``*.curve.json``）的摘要，供界面下拉与报告使用。
 
-    只做文件枚举；**不加载 CSV、不插值、不求解**。
+    只做文件枚举 + **读一个字段**；不加载 CSV、不插值、不求解。
+
+    ``entry_class``（入口分层，U04）取值：
+
+    * ``"measured"`` —— 真实实验数据，进**默认入口**；
+    * ``"fixture"``  —— 人工解析 / 合成 / 公式重算，只在**「人工解析测试」入口**出现；
+    * **缺该字段时按 ``"fixture"`` 处理** —— 未经分类的数据**不占默认入口**，
+      这是保守方向：宁可少显示，也不把测试数据当实测展示给用户。
+
+    历史上三张曲线卡都是 fixture（公式重算 / 人工解析 / 合成），
+    却在默认下拉里以「YSZ」等名字出现，容易被读成材料实测数据 —— 这个字段就是为消除该歧义。
     """
     from . import tables
 
     out: list[dict[str, Any]] = []
     for p in tables.iter_curve_cards(curves_dir):
-        out.append({"name": p.name, "path": str(p), "curve_id": p.name[: -len(".curve.json")]})
+        entry_class = "fixture"
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            ec = raw.get("entry_class")
+            if isinstance(ec, str) and ec.strip():
+                entry_class = ec.strip()
+        except Exception:  # noqa: BLE001 - 读不出就按 fixture（保守），不阻断列表
+            pass
+        out.append({
+            "name": p.name,
+            "path": str(p),
+            "curve_id": p.name[: -len(".curve.json")],
+            "entry_class": entry_class,
+        })
     return out
 
 

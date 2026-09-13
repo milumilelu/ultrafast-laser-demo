@@ -59,7 +59,7 @@ def test_jsonable_expands_dataclass():
     """dataclass 必须展开成字典，否则会变成不可解析的 repr 字符串。"""
     from ufdemo import tables as T
 
-    curve = U.load_curve_card(ROOT / "data" / "curves", "ysz_analytic_depth_vs_fluence.curve.json")
+    curve = U.load_curve_card(ROOT / "data" / "curves", "analytic_fixture_depth_vs_fluence.curve.json")
     res = U.table_lookup(U.new_session({}), curve, [5.0], method="linear")
     out = W.jsonable(res)
     assert isinstance(out, dict), f"应展开为 dict，实际 {type(out).__name__}"
@@ -193,7 +193,7 @@ def test_material_entries_three_kinds_and_probe_result():
 def test_lookup_out_of_range_returns_none_not_zero():
     """越界：允许时返回 ``None``，**绝不**返回 0 / 不外推 / 不钳端点。"""
     curves = ROOT / "data" / "curves"
-    name = "ysz_analytic_depth_vs_fluence.curve.json"
+    name = "analytic_fixture_depth_vs_fluence.curve.json"
     curve = U.load_curve_card(curves, name)
     lo, hi = curve.valid_range
     out = W.lookup_payload(curves, name, [lo - 1.0, (lo + hi) / 2, hi + 1.0], allow_out_of_range=True)
@@ -210,7 +210,7 @@ def test_lookup_out_of_range_rejected_when_not_allowed():
     因此这里断言的是**契约形状**，而不是底层异常类型。
     """
     curves = ROOT / "data" / "curves"
-    name = "ysz_analytic_depth_vs_fluence.curve.json"
+    name = "analytic_fixture_depth_vs_fluence.curve.json"
     curve = U.load_curve_card(curves, name)
     out = W.lookup_payload(curves, name, [curve.valid_range[1] + 1.0], allow_out_of_range=False)
     assert out["ok"] is False
@@ -225,6 +225,25 @@ def test_curves_payload_keeps_raw_points():
         assert c["rawPoints"], c["curveId"]
         assert c["validRange"] is not None
         assert isinstance(c["capabilityRows"], list)
+
+
+def test_curves_payload_exposes_entry_class():
+    """每张曲线卡都要带 ``entryClass``，供前端把人工解析/合成数据
+    从默认入口分流到「人工解析测试」。
+
+    这是**接口契约**：前端据此分流，缺字段会退化成「全部当实测」，
+    正是 U04 要消除的误导。
+    """
+    payload = W.curves_payload(ROOT / "data" / "curves")
+    assert payload["curves"]
+    for c in payload["curves"]:
+        assert "entryClass" in c, f"{c.get('curveId')} 缺 entryClass"
+        assert c["entryClass"] in ("measured", "fixture")
+    # 当前仓库三张卡都是 fixture（公式重算/人工解析/合成），
+    # 因此**不应**有任何卡片声称自己是实测数据
+    assert all(c["entryClass"] == "fixture" for c in payload["curves"]), (
+        "现有曲线卡都不是实测数据，不得标为 measured"
+    )
 
 
 def test_example_payload_rejects_path_traversal():

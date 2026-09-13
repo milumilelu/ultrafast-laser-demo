@@ -176,6 +176,11 @@ function toCurve(c) {
     curve_id: c.curveId,
     material_id: c.materialId,
     material_identity: c.materialIdentity,
+    /* 入口分层（U04）：measured=真实实验数据（进默认入口）；
+     * fixture=人工解析/合成/公式重算（只在「人工解析测试」出现）。
+     * 字段缺失一律按 fixture 处理 —— 保守方向：未经分类的数据不占默认入口。
+     * **不是**用来源类型猜出来的，是曲线卡里显式声明的。 */
+    entry_class: c.entryClass || "fixture",
     x_quantity: c.xQuantity,
     y_quantity: c.yQuantity,
     /* 渲染层别名：x/y 的名称与单位（真实来源是 quantity 对象） */

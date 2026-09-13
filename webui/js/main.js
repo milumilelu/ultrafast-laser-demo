@@ -1095,10 +1095,37 @@ function renderTablePanel() {
     $("#t-identity").textContent = "曲线目录为空或全部曲线卡损坏。";
     $("#t-raw").textContent = "";
     $("#t-result").textContent = "";
+    if ($("#t-curve-class")) $("#t-curve-class").innerHTML = "";
     return;
   }
-  $("#t-curve").innerHTML = STORE.curves.map((c) =>
-    `<option value="${escHTML(c.curve_id)}" ${c.curve_id === state.table.curveId ? "selected" : ""}>${escHTML(c.name)}</option>`).join("");
+
+  /* 入口分层（U04）：曲线卡分两类 ——
+   *   measured = 真实实验数据（默认入口）
+   *   fixture  = 人工解析 / 合成 / 公式重算（**不是实测**）
+   * 用 <optgroup> 分开，而不是把 fixture 藏起来：藏起来会让用户以为「没有数据」，
+   * 分开列则让「这是测试数据、不是实测」一眼可见。标签由卡片显式声明，不靠猜。 */
+  const measured = STORE.curves.filter((c) => c.entry_class !== "fixture");
+  const fixtures = STORE.curves.filter((c) => c.entry_class === "fixture");
+  const opt = (c) =>
+    `<option value="${escHTML(c.curve_id)}" ${c.curve_id === state.table.curveId ? "selected" : ""}>${escHTML(c.name)}</option>`;
+
+  let html = "";
+  if (measured.length) html += `<optgroup label="真实实验数据">${measured.map(opt).join("")}</optgroup>`;
+  if (fixtures.length) html += `<optgroup label="人工解析测试（非实测数据）">${fixtures.map(opt).join("")}</optgroup>`;
+  $("#t-curve").innerHTML = html;
+
+  const gate = $("#t-curve-class");
+  if (gate) {
+    if (!measured.length) {
+      gate.innerHTML = `<div class="notice warn">当前<strong>没有真实实验数据曲线卡</strong>；
+        下列曲线来自人工解析定义 / 合成示例 / 公式重算，<strong>仅用于数值实现验证与教学</strong>，
+        不得当作材料实测响应。</div>`;
+    } else {
+      gate.innerHTML = `<div class="watermark">已分列：真实实验数据 ${measured.length} 张｜
+        人工解析测试（非实测）${fixtures.length} 张。</div>`;
+    }
+  }
+
   const curve = curveOf(state.table.curveId);
 
   $("#t-identity").innerHTML =

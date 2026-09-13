@@ -40,7 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CURVES = ROOT / "data" / "curves"
 INVALID = ROOT / "tests" / "fixtures" / "curves_invalid"
 
-YSZ = "ysz_analytic_depth_vs_fluence"
+FIXTURE = "analytic_fixture_depth_vs_fluence"
 SIC = "sic_threshold_vs_effective_n"
 VOL = "synthetic_volume_per_energy"
 
@@ -54,7 +54,7 @@ def card(curve_id: str) -> Path:
 
 @pytest.fixture(scope="module")
 def ysz_curve() -> T.ResponseCurve:
-    return T.load_curve(card(YSZ))
+    return T.load_curve(card(FIXTURE))
 
 
 @pytest.fixture(scope="module")
@@ -74,7 +74,7 @@ def vol_curve() -> T.ResponseCurve:
 
 def test_all_example_curves_load():
     curves = T.load_curves(CURVES)
-    assert {c.curve_id for c in curves} == {YSZ, SIC, VOL}
+    assert {c.curve_id for c in curves} == {FIXTURE, SIC, VOL}
 
 
 def test_required_fields_match_spec():
@@ -94,11 +94,11 @@ def test_required_fields_match_spec():
      "source_figure_or_table", "valid_range", "points_file"],
 )
 def test_missing_required_field_rejected(tmp_path, ysz_curve, missing):
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw.pop(missing)
     (tmp_path / "c.curve.json").write_text(json.dumps(raw), encoding="utf-8")
-    (tmp_path / f"{YSZ}.points.csv").write_text(
-        (CURVES / f"{YSZ}.points.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    (tmp_path / f"{FIXTURE}.points.csv").write_text(
+        (CURVES / f"{FIXTURE}.points.csv").read_text(encoding="utf-8"), encoding="utf-8"
     )
     with pytest.raises(UFDemoError) as ei:
         T.load_curve(tmp_path / "c.curve.json")
@@ -107,7 +107,7 @@ def test_missing_required_field_rejected(tmp_path, ysz_curve, missing):
 
 
 def test_semantics_enum_not_expanded(ysz_curve):
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw["output_semantics"] = "lookup_curve"
     with pytest.raises(UFDemoError) as ei:
         _load_from_dict(raw)
@@ -116,7 +116,7 @@ def test_semantics_enum_not_expanded(ysz_curve):
 
 
 def test_empty_unit_rejected():
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw["y_quantity"]["unit"] = "   "
     with pytest.raises(UFDemoError) as ei:
         _load_from_dict(raw)
@@ -125,7 +125,7 @@ def test_empty_unit_rejected():
 
 
 def test_valid_range_must_be_two_ordered_numbers():
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw["valid_range"]["x"] = [40.0, 1.0]
     with pytest.raises(UFDemoError) as ei:
         _load_from_dict(raw)
@@ -133,7 +133,7 @@ def test_valid_range_must_be_two_ordered_numbers():
 
 
 def test_valid_range_must_cover_all_points():
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw["valid_range"]["x"] = [1.0, 20.0]  # 数据里有 40
     with pytest.raises(UFDemoError) as ei:
         _load_from_dict(raw)
@@ -142,7 +142,7 @@ def test_valid_range_must_cover_all_points():
 
 
 def test_event_increment_curve_requires_depth_direction():
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw.pop("depth_direction")
     with pytest.raises(UFDemoError) as ei:
         _load_from_dict(raw)
@@ -166,7 +166,7 @@ def _load_from_dict(raw: dict) -> T.ResponseCurve:
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         # 点文件与卡片同目录：复制一份
-        src = CURVES / f"{raw.get('curve_id', YSZ)}.points.csv"
+        src = CURVES / f"{raw.get('curve_id', FIXTURE)}.points.csv"
         (d / src.name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
         # 卡片的 curve_id 可能被改坏，单独指定 points_file 指向复制品
         raw = dict(raw)
@@ -584,7 +584,7 @@ def test_load_curve_bad_json(tmp_path):
 
 
 def test_points_file_missing(tmp_path):
-    raw = json.loads(card(YSZ).read_text(encoding="utf-8"))
+    raw = json.loads(card(FIXTURE).read_text(encoding="utf-8"))
     raw["points_file"] = "does_not_exist.points.csv"
     p = tmp_path / "c.curve.json"
     p.write_text(json.dumps(raw), encoding="utf-8")
@@ -637,17 +637,17 @@ def test_invalid_fixtures_rejected_with_expected_code(name, code):
 def test_cli_table_ok(capsys):
     from ufdemo.__main__ import main
 
-    rc = main(["table", str(card(YSZ)), "--x", "5.0"])
+    rc = main(["table", str(card(FIXTURE)), "--x", "5.0"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "ysz_analytic_depth_vs_fluence" in out
+    assert "analytic_fixture_depth_vs_fluence" in out
     assert "1.6094379124341003e-07" in out
 
 
 def test_cli_table_out_of_range_exit_code(capsys):
     from ufdemo.__main__ import main
 
-    rc = main(["table", str(card(YSZ)), "--x", "0.5"])
+    rc = main(["table", str(card(FIXTURE)), "--x", "0.5"])
     assert rc == 1
     err = capsys.readouterr()
     assert "TABLE_OUT_OF_RANGE" in (err.out + err.err)
@@ -656,7 +656,7 @@ def test_cli_table_out_of_range_exit_code(capsys):
 def test_cli_table_allow_out_of_range_json(capsys):
     from ufdemo.__main__ import main
 
-    rc = main(["table", str(card(YSZ)), "--x", "0.5", "5.0", "--allow-out-of-range", "--json"])
+    rc = main(["table", str(card(FIXTURE)), "--x", "0.5", "5.0", "--allow-out-of-range", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "below_range"
@@ -667,7 +667,7 @@ def test_cli_table_allow_out_of_range_json(capsys):
 def test_cli_table_pchip(capsys):
     from ufdemo.__main__ import main
 
-    rc = main(["table", str(card(YSZ)), "--x", "2.5", "--method", "pchip", "--json"])
+    rc = main(["table", str(card(FIXTURE)), "--x", "2.5", "--method", "pchip", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["method"] == "pchip"

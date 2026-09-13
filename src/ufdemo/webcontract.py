@@ -552,6 +552,9 @@ def curves_payload(curves_dir: str | Path) -> dict[str, Any]:
             continue
         payload = curve_payload(curve)
         payload["name"] = card["name"]
+        # 入口分层（U04）：前端据此把 fixture（人工解析/合成/公式重算）
+        # 从默认入口分流到「人工解析测试」，避免被读成材料实测数据。
+        payload["entryClass"] = card.get("entry_class", "fixture")
         out.append(payload)
     return {"schema": "ufdemo.web.curves/1", "curves": out}
 
