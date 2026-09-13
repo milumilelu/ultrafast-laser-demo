@@ -5,7 +5,7 @@
   数据来源为论文表格/正文的**人工转录**（`manual_transcription_...`），**不含**作者仪器原始文件、**不含**公式采样或模型预测行。
 - 本检查是**数据可用性**验收，**不做实验复现**；软件跑通 ≠ 材料验证。
 
-- 汇总：通过 24｜失败 1
+- 汇总：通过 26｜失败 0
 
 ## 逐项
 
@@ -32,11 +32,8 @@
 | 缺失语义 | 金刚石 pulse_duration_fs 保持 null（原文只给设备最小脉宽，不得补值） | 18 行全为 null | 18/18 为 null | 通过 | 配套 equipment_min_pulse_duration_fs=250 fs 另列 |
 | 缺失语义 | 金刚石 pulse_duration_fs 无 0 值冒充（null≠0） | 0 行 | 0 行 | 通过 |  |
 | 语义红线 | 导入数据不含 event_depth_increment（累计/体积等不得改名混入逐事件主循环） | 不含 | 不含 | 通过 | cumulative_depth、single_pulse_crater_endpoint、surface_roughness_endpoint、through_hole_geometry_endpoint、track_or_pass_depth、volume_per_energy |
-| 权限注册表 | 注册表条目数 = 实测记录数（65+4） | 69 | 69 | 通过 |  |
-| 权限注册表 | 全部记录均有 observation_access（可浏览/回放） | 全部 | 69/69 | 通过 |  |
+| 权限注册表 | 观测包条目数 = 65+4（效率曲线包不计入） | 69 | 69 | 通过 | 分类计数：efficiency_curve_pack=230、observation_pack=69 |
+| 权限注册表 | 无未分类（unknown）条目 | 0 | 0 | 通过 | 新文件必须在 datasets._FILE_CLASS 显式登记 |
+| 权限注册表 | 全部记录均有 observation_access（可浏览/回放） | 全部 | 299/299 | 通过 |  |
 | 权限注册表 | 无任何记录取得 increment_access（实测端点语义不是逐事件增量） | 0 | 0 | 通过 |  |
-| 权限注册表 | registry.json 与当前数据一致（无漂移） | 一致 | **不一致** | 失败 | 不一致说明数据变了但注册表没重生成；重跑 --write-registry |
-
-## 失败项
-
-- **registry.json 与当前数据一致（无漂移）**：期望 一致，实测 **不一致**（不一致说明数据变了但注册表没重生成；重跑 --write-registry）
+| 权限注册表 | registry.json 与当前数据一致（无漂移） | 一致 | 一致 | 通过 | 不一致说明数据变了但注册表没重生成；重跑 --write-registry |

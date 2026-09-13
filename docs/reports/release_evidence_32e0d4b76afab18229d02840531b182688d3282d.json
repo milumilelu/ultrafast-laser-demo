@@ -1,0 +1,93 @@
+{
+  "schema": "ufdemo.release_evidence/1",
+  "commit_sha": "32e0d4b76afab18229d02840531b182688d3282d",
+  "working_tree_dirty": true,
+  "working_tree_status": [
+    "M runs/acceptance/c_raster_multipass/diagnostics.json",
+    " M runs/acceptance/c_raster_multipass/metadata.json",
+    " M runs/acceptance/g01_single_pulse/diagnostics.json",
+    " M runs/acceptance/g01_single_pulse/metadata.json",
+    " M runs/acceptance/g02_ten_pulses/diagnostics.json",
+    " M runs/acceptance/g02_ten_pulses/metadata.json",
+    " M runs/acceptance/g04_line_scan/diagnostics.json",
+    " M runs/acceptance/g04_line_scan/metadata.json",
+    " M runs/acceptance/g05_sic_reference/metadata.json",
+    " M runs/acceptance/g05_ysz_reference/metadata.json",
+    " M runs/acceptance/g06_alsic_particles/diagnostics.json",
+    " M runs/acceptance/g06_alsic_particles/metadata.json",
+    " M runs/acceptance/g06_cfrp_plies/diagnostics.json",
+    " M runs/acceptance/g06_cfrp_plies/metadata.json",
+    " M runs/acceptance/m0_synthetic_demo/diagnostics.json",
+    " M runs/acceptance/m0_synthetic_demo/metadata.json"
+  ],
+  "collected_at": "2026-09-13T19:12:35+0800",
+  "python": "3.13.14",
+  "python_executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
+  "steps": {
+    "pytest": {
+      "status": "run",
+      "argv": "pytest -q --junitxml",
+      "returncode": 0,
+      "summary_text": "524 passed, 1 xfailed in 122.92s (0:02:02)",
+      "junit": {
+        "tests": 525,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1,
+        "time_s": 122.648
+      },
+      "junit_passed_consistent": true,
+      "tail": ".....................                                                    [100%]\n=========================== short test summary info ===========================\nXFAIL tests/test_alsic_gap.py::test_alsic_gap_still_open - U10 未完成：AlSiC 飞秒数值尚未取得。取得后本测试会 XPASS，届时请更新它。\n524 passed, 1 xfailed in 122.92s (0:02:02)",
+      "ok": true
+    },
+    "node": {
+      "status": "run",
+      "argv": "node webui/test/contract_test.mjs",
+      "returncode": 0,
+      "passed": 32,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "  PASS  x_name 取 label||name（analytic_fixture_depth_vs_fluence）\n\n结果：32 通过，0 失败"
+    },
+    "browser": {
+      "status": "run",
+      "argv": "node tools/browser_probe.mjs",
+      "returncode": 0,
+      "passed": 41,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "\n结果：41 通过 / 0 失败 / 1 跳过\n产物：C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\runs\\_release_evidence\\browser\\result.json"
+    },
+    "package": {
+      "status": "run",
+      "argv": "python tools/package_smoke.py",
+      "returncode": 0,
+      "passed": 21,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "====================================================================\n结果：21 通过｜0 失败｜0 跳过\n===================================================================="
+    },
+    "dataqa": {
+      "status": "run",
+      "argv": "python tools/measured_data_report.py",
+      "returncode": 0,
+      "ok": true,
+      "tail": "  通过 26｜失败 0\n报告：C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\docs\\reports\\measured_data_qa.csv\n      C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\docs\\reports\\measured_data_qa.md"
+    }
+  },
+  "summary": {
+    "run": [
+      "pytest",
+      "node",
+      "browser",
+      "package",
+      "dataqa"
+    ],
+    "not_run": [],
+    "failed": [],
+    "all_run_steps_ok": true
+  }
+}
