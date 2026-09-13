@@ -14,14 +14,19 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .config import (
     INCREMENT_SEMANTICS,
     SEMANTIC_EVENT_INCREMENT,
     SEMANTIC_THRESHOLD_ONLY,
 )
-from .errors import NUMERIC_NONFINITE, RESPONSE_SEMANTICS_INVALID, UFDemoError
+from .errors import (
+    NUMERIC_NONFINITE,
+    RESPONSE_SEMANTICS_INVALID,
+    TABLE_OUT_OF_RANGE,
+    UFDemoError,
+)
 
 # 响应语义的中文说明（供界面与报告使用；阈值图不得写“热影响区”）
 SEMANTIC_ZH: dict[str, str] = {
@@ -279,8 +284,249 @@ class FixedThresholdLogLaw:
         return res
 
 
-def build_pulse_law(material: Any, *, unit: Any | None = None) -> FixedThresholdLogLaw:
-    """由材料卡构造脉冲律。字段缺失时报错，不补近似值。"""
+class TabulatedEventLaw:
+    """逐事件**查表**去除核（U07）—— 用实测响应曲线驱动局部增量。
+
+    与 :class:`FixedThresholdLogLaw` 的关键区别：它的响应来自**数据**而非解析式。
+    这带来三条必须守住的纪律（写进代码，不只写在文档）：
+
+    1. **只有 ``event_depth_increment`` 曲线能进主循环**。别的语义
+       （累计深度、体积效率、平均率、端点几何）一律经**既有闸门**
+       :func:`tables.assert_curve_can_enter_event_kernel` 拒绝，
+       抛既定错误码 ``RESPONSE_SEMANTICS_INVALID``。
+    2. **固定条件必须与运行条件一致** —— 复用同一个闸门的比对逻辑，不另写一套；
+       不一致抛 ``CONDITION_MISMATCH``。
+    3. **越界不返回 0、不外推、不钳端点** —— 与查表口径完全一致：
+       高于上界**一律拒绝**；低于下界默认也拒绝，
+       只有当曲线**显式声明**了 ``threshold_rule``（如
+       ``{"mode": "zero_below", "reason": ...}``）时才允许记 0。
+       **禁止默认填 0**：低于量测区间不等于无去除，那是未知区。
+
+    插值**直接复用** :func:`tables.lookup`（分段线性手写二分 / PCHIP），
+    因此逐点结果与查表**完全一致**（有测试逐点比对）。
+    """
+
+    KIND = "table_event"
+
+    #: 该核依赖的**显式假设**。构造时会一并记录到 ``IncrementResult.diagnostics``，
+    #: 供报告与界面如实展示 —— 「用峰值中心关系近似局部响应」是假设，不是事实。
+    DEFAULT_ASSUMPTIONS: tuple[str, ...] = (
+        "以「峰值能流 → 中心去除量」的实测关系近似**局部**响应；"
+        "未独立标定 Gaussian 光斑内的径向分布。",
+        "曲线未含完整阈值律与光斑尾部响应；低于量程的区间是**未知区**，不是零去除区。",
+        "该核只处理**单次事件**的局部增量；不含孵化/历史耦合。",
+    )
+
+    def __init__(
+        self,
+        curve: Any,
+        *,
+        method: str = "linear",
+        threshold_rule: Mapping[str, Any] | None = None,
+        depth_direction: str | None = None,
+        unit_mode: str = "SI",
+        laser: Mapping[str, Any] | None = None,
+        assumptions: Sequence[str] | None = None,
+    ) -> None:
+        from . import tables
+
+        # --- 闸门 1：语义 + 条件 ---------------------------------------------
+        # 直接调用既有闸门：非增量语义 → RESPONSE_SEMANTICS_INVALID；
+        # 固定条件与 laser 不符 → CONDITION_MISMATCH。**不另写一套判定。**
+        tables.assert_curve_can_enter_event_kernel(curve, laser=laser)
+
+        self.curve = curve
+        self.method = str(method)
+        self.unit_mode = unit_mode
+        self.depth_direction = (
+            depth_direction or getattr(curve, "depth_direction", None) or "surface_normal"
+        )
+        self.assumptions = tuple(assumptions) if assumptions else self.DEFAULT_ASSUMPTIONS
+
+        # --- 阈值规则：**默认拒绝**低于量程的点 -------------------------------
+        rule = dict(threshold_rule or {})
+        mode = str(rule.get("mode", "reject"))
+        if mode not in ("reject", "zero_below"):
+            raise UFDemoError(
+                RESPONSE_SEMANTICS_INVALID,
+                f"未知的 threshold_rule.mode：{mode!r}",
+                field_path="threshold_rule.mode",
+                actual=mode,
+                requirement="'reject'（默认，越界即拒）或 'zero_below'（显式声明下界以下无去除）",
+                suggestion="不要为『能跑通』而放宽；下界以下没有实测依据。",
+            )
+        if mode == "zero_below" and not str(rule.get("reason", "")).strip():
+            # 显式声明必须**带理由** —— 否则「声明」会退化成随手填个默认值。
+            raise UFDemoError(
+                RESPONSE_SEMANTICS_INVALID,
+                "threshold_rule.mode='zero_below' 必须附带 reason",
+                field_path="threshold_rule.reason",
+                actual=None,
+                requirement="非空字符串，说明凭据（独立阈值律/文献依据）",
+                suggestion="没有凭据就保持默认 'reject'：低于量程是未知区，不是零去除。",
+            )
+        self.threshold_rule = rule
+        self.threshold_mode = mode
+
+    # -- 兼容 FixedThresholdLogLaw 的属性（下游按需读取）--------------------
+    @property
+    def kind(self) -> str:  # noqa: D102
+        return self.KIND
+
+    @property
+    def output_semantics(self) -> str:  # noqa: D102
+        return str(self.curve.output_semantics)
+
+    @property
+    def source_equation(self) -> str | None:  # noqa: D102
+        return getattr(self.curve, "source_figure_or_table", None)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.KIND,
+            "curve_id": self.curve.curve_id,
+            "output_semantics": self.output_semantics,
+            "method": self.method,
+            "valid_range": list(self.curve.valid_range),
+            "threshold_rule": dict(self.threshold_rule),
+            "depth_direction": self.depth_direction,
+            "assumptions": list(self.assumptions),
+        }
+
+    # -- 逐事件增量 ----------------------------------------------------------
+    def increment(
+        self,
+        fluence: Any,
+        history: HistoryState | None,
+        material: Any = None,
+    ) -> IncrementResult:
+        """按**当次事件的局部能流**查表得到去除增量。
+
+        **逐事件**推进：每个事件各查一次，不是把累计量摊到 N 次。
+        """
+        import numpy as np
+
+        from . import tables
+
+        F = np.asarray(fluence, dtype=np.float64)
+        if not np.all(np.isfinite(F)):
+            raise UFDemoError(
+                NUMERIC_NONFINITE,
+                "输入能流包含 NaN/Inf",
+                field_path="response.fluence",
+                actual="non-finite",
+                suggestion="修正上游光束或路径计算。",
+            )
+
+        if history is not None and history.enabled:
+            # 与 FixedThresholdLogLaw 同口径：查表曲线没有历史耦合的实现，
+            # **显式报错而不是静默忽略**。
+            raise UFDemoError(
+                RESPONSE_SEMANTICS_INVALID,
+                "该核未实现历史耦合",
+                field_path="solver.history_enabled",
+                actual=True,
+                requirement="history_enabled=False（查表核尚无孵化/状态累积模型）",
+                suggestion="关闭历史，或改用已标定的历史耦合核。",
+            )
+
+        lo, hi = self.curve.valid_range
+        tol = 1e-9 * max(1.0, abs(lo), abs(hi))
+        flat = F.ravel()
+        below = flat < (lo - tol)
+        above = flat > (hi + tol)
+
+        # --- 越界：**绝不返回 0、绝不外推** ---------------------------------
+        if bool(above.any()):
+            raise UFDemoError(
+                TABLE_OUT_OF_RANGE,
+                "高于曲线有效区间上界：拒绝外推",
+                field_path="response.fluence",
+                actual=[float(v) for v in flat[above][:8]],
+                requirement=f"局部能流必须 ≤ {hi!r}",
+                suggestion=(
+                    "上界之外没有实测依据，**不**外推、不钳到端点。"
+                    "请收窄工况，或补充该能流区间的实测响应。"
+                ),
+            )
+        if bool(below.any()) and self.threshold_mode != "zero_below":
+            raise UFDemoError(
+                TABLE_OUT_OF_RANGE,
+                "低于曲线有效区间下界：拒绝（下界以下不等于无去除）",
+                field_path="response.fluence",
+                actual=[float(v) for v in flat[below][:8]],
+                requirement=(
+                    f"局部能流必须 ≥ {lo!r}；除非曲线显式声明 threshold_rule="
+                    "{'mode': 'zero_below', 'reason': ...}"
+                ),
+                suggestion=(
+                    "低于量测区间**不视为无去除**：那是未知区。"
+                    "要么补数据，要么在曲线上显式声明阈值规则（并给出凭据）。"
+                ),
+            )
+
+        values = np.zeros_like(F)
+        in_range = ~below  # above 已在上面抛错，走到这里就没有 above
+        if bool(in_range.any()):
+            xs = [float(v) for v in flat[in_range]]
+            # **复用查表**：保证与 tables.lookup 逐点一致，不存在第二套插值。
+            res = tables.lookup(self.curve, xs, method=self.method)
+            got = res.values
+            if got is None or any(v is None for v in got):
+                raise UFDemoError(
+                    TABLE_OUT_OF_RANGE,
+                    "查表返回空值（不应发生：区间已先行校验）",
+                    field_path="response.fluence",
+                    actual=None,
+                    requirement="区间内查询必须返回数值",
+                )
+            values.ravel()[in_range] = np.asarray([float(v) for v in got], dtype=np.float64)
+
+        result = IncrementResult(
+            output_semantics=SEMANTIC_EVENT_INCREMENT,
+            depth_direction=self.depth_direction,
+            unit_mode=self.unit_mode,
+            values=values,
+            available=True,
+            reason=(
+                "查表逐事件增量；"
+                + ("下界以下按曲线显式声明记 0" if self.threshold_mode == "zero_below"
+                   else "下界以下拒绝（未知区）")
+            ),
+            diagnostics={
+                "law_kind": self.KIND,
+                "curve_id": self.curve.curve_id,
+                "interpolation": self.method,
+                "valid_range": [lo, hi],
+                "threshold_rule": dict(self.threshold_rule),
+                "assumptions": list(self.assumptions),
+            },
+        )
+        result.validate()
+        return result
+
+
+def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None):
+    """由材料卡（或曲线）构造脉冲律。
+
+    **按曲线类型分派**（U07 / F05）：
+
+    * 传了 ``curve`` 且语义为 ``event_depth_increment`` → :class:`TabulatedEventLaw`
+      （真实数据驱动）；
+    * 传了 ``curve`` 但语义不是 → 经既有闸门抛 ``RESPONSE_SEMANTICS_INVALID``
+      （**不静默退回对数律**，否则「接了曲线」是假的）；
+    * 没传 ``curve`` → 维持原行为（:class:`FixedThresholdLogLaw`）。
+
+    ``curve=None`` 时行为与改动前**逐位一致**，既有算例不受影响。
+    """
+    if curve is not None:
+        return TabulatedEventLaw(
+            curve,
+            unit_mode=getattr(unit, "mode", "SI"),
+            depth_direction=getattr(curve, "depth_direction", None),
+            laser=(dict(getattr(material, "laser_conditions", {}) or {}) or None),
+        )
+
     r = dict(getattr(material, "response", {}) or {})
     thr = r.get("threshold_internal")
     delta = r.get("delta_internal")
