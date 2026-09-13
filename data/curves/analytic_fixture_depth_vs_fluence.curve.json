@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
-  "curve_id": "ysz_analytic_depth_vs_fluence",
+  "curve_id": "analytic_fixture_depth_vs_fluence",
+  "entry_class": "fixture",
   "material_id": "analytic_fixture_not_a_material",
   "material_identity": {
     "family": "mathematical_fixture",
@@ -64,7 +65,7 @@
     ],
     "note": "Fth=1 J/cm^2 起；低于 Fth 的深度为 0（由阈值律支持，不是越界填零）"
   },
-  "points_file": "ysz_analytic_depth_vs_fluence.points.csv",
+  "points_file": "analytic_fixture_depth_vs_fluence.points.csv",
   "duplicate_policy": "reject",
   "evidence_status": "unverified",
   "source_type": "analytic_test_definition",

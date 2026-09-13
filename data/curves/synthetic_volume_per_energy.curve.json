@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "curve_id": "synthetic_volume_per_energy",
+  "entry_class": "fixture",
   "material_id": "synthetic_demo_isotropic",
   "material_identity": {
     "family": "synthetic_demo",

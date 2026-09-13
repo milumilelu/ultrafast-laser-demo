@@ -1,0 +1,119 @@
+{
+  "schema": "ufdemo.experimental_pack/1",
+  "prepared_on": "2026-09-11",
+  "main_record_count": 65,
+  "nonlaser_control_count": 4,
+  "material_families": [
+    "CFRP",
+    "SiC",
+    "微晶玻璃",
+    "氧化锆",
+    "金刚石",
+    "高温合金"
+  ],
+  "counting_note": "Counts are published condition/result records, NOT numbers of individual instrument measurements, independent datasets, full response curves or calibrated material laws. Repeated settings retained. Endpoint and roughness tables from same study can share treatment protocols.",
+  "raw_author_files_included": false,
+  "measurements_generated_by_model": false,
+  "sources": {
+    "D01": {
+      "title": "Optimization of the Femtosecond Laser Machining Process for Single Crystal Diamond Using Response Surface Methodology",
+      "doi": "10.3390/machines12090614",
+      "url": "https://www.mdpi.com/2075-1702/12/9/614",
+      "year": 2024,
+      "locator": "Table 4 and optimized-condition experimental verification",
+      "license": "CC BY 4.0 (article)",
+      "source_kind": "published_experimental_table"
+    },
+    "D02": {
+      "title": "Preliminary Study on the Optimization of Femtosecond Laser Treatment on the Surface Morphology of Lithium Disilicate Glass-Ceramics and Highly Translucent Zirconia Ceramics",
+      "doi": "10.3390/ma15103614",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9143866/",
+      "year": 2022,
+      "locator": "Tables 1, 2, 3",
+      "license": "CC BY 4.0 (article)",
+      "source_kind": "published_experimental_table"
+    },
+    "D03": {
+      "title": "Experimental and Simulation Research on Femtosecond Laser Induced Controllable Morphology of Monocrystalline SiC",
+      "doi": "10.3390/mi15050573",
+      "url": "https://www.mdpi.com/2072-666X/15/5/573",
+      "year": 2024,
+      "locator": "Experimental values stated in Results text accompanying Figures 3 and 7; laser conditions in Table 1",
+      "license": "CC BY 4.0 (article)",
+      "source_kind": "published_experimental_values_in_text"
+    },
+    "D04": {
+      "title": "Ablation of CFRP Modified with Copper and Calcium Hydroxyapatites by Femtosecond Laser Pulses for Further Material Cutting and Milling Applications",
+      "doi": "10.3390/polym18111284",
+      "url": "https://www.mdpi.com/2073-4360/18/11/1284",
+      "year": 2026,
+      "locator": "Section 3.1, experimental maxima accompanying Figures 3 and 4",
+      "license": "CC BY 4.0 (article)",
+      "source_kind": "published_experimental_values_in_text"
+    },
+    "D05": {
+      "title": "Optimization of Femtosecond Laser Drilling Process for DD6 Single Crystal Alloy",
+      "doi": "10.3390/met13020333",
+      "url": "https://www.mdpi.com/2075-4701/13/2/333",
+      "access_url": "https://www.researchgate.net/publication/368354938_Optimization_of_Femtosecond_Laser_Drilling_Process_for_DD6_Single_Crystal_Alloy",
+      "year": 2023,
+      "locator": "Table 2 factor levels; Table 3 experimental results",
+      "license": "CC BY 4.0 (article)",
+      "source_kind": "published_experimental_table"
+    }
+  },
+  "files": [
+    {
+      "file": "data/diamond_rsm_measured.csv",
+      "rows": 18,
+      "included_in_main_count": true,
+      "sha256": "82309c2fbded429a97c8e6bcd7f89990fb9425ff203f60eb199f0dd5e33dcec8"
+    },
+    {
+      "file": "data/ceramics_dot_line_measured.csv",
+      "rows": 4,
+      "included_in_main_count": true,
+      "sha256": "a4a2e952999575f3d6163fdbf377eddbcfbc6f86e8ef5b64db4f04b84bd2a013"
+    },
+    {
+      "file": "data/ceramics_laser_roughness_measured.csv",
+      "rows": 10,
+      "included_in_main_count": true,
+      "sha256": "671e16a540e89983c63c5b68f30815bdf9ac96e48683555e97699ae53b86fc55"
+    },
+    {
+      "file": "data/ceramics_nonlaser_controls.csv",
+      "rows": 4,
+      "included_in_main_count": false,
+      "sha256": "94881bf7eae502f0bae40167db93edd79535154b14cf780eb0776c3b889425f4"
+    },
+    {
+      "file": "data/sic_single_pulse_measured.csv",
+      "rows": 4,
+      "included_in_main_count": true,
+      "sha256": "9f4bbf3382d34ab0a0750d9528b9dac22dd16d9b948bef219fd7ca43c02617ff"
+    },
+    {
+      "file": "data/cfrp_efficiency_reported_maxima.csv",
+      "rows": 4,
+      "included_in_main_count": true,
+      "sha256": "0d94ba049fe6bed2cbd05adcff063e726d987640ce8a30e0ef8af9caf737242e"
+    },
+    {
+      "file": "data/dd6_drilling_measured.csv",
+      "rows": 25,
+      "included_in_main_count": true,
+      "sha256": "e4468cbba5a8c78767d2e85415344fb2891316ff7b9c69d20407e0823754aaaa"
+    }
+  ],
+  "missing_material_family": [
+    "铝基碳化硅"
+  ],
+  "usage_rules": [
+    "Grade is optional; unknown is allowed. Never infer missing wavelength, pulse duration, frequency or measured depths.",
+    "Formula-derived model outputs are not measurement rows. Source-reported taper and independently recomputed taper are separate.",
+    "Use data according to output_semantics. Average, cumulative, scan depth and volume efficiency cannot be added to every pulse.",
+    "No independent validation of all material responses is claimed. This pack does not modify the GitHub repository.",
+    "Public article CC BY attribution retained in sources. Author-original XLSX was located, but NOT downloaded or included."
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "D01": {
+    "title": "Optimization of the Femtosecond Laser Machining Process for Single Crystal Diamond Using Response Surface Methodology",
+    "doi": "10.3390/machines12090614",
+    "url": "https://www.mdpi.com/2075-1702/12/9/614",
+    "year": 2024,
+    "locator": "Table 4 and optimized-condition experimental verification",
+    "license": "CC BY 4.0 (article)",
+    "source_kind": "published_experimental_table"
+  },
+  "D02": {
+    "title": "Preliminary Study on the Optimization of Femtosecond Laser Treatment on the Surface Morphology of Lithium Disilicate Glass-Ceramics and Highly Translucent Zirconia Ceramics",
+    "doi": "10.3390/ma15103614",
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9143866/",
+    "year": 2022,
+    "locator": "Tables 1, 2, 3",
+    "license": "CC BY 4.0 (article)",
+    "source_kind": "published_experimental_table"
+  },
+  "D03": {
+    "title": "Experimental and Simulation Research on Femtosecond Laser Induced Controllable Morphology of Monocrystalline SiC",
+    "doi": "10.3390/mi15050573",
+    "url": "https://www.mdpi.com/2072-666X/15/5/573",
+    "year": 2024,
+    "locator": "Experimental values stated in Results text accompanying Figures 3 and 7; laser conditions in Table 1",
+    "license": "CC BY 4.0 (article)",
+    "source_kind": "published_experimental_values_in_text"
+  },
+  "D04": {
+    "title": "Ablation of CFRP Modified with Copper and Calcium Hydroxyapatites by Femtosecond Laser Pulses for Further Material Cutting and Milling Applications",
+    "doi": "10.3390/polym18111284",
+    "url": "https://www.mdpi.com/2073-4360/18/11/1284",
+    "year": 2026,
+    "locator": "Section 3.1, experimental maxima accompanying Figures 3 and 4",
+    "license": "CC BY 4.0 (article)",
+    "source_kind": "published_experimental_values_in_text"
+  },
+  "D05": {
+    "title": "Optimization of Femtosecond Laser Drilling Process for DD6 Single Crystal Alloy",
+    "doi": "10.3390/met13020333",
+    "url": "https://www.mdpi.com/2075-4701/13/2/333",
+    "access_url": "https://www.researchgate.net/publication/368354938_Optimization_of_Femtosecond_Laser_Drilling_Process_for_DD6_Single_Crystal_Alloy",
+    "year": 2023,
+    "locator": "Table 2 factor levels; Table 3 experimental results",
+    "license": "CC BY 4.0 (article)",
+    "source_kind": "published_experimental_table"
+  }
+}

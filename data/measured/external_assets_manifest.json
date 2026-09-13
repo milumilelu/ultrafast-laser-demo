@@ -1,0 +1,27 @@
+[
+  {
+    "id": "A01",
+    "title": "Laser ablation of CFRP with copper- and calcium-hydroxyapatites dataset",
+    "doi": "10.17632/sdz48p9j5m.1",
+    "landing_url": "https://data.mendeley.com/datasets/sdz48p9j5m/1",
+    "filename": "CFRP_with_hydroxyapetites_ablation_results.xlsx",
+    "reported_size": "154 KB",
+    "published_on": "2025-11-26",
+    "version": 1,
+    "license": "CC BY 4.0",
+    "status": "located_not_downloaded",
+    "rows": null,
+    "next_action": "Download original XLSX from author repository; inspect sheet units, laser condition, experimental vs fit columns; ingest actual efficiency curves. Do not claim unknown row count."
+  },
+  {
+    "id": "A02",
+    "title": "Investigation on femtosecond laser ablative processing of SiCp/AA2024 composites",
+    "doi": "10.1016/j.jmapro.2019.08.021",
+    "landing_url": "https://www.sciencedirect.com/science/article/abs/pii/S1526612518312398",
+    "wavelength_nm": 1030,
+    "pulse_duration_fs": 800,
+    "status": "relevant_experimental_paper_numeric_results_not_retrieved",
+    "rows": null,
+    "next_action": "Obtain full experimental depth/roughness tables or digitize labelled experimental points; accept any AlSiC grade. Do not substitute nanosecond response data."
+  }
+]

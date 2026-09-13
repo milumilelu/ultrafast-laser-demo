@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "curve_id": "sic_threshold_vs_effective_n",
+  "entry_class": "fixture",
   "material_id": "sic_4h_cface_1035nm_multishot",
   "material_identity": {
     "family": "SiC",
