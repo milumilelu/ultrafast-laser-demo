@@ -416,21 +416,44 @@ def render_md(rep: dict[str, Any]) -> str:
 
 
 def verify(sha: str | None = None) -> int:
-    """检查现有报告是否仍对应当前 HEAD。"""
+    """检查现有报告是否仍对应当前 HEAD。
+
+    选取顺序（**不要**改成「按文件名排序取最后一个」）：
+    1. 显式给了 ``sha`` → 用那一份；
+    2. 否则**优先找 commit_sha 等于当前 HEAD 的报告** —— 重新采集之后
+       必然存在一份对应当前 HEAD 的，这才是「本次证据」；
+    3. 再退到**按修改时间最新**的一份。
+
+    踩过的坑：原先用 ``sorted(...)[-1]`` 按**字母序**取最后一份。
+    提交哈希是随机的，旧报告 ``f2572e2…`` 恰好排在 ``d14d548…`` 之后，
+    于是**重新采集成功后 ``--verify`` 仍报「已作废」** —— 与事实相反、极易误导。
+    """
     head = git("rev-parse", "HEAD")
     cands = sorted(REPORTS.glob("release_evidence_*.json"))
     if not cands:
         print("未找到任何 release_evidence_*.json")
         return 2
-    target = None
+
+    target: Path | None = None
     if sha:
         p = REPORTS / f"release_evidence_{sha}.json"
         target = p if p.exists() else None
+        if target is None:
+            print(f"未找到 sha={sha} 的报告")
+            return 2
     else:
-        target = cands[-1]
-    if target is None:
-        print(f"未找到 sha={sha} 的报告")
-        return 2
+        # 2) 优先当前 HEAD；3) 退到最新修改
+        for p in cands:
+            try:
+                if json.loads(p.read_text(encoding="utf-8")).get("commit_sha") == head:
+                    target = p
+                    break
+            except Exception:  # noqa: BLE001 - 坏报告跳过，不阻断
+                continue
+        if target is None:
+            target = max(cands, key=lambda q: q.stat().st_mtime)
+            print("（未找到与当前 HEAD 对应的报告，退到最新修改的一份）")
+
     data = json.loads(target.read_text(encoding="utf-8"))
     ok = data["commit_sha"] == head
     print(f"报告 {target.name}")

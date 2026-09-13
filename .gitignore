@@ -21,6 +21,12 @@ runs/acceptance/_ui_demo_probe/
 runs/_ui_probe/
 runs/_ui_demo_probe/
 
+# 浏览器探针的隔离运行目录（tools/browser_check.py：自起服务 + 隔离 runs + Chrome profile）
+runs/acceptance/_browser_check/
+runs/_browser_check/
+runs/_acc_final/
+runs/_audit_*/
+
 # Streamlit 本地配置
 .streamlit/
 

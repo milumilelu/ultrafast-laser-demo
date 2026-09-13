@@ -642,11 +642,16 @@ try {
   ]);
   try { browser.process()?.kill("SIGKILL"); } catch { /* 已退出 */ }
 
-  // 清理 profile：只做**有界**尝试，绝不能让清理把进程挂住
-  if (!HEADED) {
-    try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
-    catch { /* 仍被占用就留给下次启动前清理 */ }
-  }
+  /* ⚠️ **退出时不做 profile 清理** —— 这一步本身就是挂死源。
+   *
+   * 实测（2026-09-13）：`result.json` 15:09:52 写好，`.profile` 15:09:59 被触碰，
+   * 而进程到 15:25 仍活着 —— `fs.rmSync(profileDir)` 在 Windows 上**同步阻塞**：
+   * Chrome 尚未释放句柄，删除卡在文件系统层；`maxRetries` 只控制重试次数，
+   * **不能中断正在阻塞的那一次删除**，所以「有界清理」实际是无界的，
+   * 后面的 `process.exit()` 永远到不了。
+   *
+   * 残留 profile **不需要在这里处理**：启动时（那时没有 Chrome 持有句柄，
+   * 删除是毫秒级）已经会清掉。清理放在启动处既可恢复又绝不阻塞退出。 */
 }
 
 /* U03 逐路径汇总，便于人工对照清单 */
