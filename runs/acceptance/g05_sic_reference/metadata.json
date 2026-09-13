@@ -2,11 +2,11 @@
   "case_id": "g05_sic_threshold_and_mean_rate",
   "code": {
     "build_batch": "L",
-    "commit": "7b5beebfddf1d9deff849595bc05d62c68539ec2",
+    "commit": "800c2e0383e05787528ae584275551f27d2221d1",
     "git_available": true,
     "python": "3.13.14",
-    "source_file_count": 22,
-    "source_manifest_sha256": "823a4e684cb78c1973a9e90447016e3351123d12712e7a1f24c78a7284478af7",
+    "source_file_count": 23,
+    "source_manifest_sha256": "54036e6d4c9b1f66181152cf9de4f6189af5fffaca8f32e57b9b127156bf1801",
     "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
@@ -169,7 +169,7 @@
   "run_mode": "reference_case",
   "schema_version": "1.0",
   "status": "completed",
-  "written_at_utc": "2026-09-13T09:29:10.205033+00:00",
+  "written_at_utc": "2026-09-13T10:13:54.944365+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

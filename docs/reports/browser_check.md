@@ -2,7 +2,7 @@
 
 - 驱动方式：`puppeteer-core` + **本机已装**的 Chrome/Edge（**不下载 Chromium**）
 - 探针：`tools/browser_probe.mjs`；包装器：`tools/browser_check.py`
-- 汇总：通过 30｜失败 0｜未运行 0｜未实现 1
+- 汇总：通过 36｜失败 0｜未运行 0｜未实现 1
 - 产物目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check`（隔离端口 + 隔离 `UFDEMO_RUNS_DIR`，不污染工作区 `runs/`）
 
 > 与 `webui/test/contract_test.mjs`（DOM 契约测试）的分工：后者是**无浏览器**替代品，
@@ -58,6 +58,12 @@
 | U03-9 下载 | U03-9 下载 | 功能未实现 | 未实现 | 前端未实现下载/导出（index.html 无下载控件、main.js 无 Blob/createObjectURL） |
 |  | 查表后求解次数不变（1 → 1） | 符合 | 通过 |  |
 |  | 查表未触发 POST /api/solve | 符合 | 通过 |  |
+|  | 面板显示「数据支持范围」 | 符合 | 通过 |  |
+|  | 面板同时给出分组五折误差（不只报留出） | 符合 | 通过 |  |
+|  | 面板明确标注「辅助手段，不替代物理引擎验证」 | 符合 | 通过 |  |
+|  | 给出宽/深预测结果 | 符合 | 通过 |  |
+|  | 预测后求解次数不变（1 → 1） | 符合 | 通过 |  |
+|  | 预测未触发 POST /api/solve（独立通道） | 符合 | 通过 |  |
 |  | 所有被点击的控件都真实响应（无「点不到」） | 符合 | 通过 |  |
 
 ## 已知待修（本报告的失败项不是回归，是 U03 的修复对象）
