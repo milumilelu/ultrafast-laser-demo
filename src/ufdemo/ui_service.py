@@ -845,6 +845,50 @@ def _loaded_elapsed_s(loaded: Any) -> float | None:
         return None
 
 
+def _grid_meta_from_disk(cfg_grid: Any, disk_surface: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """**读历史**时重建网格元信息。
+
+    为什么需要：``run_to_payload`` 的 ``grid`` 来自 ``frozen.surface()``，
+    而读历史路径下 ``result is None`` → ``surface()`` 返回 ``None`` → ``grid`` 变空字典。
+    后果是**只有「读历史」这条路径**才会暴露的连锁故障：
+
+    * 前端时间轴 ``drawHeatmap(..., f.grid.nx, f.grid.ny)`` 传入 ``undefined``；
+    * ``createImageData(undefined, undefined)`` 抛
+      ``Value is not of type 'long'``，回放画布永远空白（实测停在默认 300×150）；
+    * 截面路径 ``Array.from(f.grid.xs)`` 同样拿不到坐标。
+
+    修复数据来源（二者都在盘上，**不重算、不猜测**）：
+
+    * ``nx`` / ``ny`` / ``dx`` / ``dy`` ← 落盘的 ``config.json`` 的 ``grid`` 段；
+      缺 ``config`` 时退而用 ``final_surface.npz`` 里 ``height`` 的形状（``(ny, nx)``）；
+    * ``xs`` / ``ys`` ← 落盘 surface 的 ``x`` / ``y`` 数组（**原始坐标，不重建**，
+      避免浮点重建与原值出现末位差异）。
+
+    返回 ``None`` 表示确实取不到（老运行缺 config 且缺 surface）——
+    此时前端应显示「网格信息不可用」，而不是画一张空白图当成功。
+    """
+    g = dict(cfg_grid or {})
+    out: dict[str, Any] = {}
+    h = (disk_surface or {}).get("height")
+    shape = getattr(h, "shape", None)
+    if g.get("nx") and g.get("ny"):
+        out["nx"] = int(g["nx"])
+        out["ny"] = int(g["ny"])
+        out["dx"] = float(g.get("dx_m") or 0.0)
+        out["dy"] = float(g.get("dy_m") or 0.0)
+    elif shape is not None and len(shape) == 2:
+        out["ny"], out["nx"] = int(shape[0]), int(shape[1])
+        out["dx"] = out["dy"] = 0.0
+    else:
+        return None
+    ds = disk_surface or {}
+    if ds.get("x") is not None:
+        out["xs"] = ds["x"]
+    if ds.get("y") is not None:
+        out["ys"] = ds["y"]
+    return out
+
+
 def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
     """读取一个历史运行目录。**不调用求解器。**"""
     loaded = load_run(run_dir)
@@ -928,6 +972,9 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         ),
         elapsed_s=_loaded_elapsed_s(loaded),
     )
+    # 读历史时 result 为 None → surface() 为 None → 契约层拿不到 grid。
+    # 这里用**盘上已有**的 config 与坐标补回，使回放/截面可用（不重算）。
+    frozen.grid_meta = _grid_meta_from_disk(cfg.get("grid"), loaded.surface)
     state.frozen = frozen
     state.read_count += 1
     # 读取历史结果不等于用当前参数求解：把提交哈希同步为该结果的输入哈希，
@@ -1224,8 +1271,16 @@ def list_curve_cards(curves_dir: str | Path) -> list[dict[str, Any]]:
 def load_curve_card(curves_dir: str | Path, name: str):
     """加载并校验一张曲线卡。不求解。"""
     from . import tables
-
-    return tables.load_curve(Path(curves_dir) / name)
+    root = Path(curves_dir).resolve()
+    candidate_name = Path(name)
+    if candidate_name.name != name or candidate_name.suffixes[-2:] != [".curve", ".json"]:
+        raise ValueError("曲线卡名称不合法")
+    candidate = (root / name).resolve()
+    if candidate.parent != root:
+        raise ValueError("曲线路径越界")
+    if not candidate.is_file():
+        raise FileNotFoundError(candidate)
+    return tables.load_curve(candidate)
 
 
 def table_lookup(

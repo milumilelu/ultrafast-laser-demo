@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import math
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -174,6 +175,22 @@ def run_to_payload(
             "xs": jsonable(np.asarray(surface.x)),
             "ys": jsonable(np.asarray(surface.y)),
         }
+    else:
+        # **读历史**路径：result 为 None，surface 未重建，但盘上有网格信息。
+        # 不补的话前端拿到 `grid={}`：时间轴 drawHeatmap 收到 undefined →
+        # createImageData 抛 "Value is not of type 'long'"，回放画布永远空白；
+        # 截面 Array.from(xs) 同样失败。见 ui_service._grid_meta_from_disk。
+        gm = getattr(frozen, "grid_meta", None)
+        if gm:
+            grid = {
+                "nx": int(gm["nx"]),
+                "ny": int(gm["ny"]),
+                "dx": float(gm.get("dx") or 0.0),
+                "dy": float(gm.get("dy") or 0.0),
+                "xs": jsonable(gm.get("xs")),
+                "ys": jsonable(gm.get("ys")),
+                "reconstructedFromDisk": True,
+            }
 
     return {
         "schema": "ufdemo.web.run/1",
@@ -275,8 +292,20 @@ def solve_payload(
     校验或求解失败 → 返回 ``status="failed"`` 与错误列表，**不**伪造结果。
     """
     state = U.new_session(params)
+    config_base = Path(project_root)
+    # In a wheel ``project_root()`` points outside the installed resources;
+    # use the packaged resource root for relative card paths in that case.
+    if not (config_base / "data").is_dir():
+        try:
+            from . import resource_root
+            config_base = resource_root()
+        except Exception:
+            pass
     try:
-        cfg = RunConfig.from_dict(dict(params))
+        # Resolve cards relative to the project/config root.  This keeps the
+        # web entry point independent of the process working directory (and
+        # therefore usable from an installed wheel).
+        cfg = RunConfig.from_dict(dict(params), base_dir=str(config_base))
     except UFDemoError as err:
         return _failure([err.to_dict()])
     try:
@@ -305,10 +334,21 @@ def solve_payload(
     return run_to_payload(frozen, material=material)
 
 
-def preview_payload(params: Mapping[str, Any]) -> dict[str, Any]:
+def preview_payload(
+    params: Mapping[str, Any], *, project_root: str | Path | None = None
+) -> dict[str, Any]:
     """**只做准入校验**，不求解、不落盘（前端「预检」按钮用）。"""
+    config_base = Path(project_root) if project_root is not None else None
+    if config_base is not None and not (config_base / "data").is_dir():
+        try:
+            from . import resource_root
+            config_base = resource_root()
+        except Exception:
+            pass
     try:
-        cfg = RunConfig.from_dict(dict(params))
+        cfg = RunConfig.from_dict(
+            dict(params), base_dir=str(config_base) if config_base is not None else None
+        )
     except UFDemoError as err:
         return {"ok": False, "errors": [err.to_dict()], "warnings": []}
     try:
@@ -516,6 +556,21 @@ def curves_payload(curves_dir: str | Path) -> dict[str, Any]:
     return {"schema": "ufdemo.web.curves/1", "curves": out}
 
 
+def _safe_curve_name(curves_dir: str | Path, name: str) -> str:
+    """Validate a curve card selector and keep it below ``curves_dir``."""
+    if not isinstance(name, str) or not name or Path(name).name != name:
+        raise ContractError("CURVE_NOT_FOUND", "曲线卡名称不合法", status=404, field_path="curve")
+    if not name.endswith(".curve.json"):
+        raise ContractError("CURVE_NOT_FOUND", "曲线卡名称不合法", status=404, field_path="curve")
+    root = Path(curves_dir).resolve()
+    candidate = (root / name).resolve()
+    if candidate.parent != root:
+        raise ContractError("CURVE_NOT_FOUND", "曲线路径越界", status=404, field_path="curve")
+    if not candidate.is_file():
+        raise ContractError("CURVE_NOT_FOUND", f"曲线卡不存在：{name}", status=404, field_path="curve")
+    return name
+
+
 def example_payload(examples_dir: str | Path, name: str) -> dict[str, Any]:
     """单个配置模板的**完整参数**（前端「载入/重置为该模板」用）。
 
@@ -589,7 +644,31 @@ def read_run_payload(runs_dir: str | Path, run_id_or_dir: str) -> dict[str, Any]
     target = Path(run_id_or_dir)
     if not target.is_absolute():
         candidate = base / run_id_or_dir
-        target = candidate if candidate.exists() else base / run_id_or_dir.split("/")[-1]
+        if candidate.exists():
+            target = candidate
+        else:
+            # ``/api/runs`` exposes the metadata run_id even for nested
+            # layouts (runs/<group>/<id>).  Resolve that id by inspecting the
+            # small metadata files rather than dropping the parent directory.
+            target = base / run_id_or_dir.split("/")[-1]
+            if not target.exists() and base.exists():
+                for md_path in base.glob("*/metadata.json"):
+                    try:
+                        md = json.loads(md_path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if str(md.get("run_id", "")) == run_id_or_dir:
+                        target = md_path.parent
+                        break
+                if not target.exists():
+                    for md_path in base.glob("*/*/metadata.json"):
+                        try:
+                            md = json.loads(md_path.read_text(encoding="utf-8"))
+                        except (OSError, ValueError):
+                            continue
+                        if str(md.get("run_id", "")) == run_id_or_dir:
+                            target = md_path.parent
+                            break
     # 防目录穿越：只允许 runs 根目录之下
     try:
         resolved = target.resolve()
@@ -639,7 +718,7 @@ def lookup_payload(
     唯一越界错误码 ``TABLE_OUT_OF_RANGE``；``allow_out_of_range=True`` 时
     越界项返回 ``None``，**绝不返回 0、不外推、不钳端点**。
     """
-    curve = U.load_curve_card(curves_dir, curve_name)
+    curve = U.load_curve_card(curves_dir, _safe_curve_name(curves_dir, curve_name))
     state = U.new_session({})
     solve_before = state.solve_count
     try:
@@ -665,7 +744,15 @@ def curve_grid_payload(
     curves_dir: str | Path, curve_name: str, *, n: int = 200, method: str = "linear"
 ) -> dict[str, Any]:
     """插值图数据（不触发求解）。"""
-    curve = U.load_curve_card(curves_dir, curve_name)
+    if isinstance(n, bool) or not isinstance(n, int) or n < 2 or n > 5000:
+        raise ContractError(
+            "BAD_REQUEST",
+            "n 必须是 2..5000 的整数",
+            status=400,
+            field_path="n",
+            requirement="整数采样点数，范围 2..5000",
+        )
+    curve = U.load_curve_card(curves_dir, _safe_curve_name(curves_dir, curve_name))
     state = U.new_session({})
     before = state.solve_count
     grid = U.table_grid(state, curve, n=n, method=method)
