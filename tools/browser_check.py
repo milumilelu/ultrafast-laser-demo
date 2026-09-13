@@ -90,6 +90,19 @@ def _row(check: str, expected: Any, measured: Any, status: str, note: str = "",
             "measured": measured, "status": status, "note": note}
 
 
+def _timeout_row(timeout: float) -> dict[str, Any]:
+    """探针超时的验收行。
+
+    单独抽成函数**并配测试**：它原先内联在 ``return`` 里，参数个数写错时
+    只有真的挂死才会暴露 —— 而挂死本来就是罕见路径，错误会被掩盖很久。
+    """
+    return _row("U03 浏览器级", "在超时内完成",
+                f"超时 {timeout:.0f}s（已终止进程树）", "失败",
+                "探针挂死：不是断言失败。用命令行核对 Chrome 是否启动、"
+                "profile 是否被占用、CDP 是否返回。",
+                "U03-浏览器级")
+
+
 def _find_node() -> tuple[str | None, str]:
     for p in NODE_CANDIDATES:
         if p and Path(p).exists():
@@ -249,11 +262,7 @@ def run_browser_checks(out_dir: Path, *, browser: str = "auto", solve: bool = Tr
             # 「未运行」= 没跑；「失败」= 跑了但没跑完。把它记成未运行会把
             # 一个真实缺陷藏起来（本工程踩过：探针挂死被记成未运行，
             # 验收凭空少一整组，看起来像功能没做）。
-            return [_row("U03 浏览器级", f"探针在 {timeout:.0f}s 内完成", "在超时内完成",
-                         f"超时 {timeout:.0f}s（已终止进程树）", "失败",
-                         "探针挂死：不是断言失败。用命令行核对 Chrome 是否启动、"
-                         "profile 是否被占用、CDP 是否返回。",
-                         "U03-浏览器级")]
+            return [_timeout_row(timeout)]
         log_file = out_dir / "browser_probe.log"
         log_file.write_text((out_s or "") + "\n" + (err_s or ""), encoding="utf-8")
 

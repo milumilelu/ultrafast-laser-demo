@@ -1358,6 +1358,7 @@ function renderAll() {
   renderTablePanel();
   renderCapsPanel();
   renderProcessPanel();
+  renderCasesPanel();
   renderHistoryPanel();
 }
 
@@ -1413,6 +1414,40 @@ function bindGlobal() {
   $("#h-load").addEventListener("click", onLoadHistory);
 
   window.addEventListener("resize", () => { paintResultCharts(); paintCurveChart(); });
+}
+
+/* U08：真实实验案例（文献算例回放）。
+ * 只呈现**实测条件与实测结果**；不含三维形貌；不触发求解。 */
+function renderCasesPanel() {
+  const box = $("#cases-table");
+  if (!box) return;
+  const d = STORE.cases;
+  if (!d || d.available === false || !(d.cases || []).length) {
+    box.innerHTML = `<div class="empty">暂无可回放的文献算例（后端不可用或数据未导入）。</div>`;
+    if ($("#cases-note")) $("#cases-note").textContent = "";
+    return;
+  }
+  if ($("#cases-note")) {
+    $("#cases-note").innerHTML = (d.notes || []).map((n) => `· ${escHTML(n)}`).join("<br>");
+  }
+  box.innerHTML =
+    `<table class="data"><thead><tr>
+       <th>算例</th><th>材料</th><th>图形</th><th>条件</th><th>深度 (μm)</th>
+       <th>线宽 (μm)</th><th>来源</th></tr></thead><tbody>` +
+    (d.cases || []).map((c) => {
+      const width = (c.lineWidthUm === null || c.lineWidthUm === undefined) ? "—" : c.lineWidthUm;
+      return `<tr>
+        <td>${escHTML(c.caseId)}</td>
+        <td>${escHTML(c.materialName)}</td>
+        <td>${escHTML(c.pattern)}</td>
+        <td>${escHTML(c.conditions)}</td>
+        <td>${c.depthUm}</td>
+        <td>${width}</td>
+        <td>${escHTML(c.sourceDoi)}<br>${escHTML(c.sourceLocator)}</td></tr>`;
+    }).join("") +
+    `</tbody></table>
+     <div class="notice warn">以上为<strong>实测值</strong>；本页<strong>不生成</strong>三维形貌，
+       也<strong>不触发</strong>求解。模型预测请看「过程响应（金刚石）」或「参数与运行」。</div>`;
 }
 
 /* U06：金刚石过程响应评估器面板。

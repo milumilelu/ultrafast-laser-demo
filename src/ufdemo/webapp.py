@@ -284,6 +284,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif path == "/api/datasets":
             # U05：实测数据集与权限。判定与界面同源（datasets.evaluate）。
             self._send_json(W.datasets_payload(ctx.measured_dir))
+        elif path == "/api/cases":
+            # U08：文献算例回放（实测条件 + 实测结果，不经过模型）。
+            self._send_json(W.cases_payload(ctx.measured_dir))
         elif path == "/api/diamond-evaluator":
             # U06：过程响应评估器摘要（支持范围 + 三档指标 + 门槛判定）。
             self._send_json(W.diamond_evaluator_payload(ctx.measured_dir))

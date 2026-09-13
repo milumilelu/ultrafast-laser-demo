@@ -57,6 +57,8 @@ const API = {
     readRun(id) { return this.get("/api/runs/" + encodeURIComponent(id)); },
     /* U05：实测数据集与权限（观测可放、增量必拦）。 */
     datasets() { return this.get("/api/datasets"); },
+    /* U08：文献算例回放（实测条件 + 实测结果，不经过模型）。 */
+    cases() { return this.get("/api/cases"); },
     /* U06：过程响应评估器摘要（支持范围 + 三档指标 + 门槛判定）。 */
     diamondEvaluator() { return this.get("/api/diamond-evaluator"); },
     /* U06：工艺三输入 → 过程响应预测。**不触发求解、不产生形貌**。 */
@@ -277,6 +279,7 @@ const STORE = {
    * 它们是新增面板，后端老版本没有这两个端点时，主界面仍应可用。 */
   datasets: null,
   diamondEvaluator: null,
+  cases: null,
   auxErrors: [],
   error: null,
 };
@@ -304,6 +307,8 @@ async function bootstrapData() {
   catch (e) { STORE.datasets = null; STORE.auxErrors.push(`/api/datasets：${e && e.message ? e.message : e}`); }
   try { STORE.diamondEvaluator = await API.diamondEvaluator(); }
   catch (e) { STORE.diamondEvaluator = null; STORE.auxErrors.push(`/api/diamond-evaluator：${e && e.message ? e.message : e}`); }
+  try { STORE.cases = await API.cases(); }
+  catch (e) { STORE.cases = null; STORE.auxErrors.push(`/api/cases：${e && e.message ? e.message : e}`); }
 
   STORE.ready = true;
   return STORE;

@@ -1,0 +1,5 @@
+﻿case_id,material,pattern,peak_fluence_J_cm2,pulse_count,equivalent_pulse_count,pulse_count_label,depth_um,line_width_um,source_doi,source_locator,observation_access,increment_access,note
+D02-glass_dot,IPS e.max CAD HT lithium-disilicate glass-ceramic,dot,8.0,10.0,,脉冲数,6.3,,10.3390/ma15103614,Table 1,True,False,Equivalent pulse count is not an integer event sequence. Crater diameter is not laser waist. No full 3D measured surface.
+D02-zirconia_dot,KATANA UTML 6Y-PSZ,dot,4.0,20.0,,脉冲数,7.4,,10.3390/ma15103614,Table 1,True,False,Equivalent pulse count is not an integer event sequence. Crater diameter is not laser waist. No full 3D measured surface.
+D02-glass_cross,IPS e.max CAD HT lithium-disilicate glass-ceramic,crossed_line,8.0,,20.0,等效脉冲数（非真实事件序列）,8.8,21.5,10.3390/ma15103614,Table 2,True,False,Equivalent pulse count is not an integer event sequence. Crater diameter is not laser waist. No full 3D measured surface.
+D02-zirconia_cross,KATANA UTML 6Y-PSZ,crossed_line,8.0,,20.0,等效脉冲数（非真实事件序列）,7.1,22.7,10.3390/ma15103614,Table 2,True,False,Equivalent pulse count is not an integer event sequence. Crater diameter is not laser waist. No full 3D measured surface.

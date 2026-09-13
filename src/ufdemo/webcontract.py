@@ -571,6 +571,19 @@ def datasets_payload(measured_dir: str | Path) -> dict[str, Any]:
     return {"schema": "ufdemo.web.datasets/1", **payload}
 
 
+def cases_payload(measured_dir: str | Path) -> dict[str, Any]:
+    """文献算例回放（U08）。
+
+    **已知条件回放**：展示论文表格的实测条件与结果，**不经过模型**。
+    不含三维形貌；等效脉冲数带强制标签（非真实事件序列）。
+    """
+    from .cases import CaseReplay, assert_cases_are_replay_only
+
+    replay = CaseReplay.from_dir(measured_dir)
+    assert_cases_are_replay_only(replay.cases)   # 红线：回放一律无 increment_access
+    return replay.to_dict()
+
+
 def diamond_evaluator_payload(measured_dir: str | Path) -> dict[str, Any]:
     """金刚石过程响应评估器摘要（U06）。
 

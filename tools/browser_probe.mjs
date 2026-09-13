@@ -73,7 +73,10 @@ const OUT = path.resolve(opt("--out", path.join(ROOT, "runs", "browser-probe")))
  *
  * 默认 300s（正常全程约 45–60s，留足余量）；`--watchdog=<秒>` 可覆写，0 关闭。
  */
-const WATCHDOG_S_DEFAULT = 300;
+// ⚠️ **必须早于调用方的超时**（tools/browser_check.py 用 300s）：
+// 两者相等会变成赛跑 —— 包装器可能在内层写出失败原因**之前**就杀掉进程树，
+// 结果反而丢失诊断信息。留 60s 余量让内层先写出结果并自行退出。
+const WATCHDOG_S_DEFAULT = 240;
 function watchdogSeconds() {
   const arg = process.argv.find((a) => a.startsWith("--watchdog="));
   if (!arg) return WATCHDOG_S_DEFAULT;
@@ -690,6 +693,26 @@ try {
         null, "预测未触发 POST /api/solve（独立通道）");
     }
   } else skip(null, "页面上没有 #pe-run", "过程响应面板（U06）");
+
+  /* ================= 附加：真实实验案例回放（U08）=================
+   * 这一组验证两条**措辞/语义红线**在真引擎里确实生效：
+   * 等效脉冲数不被写成脉冲数；页面不声称有三维形貌。 */
+  console.log("\n[X] 附加：真实实验案例回放（U08）");
+  if (await page.$("#cases-table")) {
+    await switchTab("cases");
+    const b6 = await chip("chip-solve");
+    const txt = await page.$eval("#cases-table", (el) => el.textContent || "");
+    const note = await page.$eval("#cases-note", (el) => el.textContent || "");
+    ok(/D02-/.test(txt), null, "案例表列出文献算例（D02-*）",
+      txt.slice(0, 50).replace(/\s+/g, " "));
+    ok(/等效/.test(txt) && /非真实事件序列/.test(txt),
+      null, "等效脉冲数带「非真实事件序列」标注（不得写成脉冲数）");
+    ok(!/真实脉冲数|实际脉冲数/.test(txt), null, "案例表未把等效值表述为真实脉冲数");
+    ok(/假设截面形状重建|没有实测三维形貌/.test(note + txt),
+      null, "页面声明无实测三维形貌 / 重建须标注");
+    ok((await chip("chip-solve")) === b6, null, `回放后求解次数不变（${b6} → ${await chip("chip-solve")}）`);
+    ok(!apiCalls.some((c) => c.path === "/api/solve"), null, "回放未触发 POST /api/solve");
+  } else skip(null, "页面上没有 #cases-table", "真实实验案例回放（U08）");
 
   /* 所有被点击控件的响应性汇总（防止「点不到」被静默吞掉） */
   ok(actionErrors.length === 0, null, "所有被点击的控件都真实响应（无「点不到」）",
