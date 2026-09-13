@@ -78,6 +78,12 @@ ALL_SEMANTICS: tuple[str, ...] = (
     SEMANTIC_THRESHOLD_ONLY,
 )
 
+# ⚠️ **本枚举不扩容**（细则 4.3）：它是**曲线 / 材料响应**的语义集合，
+# `tables.CURVE_ROUTES` 必须对其中每一项登记去向，`assert_increment_semantics`
+# 也以它为准。**实测数据的端点语义不属于这个枚举** —— 那是另一个概念轴
+# （观测语义，见 `datasets.OBSERVATION_SEMANTICS`），
+# 只在「数据集权限」层使用，**既不进曲线枚举，也永不进事件核**。
+
 # 只有该语义允许进入逐事件增量主循环（细则 4.3 / 7 节）
 INCREMENT_SEMANTICS: tuple[str, ...] = (SEMANTIC_EVENT_INCREMENT,)
 
