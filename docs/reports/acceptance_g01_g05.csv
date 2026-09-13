@@ -55,11 +55,11 @@ G06,examples/（两个合成结构算例）,,红线：结构类型与卡一致,�
 G09-UI,app.py（Streamlit）,,初始渲染无异常,无异常,无异常,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,六标签页：参数与运行 / 结果 / 参考评估器 / 查表 / 七材料能力入口 / 历史运行
 G09-UI,app.py（Streamlit）,,初始 solve_count,0,0,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,未提交前不得求解
 G09-UI,app.py（Streamlit）,,初始无冻结结果,frozen=None,frozen=None,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,
-G09-UI,app.py（Streamlit）,,提交计算：solve_count 恰好 +1,1,1,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,run_id=ui_run_20260913T101400_6s1r｜status=completed
-G09-UI,app.py（Streamlit）,,改参数未提交：旧结果标为「上一次运行」且不求解,is_stale=True｜solve_count=1｜界面出现「上一次运行」,is_stale=True｜solve_count=1｜label=上一次运行（2026-09-13T10:14:00.520639+00:00）,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,执行细则 11.3
+G09-UI,app.py（Streamlit）,,提交计算：solve_count 恰好 +1,1,1,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,run_id=ui_run_20260913T104146_dwjc｜status=completed
+G09-UI,app.py（Streamlit）,,改参数未提交：旧结果标为「上一次运行」且不求解,is_stale=True｜solve_count=1｜界面出现「上一次运行」,is_stale=True｜solve_count=1｜label=上一次运行（2026-09-13T10:41:46.980592+00:00）,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,执行细则 11.3
 G09-UI,app.py（Streamlit）,,改参数后 solve_count 不变,1,1,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,
 G09-UI,app.py（Streamlit）,,快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变,1（不变）,1,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,执行细则 11.3「只旋转视图、切换图层/截面/快照时读取已有数据」
-G09-UI,app.py（Streamlit）,,读取历史运行：read_count +1 且 solve_count 不变,read_count=1｜solve_count=0,read_count=1｜solve_count=0｜run_id=ui_run_20260913T101400_6s1r,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,读取不等于用当前参数求解
+G09-UI,app.py（Streamlit）,,读取历史运行：read_count +1 且 solve_count 不变,read_count=1｜solve_count=0,read_count=1｜solve_count=0｜run_id=ui_run_20260913T104146_dwjc,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,读取不等于用当前参数求解
 G09-UI,app.py（Streamlit）,,回放水印与导出 watermark.json 逐字段一致,material_id/run_mode/unit_mode 全部一致,导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,批次 H：导出=回放，标签不再各写一份
 G09-UI,app.py（Streamlit）,,参考评估器「评估」：不进入逐事件求解、不产生形貌,solve_count=0｜产出参考结果｜frozen=None,solve_count=0｜有参考结果=True｜frozen=None,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,参考评估器只做公式核查（批次 D 语义）
 G09-UI,app.py（Streamlit）,,查表「查值」：不触发求解、不读取历史,solve_count=0｜产出查表结果｜read_count=0,solve_count=0｜read_count=0｜有查表结果=True,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,批次 F：查表是纯读取，不是求解
@@ -74,7 +74,7 @@ G09-UI,app.py（Streamlit）,,求解模式可切为「冻结几何分组」并�
 G09-UI,app.py（Streamlit）,,参考模式：加速面板如实说明未启用批量（不假装加速过）,grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明,grouped=False｜effective_mode=reference｜boundary_note 存在=True,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,批次 I：局部误差估计不是全局误差证明，边界必须写明
 G09-UI,app.py（Streamlit）,,几何修正：入射角/动态角度可切换，且支持范围与近似标注可见,solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围,solve_count=0→1｜斜入射=True｜动态角度=True｜光轴夹角=59.99999999999999｜法向厚度转换=0｜支持范围 n_z≥0.5、入射角≤60.0,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,批次 J / T19：两增强对照可检查、支持范围与误差标识可见
 G09-UI,app.py（Streamlit）,,正入射：不显示几何修正面板（未启用即不显示）,geometry_diagnostics 为空字典,空字典=True,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,与批次 G/H/I 同口径：未启用不返回假数据
-G09-UI,app.py（Streamlit）,,探针运行输出位置,隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,已写入 305 个运行目录,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,UFDEMO_RUNS_DIR 覆盖，不污染工作区 runs/
+G09-UI,app.py（Streamlit）,,探针运行输出位置,隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,已写入 341 个运行目录,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,UFDEMO_RUNS_DIR 覆盖，不污染工作区 runs/
 G09-UI,app.py（Streamlit）,,提交运行目录,存在 metadata.json,存在,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe,
 G09-demo,app.py（端到端链路）,,示例发现,cfrp_laminated_ply.json 出现在界面示例列表,在列表中,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_demo_probe,示例由 list_examples 扫目录自动纳入界面下拉
 G09-demo,app.py（端到端链路）,,示例发现,alsic_particle_composite.json 出现在界面示例列表,在列表中,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_demo_probe,示例由 list_examples 扫目录自动纳入界面下拉
@@ -125,6 +125,12 @@ U03-browser,webui（真实浏览器）,,面板明确标注「辅助手段，不�
 U03-browser,webui（真实浏览器）,,给出宽/深预测结果,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
 U03-browser,webui（真实浏览器）,,预测后求解次数不变（1 → 1）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
 U03-browser,webui（真实浏览器）,,预测未触发 POST /api/solve（独立通道）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,案例表列出文献算例（D02-*）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,等效脉冲数带「非真实事件序列」标注（不得写成脉冲数）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,案例表未把等效值表述为真实脉冲数,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,页面声明无实测三维形貌 / 重建须标注,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,回放后求解次数不变（1 → 1）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
+U03-browser,webui（真实浏览器）,,回放未触发 POST /api/solve,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
 U03-browser,webui（真实浏览器）,,所有被点击的控件都真实响应（无「点不到」）,,符合,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check,
 G09-table,curves/analytic_fixture_depth_vs_fluence.curve.json,,曲线去向（语义路由）,event_kernel（event_kernel 仅限 event_depth_increment）,"event_kernel｜可进事件核=True｜派生=removal_depth_per_pulse,local_depth",,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\docs\reports,"原始点 9｜有效区间 [1.0, 40.0]"
 G09-table,curves/sic_threshold_vs_effective_n.curve.json,,曲线去向（语义路由）,evaluator（event_kernel 仅限 event_depth_increment）,evaluator｜可进事件核=False｜派生=threshold_fluence,,,通过,数值实现验证,C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\docs\reports,"原始点 7｜有效区间 [1.0, 720.0]"
