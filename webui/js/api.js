@@ -141,6 +141,36 @@ function toCurve(c) {
   const capMap = {};
   (c.capabilityRows || []).forEach((r) => { capMap[r["项"]] = r["值"]; });
   const canKernel = capMap["可进事件核（语义）"] === "是";
+
+  /* ---- 名称与单位：真实来源是 xQuantity / yQuantity 对象 ----
+   * 后端契约里 xQuantity = {name, unit, label, kind}。
+   * **不是** fixedConditions.x_unit —— 那里没有这个键，取它必然得到空串。
+   * 旧写法把整个对象赋给 x_name，DOM 里就被字符串化成 `[object Object]`，
+   * 用户看不到「深度还是体积、单位是米还是微米」——是语义问题，不只是显示问题。
+   * 因此这里显式取字段，并对旧格式（字符串）留一条兼容分支，
+   * 绝不依赖对象的隐式类型转换。
+   */
+  const xq = c.xQuantity, yq = c.yQuantity;
+  const pickName = (q, fallback) => {
+    if (typeof q === "string") return q;              // 旧契约：直接是名称
+    if (q && typeof q === "object") return q.label || q.name || fallback;
+    return fallback;
+  };
+  const pickUnit = (q) => {
+    if (q && typeof q === "object" && typeof q.unit === "string") return q.unit;
+    return "";
+  };
+  /* 防御：万一上游再变形，也绝不把对象渲染成 [object Object] */
+  const asText = (v, fallback) => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") return v.label || v.name || fallback;
+    return fallback;
+  };
+  const xName = pickName(xq, "x");
+  const yName = pickName(yq, "y");
+  const xUnit = pickUnit(xq);
+  const yUnit = pickUnit(yq);
+
   return {
     name: c.name,
     curve_id: c.curveId,
@@ -148,11 +178,11 @@ function toCurve(c) {
     material_identity: c.materialIdentity,
     x_quantity: c.xQuantity,
     y_quantity: c.yQuantity,
-    /* 渲染层别名：x/y 的名称与单位（真实来源是 quantity 标识） */
-    x_name: c.xQuantity || "x",
-    x_unit: (c.fixedConditions && c.fixedConditions.x_unit) || "",
-    y_name: c.yQuantity || "y",
-    y_unit: (c.fixedConditions && c.fixedConditions.y_unit) || "",
+    /* 渲染层别名：x/y 的名称与单位（真实来源是 quantity 对象） */
+    x_name: asText(xName, "x"),
+    x_unit: xUnit,
+    y_name: asText(yName, "y"),
+    y_unit: yUnit,
     source: c.sourceFigureOrTable || "（未登记来源）",
     output_semantics: c.outputSemantics,
     fixed_conditions: c.fixedConditions,
@@ -244,7 +274,8 @@ async function bootstrapData() {
   STORE.entries = materials.entries || [];
   STORE.entrySummary = materials.summary || null;
   STORE.examples = examples.examples || [];
-  STORE.curves = (curves.curves || []).map(toCurve);
+  /* 坏卡由后端如实列出，但不让一张坏卡把整个表格面板拖垮。 */
+  STORE.curves = (curves.curves || []).filter((c) => !c.broken).map(toCurve);
   STORE.references = references.cases || [];
   STORE.runs = runs.runs || [];
   STORE.layerMeta = layers;

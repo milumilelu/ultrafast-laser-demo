@@ -31,6 +31,18 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+/* 后端/磁盘内容一律先转义再拼入 innerHTML。材料卡、运行记录和错误文本
+ * 都可能由用户维护；页面也支持 --host 绑定非 localhost，不能把这些内容
+ * 当成可信 HTML。 */
+function escHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function materialOf(id) {
   return STORE.materials.find((m) => m.id === id);
 }
@@ -252,6 +264,23 @@ function mockSolve(params, material, runMode, opts = {}) {
  * ============================================================ */
 
 function drawHeatmap(canvas, barCanvas, data, nx, ny, opts = {}) {
+  /* 尺寸必须归一化为**正整数**：`createImageData` 只接受 unsigned long，
+   * 传 float / undefined / NaN 会抛
+   * `TypeError: Value is not of type 'long'`，整个画布直接停在 0×0。
+   * 上游可能给 `view.nx`（带 stride 的派生值）或 `grid.nx`（JSON 数字），
+   * 这里统一收口，避免每个调用点各赌一次。 */
+  nx = Math.round(Number(nx));
+  ny = Math.round(Number(ny));
+  if (!Number.isFinite(nx) || !Number.isFinite(ny) || nx < 1 || ny < 1) {
+    canvas.dataset.unavailable =
+      `尺寸无效（nx=${String(opts._rawNx ?? nx)}，ny=${String(opts._rawNy ?? ny)}）`;
+    return;
+  }
+  if (!data || data.length < nx * ny) {
+    canvas.dataset.unavailable =
+      `数据长度 ${data ? data.length : 0} 与网格 ${nx}×${ny} 不匹配`;
+    return;
+  }
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth || 600;
   const cell = Math.max(2, Math.floor(W / nx));
@@ -386,11 +415,23 @@ function fmtNum(v) {
 function renderSidebar() {
   const m = materialOf(state.materialId);
 
+  if (!m) {
+    $("#material-select").innerHTML = "<option value=\"\">（无可用材料卡）</option>";
+    $("#mode-select").innerHTML = "<option value=\"\">（无可用模式）</option>";
+    $("#mode-select").disabled = true;
+    $("#cap-table").textContent = "材料目录为空或全部材料卡损坏。";
+    $("#gate-box").className = "notice error";
+    $("#gate-box").textContent = "后端未提供可用材料卡，无法提交求解。";
+    $("#material-meta").textContent = "";
+    renderLedger();
+    return;
+  }
+
   /* 材料卡 select */
   const sel = $("#material-select");
   sel.innerHTML = STORE.materials.map((x) => {
     const label = `${x.id}｜${x.family}${x.grade ? "／" + x.grade : ""}｜证据 ${x.evidence_status}`;
-    return `<option value="${x.id}" ${x.id === state.materialId ? "selected" : ""}>${label}</option>`;
+    return `<option value="${escHTML(x.id)}" ${x.id === state.materialId ? "selected" : ""}>${escHTML(label)}</option>`;
   }).join("");
 
   /* 能力表 */
@@ -398,7 +439,7 @@ function renderSidebar() {
     "<table class='data'><thead><tr><th>能力</th><th>可用</th><th>说明</th></tr></thead><tbody>" +
     Object.entries(m.capabilities).map(([name, c]) =>
       `<tr><td>${name}</td><td><span class="tag ${c.available ? "yes" : "no"}">${c.available ? "是" : "否"}</span></td>` +
-      `<td>${c.reason}${c.missing ? `<br><span style="color:var(--text-3)">缺：${c.missing.join(", ")}</span>` : ""}</td></tr>`
+      `<td>${escHTML(c.reason)}${c.missing ? `<br><span style="color:var(--text-3)">缺：${escHTML(c.missing.join(", "))}</span>` : ""}</td></tr>`
     ).join("") + "</tbody></table>";
 
   /* 运行模式 */
@@ -415,10 +456,10 @@ function renderSidebar() {
     gate.innerHTML = `不可用：材料卡缺响应参数（${m.readiness}），任何模式都无法在配置层通过。` +
       `<div class="btn-row"><button class="btn" id="offer-synthetic">改用合成示例（需显式选择）</button></div>` +
       `<div style="margin-top:6px;font-size:12px">合成示例为无量纲演示，只验证流程与界面，不输出物理结论。</div>`;
-    $("#offer-synthetic").addEventListener("click", () => {
+    $("#offer-synthetic").addEventListener("click", async () => {
       state.materialId = "synthetic_demo_isotropic";
       state.runMode = "synthetic_normalized";
-      loadTemplate("synthetic_demo_point.json");
+      await loadTemplate("synthetic_demo_point.json");
       renderAll();
     });
   } else if (m.physical) {
@@ -431,8 +472,8 @@ function renderSidebar() {
 
   /* 激光条件 + 限制 */
   $("#material-meta").innerHTML =
-    `<div class="watermark">激光条件：${m.laser}</div>` +
-    (m.limitations || []).map((l) => `<div class="notice warn" style="margin:6px 0">⚠ ${l}</div>`).join("");
+    `<div class="watermark">激光条件：${escHTML(m.laser)}</div>` +
+    (m.limitations || []).map((l) => `<div class="notice warn" style="margin:6px 0">⚠ ${escHTML(l)}</div>`).join("");
 
   renderLedger();
 }
@@ -559,8 +600,50 @@ async function loadTemplate(tid) {
       $("#p-inc").value = ((Math.acos(kz) * 180) / Math.PI).toFixed(2);
     }
     $("#template-select").value = tid;
+
+    /* ---- 材料与模式必须**同步回填**到状态 ----
+     * 模板自带 material_id / run_mode（后端 /api/examples 给出）。
+     * 旧实现只把网格/光束/路径写进表单控件，**没有动 state.materialId /
+     * state.runMode** → 载入 alsic 模板后材料仍停在上一张卡
+     * （实测：期望 alsic_sicp_aa2024_1030nm，实际 zirconia_ysz_machining_effective_n3），
+     * 模式也停在旧值（期望 synthetic_demo，实际 reference_case）。
+     * 更糟的是提交时会按**错的材料**做准入校验，错误原因被错误归因。
+     * 这里按模板显式回填，并在模板声明的模式不被该材料允许时**明确提示**，
+     * 而不是静默改掉用户看到的模式。 */
+    const tplMaterial = p.material_id || null;
+    const tplMode = p.run_mode || null;
+    if (tplMaterial && materialOf(tplMaterial)) {
+      state.materialId = tplMaterial;
+    } else if (tplMaterial) {
+      const msg0 = $("#submit-msg");
+      if (msg0) {
+        msg0.className = "notice warn";
+        msg0.style.display = "block";
+        msg0.textContent =
+          `模板 ${tid} 声明的材料卡 ${tplMaterial} 不在当前材料清单里；材料选择未改动。`;
+      }
+    }
+    if (tplMode) {
+      const mat = materialOf(state.materialId);
+      const allowed = (mat && mat.allowed_run_modes) || [];
+      if (!allowed.length || allowed.includes(tplMode)) {
+        state.runMode = tplMode;
+      } else {
+        const msg0 = $("#submit-msg");
+        if (msg0) {
+          msg0.className = "notice warn";
+          msg0.style.display = "block";
+          msg0.textContent =
+            `模板 ${tid} 的运行模式 ${tplMode} 不被材料 ${state.materialId} 允许` +
+            `（允许：${allowed.join(" / ")}）；模式保持 ${state.runMode}。`;
+        }
+      }
+    }
+
     const msg = $("#submit-msg");
-    if (msg) { msg.style.display = "none"; }
+    if (msg && !/不被材料|不在当前材料清单/.test(msg.textContent || "")) {
+      msg.style.display = "none";
+    }
   } catch (err) {
     const msg = $("#submit-msg");
     if (msg) {
@@ -573,7 +656,7 @@ async function loadTemplate(tid) {
 
 function renderParamPanel() {
   $("#template-select").innerHTML = STORE.examples.map((t) =>
-    `<option value="${t.name}" ${t.name === state.templateId ? "selected" : ""}>${t.label}（${t.name}）</option>`).join("");
+    `<option value="${escHTML(t.name)}" ${t.name === state.templateId ? "selected" : ""}>${escHTML(t.label)}（${escHTML(t.name)}）</option>`).join("");
 
   const stale = isStale();
   $("#stale-warning").style.display = stale ? "block" : "none";
@@ -618,7 +701,7 @@ async function onSubmit() {
       const errs = adapted.errors || [];
       msg.className = "notice warn";
       msg.innerHTML = `<strong>准入校验未通过，未执行求解（求解次数不变）：</strong><br>` +
-        errs.map((e) => `· ${e.code || ""} ${e.message || ""}${e.requirement ? `（要求：${e.requirement}）` : ""}`).join("<br>");
+        errs.map((e) => `· ${escHTML(e.code || "")} ${escHTML(e.message || "")}${e.requirement ? `（要求：${escHTML(e.requirement)}）` : ""}`).join("<br>");
       state.frozen = adapted;   // 结果区如实显示失败原因
       state.submittedKey = paramsKey(p);
       renderResultPanel();
@@ -641,9 +724,9 @@ async function onSubmit() {
     switchTab("result");
   } catch (err) {
     msg.className = "notice warn";
-    msg.innerHTML = `<strong>请求失败：</strong>${err.message || String(err)}` +
-      (err.suggestion ? `<br>${err.suggestion}` : "") +
-      ((err.errors || []).map((e) => `<br>· ${e.code} ${e.message}`).join(""));
+    msg.innerHTML = `<strong>请求失败：</strong>${escHTML(err.message || String(err))}` +
+      (err.suggestion ? `<br>${escHTML(err.suggestion)}` : "") +
+      ((err.errors || []).map((e) => `<br>· ${escHTML(e.code)} ${escHTML(e.message)}`).join(""));
   } finally {
     btn.disabled = wasDisabled;
   }
@@ -729,19 +812,28 @@ function renderResultPanel() {
     return;
   }
   const m = materialOf(f.materialId);
-  const wm = f.watermark;
+  /* 水印：**失败的结果没有水印**（求解器没跑，自然没有材料/单位/证据口径）。
+   * 旧写法直接 `f.watermark` → 读 `wm.material_id` 抛
+   * `TypeError: Cannot read properties of undefined`，
+   * 于是**任何准入失败都把结果面板崩成 JS 错误**，用户看不到真正的原因
+   * （越界入射角、坏材料卡、非法几何…）。这正好毁掉了「错误提示」这条路径。
+   * 现在：拿不到就如实报「不提供」，与工程既有口径一致（不显示假数据）。 */
+  const wm = f.watermark || null;
   const stale = isStale();
 
-  const layerNames = Object.keys(f.layers);
+  const layerNames = Object.keys(f.layers || {});
   if (!layerNames.includes(state.result.layer)) state.result.layer = layerNames[0] || null;
 
   let html = "";
   html += stale
-    ? `<div class="notice warn">当前参数已修改，下方显示的是 <strong>${f.runId}</strong>；要按新参数出结果请重新「提交计算」。</div>`
-    : `<div class="notice ok">结果状态：${f.runId}（最新提交）</div>`;
+    ? `<div class="notice warn">当前参数已修改，下方显示的是 <strong>${escHTML(f.runId)}</strong>；要按新参数出结果请重新「提交计算」。</div>`
+    : `<div class="notice ok">结果状态：${escHTML(f.runId)}（最新提交）</div>`;
 
-  html += `<div class="watermark">${wm.material_id}｜${wm.family}／${wm.grade}｜模式 ${wm.run_mode}｜单位 ${wm.unit_system}｜证据 ${wm.evidence_status}｜${wm.physical_prediction_allowed ? "物理预测" : "非物理预测"}</div>`;
-  wm.warnings.forEach((w) => (html += `<div class="notice warn" style="margin:6px 0">⚠ ${w}</div>`));
+  html += wm
+    ? `<div class="watermark">${escHTML(wm.material_id)}｜${escHTML(wm.family)}／${escHTML(wm.grade)}｜模式 ${escHTML(wm.run_mode)}｜单位 ${escHTML(wm.unit_system)}｜证据 ${escHTML(wm.evidence_status)}｜${wm.physical_prediction_allowed ? "物理预测" : "非物理预测"}</div>`
+    : `<div class="notice warn">材料/单位水印：<strong>不提供</strong>（本次未执行求解，故无材料口径与证据状态）。</div>`;
+  (wm ? (wm.warnings || []) : []).forEach(
+    (w) => (html += `<div class="notice warn" style="margin:6px 0">⚠ ${escHTML(w)}</div>`));
 
   const st = f.stats;
   html += `<div class="metrics">
@@ -750,13 +842,15 @@ function renderResultPanel() {
     <div class="metric"><div class="k">去除体积</div><div class="v">${f.removalAvailable ? fmtNum(st.removal_volume_internal) : "不提供（threshold_only）"}</div></div>
     <div class="metric"><div class="k">中心深度</div><div class="v">${f.removalAvailable ? fmtNum(st.center_depth_internal) : "不提供"}</div></div>
   </div>`;
-  html += `<div class="watermark">单位：长度 ${wm.length_label}｜深度 ${wm.depth_label}｜能流 ${wm.fluence_label}（CSV 与界面统计同源）</div>`;
+  if (wm) {
+    html += `<div class="watermark">单位：长度 ${wm.length_label}｜深度 ${wm.depth_label}｜能流 ${wm.fluence_label}（CSV 与界面统计同源）</div>`;
+  }
 
   /* 批次 H/I/J：几何修正 / 批量 / 阈值协议 / 相结构（未启用则不显示） */
   html += diagnosticPanels(f);
   if ((f.errors || []).length) {
     html += `<div class="notice error" style="margin:8px 0"><strong>错误：</strong>` +
-      f.errors.map((e) => `<br>· ${e.code || ""} ${e.message || ""}${e.requirement ? `（要求：${e.requirement}）` : ""}`).join("") +
+      f.errors.map((e) => `<br>· ${escHTML(e.code || "")} ${escHTML(e.message || "")}${e.requirement ? `（要求：${escHTML(e.requirement)}）` : ""}`).join("") +
       `</div>`;
   }
 
@@ -771,7 +865,7 @@ function renderResultPanel() {
     </div>`;
 
     const blockedCaps = Object.entries(f.blocked)
-      .map(([k, why]) => `<div class="notice info" style="margin:6px 0">图层「${layerLabel(k)}」不可用：${why}</div>`).join("");
+      .map(([k, why]) => `<div class="notice info" style="margin:6px 0">图层「${escHTML(layerLabel(k))}」不可用：${escHTML(why)}</div>`).join("");
 
     if (state.result.subtab === "morph") {
       html += `<div class="control-row">
@@ -814,11 +908,11 @@ function renderResultPanel() {
   /* 页脚：警告/错误/相结构诊断 */
   if (f.warnings.length) {
     html += `<details class="expander"><summary>警告（${f.warnings.length}）</summary><div class="body">` +
-      f.warnings.map((w) => `<div>· ${w}</div>`).join("") + "</div></details>";
+      f.warnings.map((w) => `<div>· ${escHTML(w)}</div>`).join("") + "</div></details>";
   }
   if (f.errors.length) {
     html += `<details class="expander" open><summary>错误（${f.errors.length}）</summary><div class="body">` +
-      f.errors.map((e) => `<div>· [${e.code}] ${e.message}（${e.field_path}）</div>`).join("") + "</div></details>";
+      f.errors.map((e) => `<div>· [${escHTML(e.code)}] ${escHTML(e.message)}（${escHTML(e.field_path)}）</div>`).join("") + "</div></details>";
   }
   if (f.diagnostics) html += renderDiagnostics(f.diagnostics);
 
@@ -913,9 +1007,21 @@ function paintResultCharts() {
   const tCanvas = $("#tl-canvas");
   if (tCanvas && f.snapshots.length && state.result.subtab === "tl") {
     const i = Math.min(state.result.snapIdx, f.snapshots.length - 1);
-    const snap = f.snapshots[i < 0 ? f.snapshots.length - 1 : i];
+    const idx = i < 0 ? f.snapshots.length - 1 : i;
+    const snap = f.snapshots[idx];
+    /* 快照元信息在契约里嵌在 **`label`** 子对象中，且键名是 **snake_case**
+     * （`event_index` / `time_s` / `pass_id`）——**不是**顶层的 camelCase。
+     * 旧写法读 `snap.eventIndex` 等，全部拿到 `undefined`，
+     * 界面上就显示「事件 undefined｜t = undefined s｜遍 undefined」。
+     * 这里按 `label` 读取，并对缺字段如实报「—」而不是打印 undefined。 */
+    const meta = snap.label || {};
+    const evt = meta.event_index ?? snap.index ?? "—";
+    const t = meta.time_s ?? "—";
+    const pass = meta.pass_id ?? "—";
+    const show = (v) => (v === "—" || v === null || v === undefined ? "—" : v);
     $("#t-meta").textContent =
-      `快照 ${(i < 0 ? f.snapshots.length - 1 : i) + 1}/${f.snapshots.length}｜事件 ${snap.eventIndex}｜t = ${snap.timeS} s｜遍 ${snap.passId}｜${snap.final ? "最终" : "过程"}`;
+      `快照 ${idx + 1}/${f.snapshots.length}｜事件 ${show(evt)}｜t = ${show(t)} s｜` +
+      `遍 ${show(pass)}｜${snap.final ? "最终" : "过程"}`;
     drawHeatmap(tCanvas, $("#tl-bar"), snap.height, f.grid.nx, f.grid.ny);
   }
 }
@@ -926,7 +1032,7 @@ function paintResultCharts() {
 
 function renderRefPanel() {
   $("#ref-case").innerHTML = STORE.references.map((c) =>
-    `<option value="${c.id}" ${c.id === state.ref.caseId ? "selected" : ""}>${c.label}</option>`).join("");
+    `<option value="${escHTML(c.id)}" ${c.id === state.ref.caseId ? "selected" : ""}>${escHTML(c.label)}</option>`).join("");
   const box = $("#ref-result");
   const r = state.ref.result;
   if (!r) {
@@ -937,14 +1043,14 @@ function renderRefPanel() {
     `事件核允许：${r.eventKernelAllowed ? "是" : "否"}｜` +
     `公式核查：${r.verifiedByFormula ? "已做" : "未做"}｜` +
     `实验复现：${r.verifiedByExperiment ? "是" : "**否（只做公式核查）**"}</div>`;
-  html += `<div class="watermark">材料 ${r.materialId || "—"}｜协议 ${r.protocolId || "—"}｜条件匹配 ${r.conditionMatch || "—"}｜证据 ${r.evidenceStatus || "—"}</div>`;
+  html += `<div class="watermark">材料 ${escHTML(r.materialId || "—")}｜协议 ${escHTML(r.protocolId || "—")}｜条件匹配 ${escHTML(r.conditionMatch || "—")}｜证据 ${escHTML(r.evidenceStatus || "—")}</div>`;
   html += `<table class="data"><thead><tr><th>量</th><th>值</th><th>单位</th></tr></thead><tbody>` +
     (r.values || []).map((row) =>
-      `<tr><td>${row[0]}</td><td style="font-family:var(--mono)">${fmtNum(row[1])}</td><td>${row[2] || ""}</td></tr>`).join("") +
+      `<tr><td>${escHTML(row[0])}</td><td style="font-family:var(--mono)">${fmtNum(row[1])}</td><td>${escHTML(row[2] || "")}</td></tr>`).join("") +
     "</tbody></table>";
-  html += `<div class="watermark">来源公式：${r.sourceEquation || "—"}｜来源图表：${r.sourceFigureOrTable || "—"}</div>`;
-  (r.notes || []).forEach((n) => (html += `<div class="watermark">· ${n}</div>`));
-  (r.warnings || []).forEach((w) => (html += `<div class="notice warn">⚠ ${w}</div>`));
+  html += `<div class="watermark">来源公式：${escHTML(r.sourceEquation || "—")}｜来源图表：${escHTML(r.sourceFigureOrTable || "—")}</div>`;
+  (r.notes || []).forEach((n) => (html += `<div class="watermark">· ${escHTML(n)}</div>`));
+  (r.warnings || []).forEach((w) => (html += `<div class="notice warn">⚠ ${escHTML(w)}</div>`));
   box.innerHTML = html;
 }
 
@@ -953,14 +1059,14 @@ async function onEvaluateReference() {
   const box = $("#ref-result");
   const caseId = state.ref.caseId;
   if (!caseId) return;
-  box.innerHTML = `<div class="notice info">正在评估 ${caseId} …</div>`;
+  box.innerHTML = `<div class="notice info">正在评估 ${escHTML(caseId)} …</div>`;
   try {
     const r = await API.post("/api/reference", { case: caseId });
     state.ref.result = r;
     renderRefPanel();
   } catch (err) {
-    box.innerHTML = `<div class="notice warn"><strong>评估失败：</strong>${err.message || String(err)}` +
-      ((err.errors || []).map((e) => `<br>· ${e.code} ${e.message}`).join("")) + `</div>`;
+    box.innerHTML = `<div class="notice warn"><strong>评估失败：</strong>${escHTML(err.message || String(err))}` +
+      ((err.errors || []).map((e) => `<br>· ${escHTML(e.code)} ${escHTML(e.message)}`).join("")) + `</div>`;
   }
 }
 
@@ -984,8 +1090,15 @@ function interpLinear(points, x) {
 }
 
 function renderTablePanel() {
+  if (!STORE.curves.length) {
+    $("#t-curve").innerHTML = "<option value=\"\">（无可用曲线卡）</option>";
+    $("#t-identity").textContent = "曲线目录为空或全部曲线卡损坏。";
+    $("#t-raw").textContent = "";
+    $("#t-result").textContent = "";
+    return;
+  }
   $("#t-curve").innerHTML = STORE.curves.map((c) =>
-    `<option value="${c.curve_id}" ${c.curve_id === state.table.curveId ? "selected" : ""}>${c.name}</option>`).join("");
+    `<option value="${escHTML(c.curve_id)}" ${c.curve_id === state.table.curveId ? "selected" : ""}>${escHTML(c.name)}</option>`).join("");
   const curve = curveOf(state.table.curveId);
 
   $("#t-identity").innerHTML =
@@ -994,11 +1107,11 @@ function renderTablePanel() {
       <tr><td>进入评估器（体积/平均率/累计）</td><td><span class="tag yes">允许</span></td></tr>
       <tr><td>反推局部深度/生成局部形貌</td><td><span class="tag ${curve.can_enter_event_kernel ? "yes" : "no"}">${curve.can_enter_event_kernel ? "允许" : "禁止"}</span></td></tr>
     </tbody></table>
-    <div class="watermark">x：${curve.x_name}（${curve.x_unit}）｜y：${curve.y_name}（${curve.y_unit}）｜来源：${curve.source}｜来源类型 ${curve.source_type}</div>` +
+    <div class="watermark">x：${escHTML(curve.x_name)}（${escHTML(curve.x_unit)}）｜y：${escHTML(curve.y_name)}（${escHTML(curve.y_unit)}）｜来源：${escHTML(curve.source)}｜来源类型 ${escHTML(curve.source_type)}</div>` +
     (curve.can_enter_event_kernel ? "" :
       `<div class="notice warn">该曲线<strong>不得进入逐事件核</strong>，也不得用于生成局部形貌；只能进评估器（体积/平均率/累计曲线在无额外形状假设时不能唯一反推局部深度）。</div>`) +
-    curve.notes.map((n) => `<div class="watermark">· ${n}</div>`).join("") +
-    curve.limitations.map((l) => `<div class="notice warn" style="margin:6px 0">⚠ ${l}</div>`).join("");
+    curve.notes.map((n) => `<div class="watermark">· ${escHTML(n)}</div>`).join("") +
+    curve.limitations.map((l) => `<div class="notice warn" style="margin:6px 0">⚠ ${escHTML(l)}</div>`).join("");
 
   $("#t-raw").innerHTML =
     `<table class="data"><thead><tr><th>#</th><th>x（${curve.x_unit}）</th><th>y（${curve.y_unit}）</th></tr></thead><tbody>` +
@@ -1027,7 +1140,7 @@ function renderTableResult() {
   html += res.status === "ok"
     ? `<div class="notice ok">状态：ok｜全部查询点位于有效区间内。</div>`
     : `<div class="notice warn">状态：${res.status}｜${res.reason}</div>`;
-  res.notes.forEach((n) => (html += `<div class="watermark">· ${n}</div>`));
+  res.notes.forEach((n) => (html += `<div class="watermark">· ${escHTML(n)}</div>`));
   box.innerHTML = html;
 }
 
@@ -1118,10 +1231,10 @@ function renderHistoryPanel() {
   }
   if (state.history.idx >= STORE.runs.length) state.history.idx = 0;
   sel.innerHTML = STORE.runs.map((r, i) =>
-    `<option value="${i}" ${i === state.history.idx ? "selected" : ""}>${r.run_id}｜${r.status_zh || r.status}｜${r.run_mode || ""}｜${(r.written_at_utc || "").slice(0, 19)}</option>`).join("");
+    `<option value="${i}" ${i === state.history.idx ? "selected" : ""}>${escHTML(r.run_id)}｜${escHTML(r.status_zh || r.status)}｜${escHTML(r.run_mode || "")}｜${escHTML((r.written_at_utc || "").slice(0, 19))}</option>`).join("");
   const r = STORE.runs[state.history.idx];
   $("#h-note").textContent =
-    `读取 ${r.run_id}（目录 ${r.run_dir}）。读取**只**递增「读取次数」，不调用求解器。`;
+    `读取 ${escHTML(r.run_id)}（目录 ${escHTML(r.run_dir)}）。读取**只**递增「读取次数」，不调用求解器。`;
 }
 
 async function onLoadHistory() {
@@ -1153,8 +1266,8 @@ async function onLoadHistory() {
     switchTab("result");
   } catch (err) {
     msg.className = "notice warn";
-    msg.innerHTML = `<strong>读取失败：</strong>${err.message || String(err)}` +
-      ((err.errors || []).map((e) => `<br>· ${e.code} ${e.message}`).join(""));
+    msg.innerHTML = `<strong>读取失败：</strong>${escHTML(err.message || String(err))}` +
+      ((err.errors || []).map((e) => `<br>· ${escHTML(e.code)} ${escHTML(e.message)}`).join(""));
   }
 }
 
@@ -1225,6 +1338,14 @@ function bindGlobal() {
 
   $("#material-select").addEventListener("change", (e) => {
     state.materialId = e.target.value;
+    /* 材料选择必须同时更新卡路径；否则 buildRunConfig 只改 material_id，
+     * 后端仍会按模板旧卡求解，界面与水印就会指向不同材料。 */
+    const selected = materialOf(state.materialId);
+    if (selected && state.baseParams) {
+      const cardPath = selected.card_file || selected.card_path;
+      if (cardPath) state.baseParams.material_card_file = cardPath;
+      state.baseParams.material_id = state.materialId;
+    }
     renderSidebar();
     renderParamPanel();
   });
@@ -1236,6 +1357,11 @@ function bindGlobal() {
   $("#template-select").addEventListener("change", (e) => { state.templateId = e.target.value; });
   $("#load-template").addEventListener("click", async () => {
     await loadTemplate($("#template-select").value);
+    /* 材料/模式下拉由 renderSidebar() 渲染，**不在** renderParamPanel() 里。
+     * 模板自带 material_id / run_mode，loadTemplate 已把它们写回 state，
+     * 所以这里必须同时刷新侧边栏，否则下拉框仍显示旧材料
+     * （实测：载入 alsic 模板后仍显示 zirconia，模式也停在 reference_case）。 */
+    renderSidebar();
     renderParamPanel();
   });
 

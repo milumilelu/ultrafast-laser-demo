@@ -211,5 +211,91 @@ if (!alive) {
   }
 }
 
+/* ---------------- C. 契约适配层：曲线名称/单位（F04 / U03） ----------------
+ *
+ * 回归背景：后端 `curve_payload()` 输出的 `xQuantity` 是**对象**
+ * `{name, unit, label, kind}`，而前端曾写成
+ *     x_name: c.xQuantity || "x",
+ *     x_unit: (c.fixedConditions && c.fixedConditions.x_unit) || "",
+ * → x_name 被字符串化成 `[object Object]`，x_unit 恒为空串
+ *   （`fixedConditions` 里根本没有 `x_unit` 键）。
+ *
+ * 为什么此前两层测试都没抓到：DOM 契约测试只查「元素是否存在」，
+ * 浏览器探针只查「canvas 出没出像素 / 计数变不变」——**都不读文案**。
+ * 所以这一节直接**调用真实的 toCurve()** 并断言字段，而不是匹配源码文本。
+ * ------------------------------------------------------------------------- */
+
+console.log("\n[C] 契约适配层：曲线名称/单位（F04）");
+
+if (!alive) {
+  console.log("  后端不可达 → 跳过 C 段（**不**记为通过）");
+  skipped += 4;
+} else {
+  let adapters = null;
+  try {
+    const { createRequire } = await import("node:module");
+    adapters = createRequire(import.meta.url)(path.join(ROOT, "js", "api.js"));
+  } catch (err) {
+    adapters = null;
+  }
+
+  if (!adapters || typeof adapters.toCurve !== "function") {
+    ok(false, "api.js 可作为模块加载并导出 toCurve",
+       "无法 require；请确认 api.js 末尾有 module.exports");
+  } else {
+    const resp = await get("/api/curves");
+    const list = (resp.body.curves || []).filter((c) => !c.broken);
+    ok(list.length > 0, `曲线清单含可用卡片（${list.length} 张）`);
+
+    const problems = [];
+    let withUnit = 0;
+    for (const card of list) {
+      const t = adapters.toCurve(card);
+      const xUnit = (card.xQuantity && card.xQuantity.unit) || "";
+      const yUnit = (card.yQuantity && card.yQuantity.unit) || "";
+      if (typeof t.x_name !== "string") {
+        problems.push(`${card.curveId}: x_name 类型 ${typeof t.x_name}`);
+      } else if (t.x_name.includes("[object")) {
+        problems.push(`${card.curveId}: x_name 含 [object`);
+      }
+      if (typeof t.y_name !== "string") {
+        problems.push(`${card.curveId}: y_name 类型 ${typeof t.y_name}`);
+      } else if (t.y_name.includes("[object")) {
+        problems.push(`${card.curveId}: y_name 含 [object`);
+      }
+      /* 单位真实来源是 xQuantity.unit / yQuantity.unit —— 不是 fixedConditions */
+      if (t.x_unit !== xUnit) {
+        problems.push(`${card.curveId}: x_unit=${JSON.stringify(t.x_unit)}，应为 ${JSON.stringify(xUnit)}`);
+      }
+      if (t.y_unit !== yUnit) {
+        problems.push(`${card.curveId}: y_unit=${JSON.stringify(t.y_unit)}，应为 ${JSON.stringify(yUnit)}`);
+      }
+      if (t.x_unit || t.y_unit) withUnit += 1;
+    }
+
+    ok(problems.length === 0,
+       "全部曲线的 x/y 名称为字符串且不含对象字符串化",
+       problems.slice(0, 4).join("；"));
+
+    ok(list.every((c) => {
+      const t = adapters.toCurve(c);
+      return t.x_unit === ((c.xQuantity && c.xQuantity.unit) || "")
+          && t.y_unit === ((c.yQuantity && c.yQuantity.unit) || "");
+    }), "x_unit/y_unit 取自 quantity.unit（不是 fixedConditions）");
+
+    ok(withUnit === list.length && list.length > 0,
+       `每条曲线都带非空单位（${withUnit}/${list.length}）`,
+       "卡里 unit 非空却传不出来 → 说明映射仍在取错字段");
+
+    /* 名称优先 label（中文可读），其次 name；两者都不得是对象 */
+    const probe = list[0];
+    const tp = adapters.toCurve(probe);
+    const want = (probe.xQuantity && (probe.xQuantity.label || probe.xQuantity.name)) || "x";
+    ok(tp.x_name === want,
+       `x_name 取 label||name（${probe.curveId}）`,
+       `实际 ${JSON.stringify(tp.x_name)}，期望 ${JSON.stringify(want)}`);
+  }
+}
+
 console.log(`\n结果：${pass} 通过，${fail} 失败${skipped ? `，${skipped} 跳过` : ""}`);
 process.exit(fail ? 1 : 0);
