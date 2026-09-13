@@ -11,7 +11,7 @@
       "evidence_status": "literature_reported",
       "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
       "labels": {
-        "card_sha256": "e804f570ea62dbbdd62104d71e2972f53344290f5cf6244b2c63612d3729387a",
+        "card_sha256": "42dba4c2ffa76510af9a2b0d3626eaec8b49f18c207980343d4ccd8e6608b946",
         "card_version": "1.0.0",
         "evidence_status": "literature_reported",
         "material_id": "sic_4h_cface_1035nm_multishot",

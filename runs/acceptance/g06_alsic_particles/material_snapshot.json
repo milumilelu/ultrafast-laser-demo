@@ -125,11 +125,11 @@
       "scope": "unknown"
     }
   },
-  "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
+  "card_sha256": "0f56b7cdfd390e581855ae8c1e1dde94566fa7d4c5c4a43f42d96d0b6f0fe803",
   "schema_version": "1.0",
   "watermark": {
     "acceleration": "off",
-    "card_sha256": "ef1861b1181d3dabd4c43e78c82d1f27a020a799fd659f144f83892835b4065e",
+    "card_sha256": "0f56b7cdfd390e581855ae8c1e1dde94566fa7d4c5c4a43f42d96d0b6f0fe803",
     "card_version": "1.0.0",
     "depth_label": "L_ref",
     "evidence_status": "literature_reported",

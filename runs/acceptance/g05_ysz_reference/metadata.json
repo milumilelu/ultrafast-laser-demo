@@ -2,13 +2,13 @@
   "case_id": "g05_ysz_effective_n_conversion",
   "code": {
     "build_batch": "L",
-    "commit": "e68d668ae7e3c1b29dc05da6167c528e97a4d480",
+    "commit": "eea29d3d674b399a315471ca8444558270201080",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 21,
-    "source_manifest_sha256": "f5894a803c837e2762fc5d15c2cb5601a4653c56a48f9a4143ec6443c8aad4ac",
+    "source_manifest_sha256": "af87c4b8689fa2547429e64a6a33febf150014c565a13c299973bba0b9891f24",
     "ufdemo_version": "0.9.1",
-    "working_tree_dirty": true
+    "working_tree_dirty": false
   },
   "config_sha256": "871b14b82aa267f1f39dbba03f3af0d13e347825274861a3adbdb802b52fd370",
   "environment": {
@@ -20,7 +20,7 @@
   },
   "events_processed": 0,
   "labels": {
-    "card_sha256": "d2d273ea2e9970adffd40d73dc296006fd3f7cedbafd5fbd2752166e542b5fc4",
+    "card_sha256": "56b00c09771a194ab4e868ef277f3c6d2d0a6134e1e3ab2d6a73a7022d95efff",
     "card_version": "1.0.0",
     "evidence_status": "literature_reported",
     "material_id": "zirconia_ysz_machining_effective_n3",
@@ -56,7 +56,7 @@
     "evidence_status": "literature_reported",
     "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
     "labels": {
-      "card_sha256": "d2d273ea2e9970adffd40d73dc296006fd3f7cedbafd5fbd2752166e542b5fc4",
+      "card_sha256": "56b00c09771a194ab4e868ef277f3c6d2d0a6134e1e3ab2d6a73a7022d95efff",
       "card_version": "1.0.0",
       "evidence_status": "literature_reported",
       "material_id": "zirconia_ysz_machining_effective_n3",
@@ -114,7 +114,7 @@
   "run_mode": "reference_case",
   "schema_version": "1.0",
   "status": "completed",
-  "written_at_utc": "2026-09-13T07:03:19.484499+00:00",
+  "written_at_utc": "2026-09-13T08:26:19.147474+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

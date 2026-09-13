@@ -1,7 +1,7 @@
 # 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）
 
-- 生成时间（UTC）：2026-09-13T07:04:40.963706+00:00
-- 代码版本：commit=e68d668ae7e3c1b29dc05da6167c528e97a4d480｜工作区有改动=True｜源码清单哈希=f5894a803c837e27…
+- 生成时间（UTC）：2026-09-13T08:27:39.814766+00:00
+- 代码版本：commit=eea29d3d674b399a315471ca8444558270201080｜工作区有改动=False｜源码清单哈希=af87c4b8689fa254…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
 - 汇总：通过 168｜失败 0｜未运行 2
@@ -78,10 +78,10 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-13T07:03:26.497947+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-13T08:26:28.460466+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260913T070326_h36x |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260913T082628_bd9f |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
@@ -96,7 +96,7 @@
 | G09-UI | app.py（Streamlit） | 参考模式：加速面板如实说明未启用批量（不假装加速过） | grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明 | grouped=False｜effective_mode=reference｜boundary_note 存在=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 几何修正：入射角/动态角度可切换，且支持范围与近似标注可见 | solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围 | solve_count=0→1｜斜入射=True｜动态角度=True｜光轴夹角=59.99999999999999｜法向厚度转换=0｜支持范围 n_z≥0.5、入射角≤60.0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 正入射：不显示几何修正面板（未启用即不显示） | geometry_diagnostics 为空字典 | 空字典=True |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 239 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 254 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
@@ -142,9 +142,9 @@
 | U03-browser | webui（真实浏览器） | 查表后求解次数不变（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
 | U03-browser | webui（真实浏览器） | 查表未触发 POST /api/solve |  | 符合 |  |  | 通过 | 数值实现验证 |
 | U03-browser | webui（真实浏览器） | 所有被点击的控件都真实响应（无「点不到」） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| G09-table | curves/analytic_fixture_depth_vs_fluence.curve.json | 曲线去向（语义路由） | event_kernel（event_kernel 仅限 event_depth_increment） | event_kernel｜可进事件核=True｜派生=removal_depth_per_pulse,local_depth |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/sic_threshold_vs_effective_n.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=threshold_fluence |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/synthetic_volume_per_energy.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=removal_volume,removal_volume_per_energy |  |  | 通过 | 数值实现验证 |
-| G09-table | curves/ysz_analytic_depth_vs_fluence.curve.json | 曲线去向（语义路由） | event_kernel（event_kernel 仅限 event_depth_increment） | event_kernel｜可进事件核=True｜派生=removal_depth_per_pulse,local_depth |  |  | 通过 | 数值实现验证 |
 | G09-table | tests/fixtures/curves_invalid/* | 无效曲线卡是否按预期码拒收 | 14 组分别触发预期错误码（CONFIG_INVALID / NUMERIC_NONFINITE / …） | 通过 14/14 |  | 全通过（14 项） | 通过 | 数值实现验证 |
 | G09-table | lookup_below_range | 行为级拒收错误码 | `TABLE_OUT_OF_RANGE` | `TABLE_OUT_OF_RANGE` |  | 码一致 | 通过 | 数值实现验证 |
 | G09-table | lookup_above_range | 行为级拒收错误码 | `TABLE_OUT_OF_RANGE` | `TABLE_OUT_OF_RANGE` |  | 码一致 | 通过 | 数值实现验证 |
@@ -153,8 +153,8 @@
 | G09-table | event_kernel_from_threshold | 行为级拒收错误码 | `RESPONSE_SEMANTICS_INVALID` | `RESPONSE_SEMANTICS_INVALID` |  | 码一致 | 通过 | 数值实现验证 |
 | G09-table | condition_mismatch_on_event_curve | 行为级拒收错误码 | `CONDITION_MISMATCH` | `CONDITION_MISMATCH` |  | 码一致 | 通过 | 数值实现验证 |
 | G09-table | unknown_interpolation_method | 行为级拒收错误码 | `CONFIG_INVALID` | `CONFIG_INVALID` |  | 码一致 | 通过 | 数值实现验证 |
-| G09-table | ysz_analytic_depth_vs_fluence | 越界查询返回值 | None（不是 0，也不外推） | 越界=[None]｜状态=below_range |  | 值必须为 None | 通过 | 数值实现验证 |
-| G09-table | ysz_analytic_depth_vs_fluence | 端点包含性 | 含端点（闭区间） | [1.0, 40.0] 查值状态=ok |  | status==ok | 通过 | 数值实现验证 |
+| G09-table | analytic_fixture_depth_vs_fluence | 越界查询返回值 | None（不是 0，也不外推） | 越界=[None]｜状态=below_range |  | 值必须为 None | 通过 | 数值实现验证 |
+| G09-table | analytic_fixture_depth_vs_fluence | 端点包含性 | 含端点（闭区间） | [1.0, 40.0] 查值状态=ok |  | status==ok | 通过 | 数值实现验证 |
 | G09-table | curves/* | 查表是否产生形貌表面文件 | 不产生（查表不是求解） | 无 final_surface.npz（查表只读曲线） |  |  | 通过 | 数值实现验证 |
 | G09-threshold | tools/material_report.py | 配置层拒绝累计/平均能流基准 | CONFIG_INVALID | 4 个累计/平均基准 + 整份 RunConfig 均 CONFIG_INVALID |  |  | 通过 | 数值实现验证 |
 | G09-threshold | tools/material_report.py | 唯一注册基准 = 本事件入射能流 | ('per_event_incident',) | 唯一注册基准=('per_event_incident',) |  |  | 通过 | 数值实现验证 |
@@ -210,7 +210,7 @@ python -m ufdemo reference examples/ysz_reference_case.json --out runs/g05_ysz_r
 python -m ufdemo reference examples/sic_reference_case.json --out runs/g05_sic_reference
 python -m ufdemo run examples/alsic_particle_composite.json --out runs/g06_alsic_particles --force-new-suffix
 python -m ufdemo run examples/cfrp_laminated_ply.json --out runs/g06_cfrp_plies --force-new-suffix
-python -m ufdemo table data/curves/ysz_analytic_depth_vs_fluence.curve.json --x 5
+python -m ufdemo table data/curves/analytic_fixture_depth_vs_fluence.curve.json --x 5
 python tools/make_curves.py
 python tools/table_report.py
 python tools/structure_report.py
