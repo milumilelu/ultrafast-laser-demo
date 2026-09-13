@@ -55,6 +55,11 @@ def test_measured_pack_counts_match_claim(qa_rows):
     ctrl = by_check.get("非激光对照行数 = manifest.nonlaser_control_count")
     assert main and main["measured"] == "65", f"激光观测数应 65，实测 {main and main['measured']}"
     assert ctrl and ctrl["measured"] == "4", f"对照数应 4，实测 {ctrl and ctrl['measured']}"
+    # 观测包必须是 69（U09 的效率曲线包**不计入** —— 两者「一行」含义不同）
+    obs = by_check.get("观测包条目数 = 65+4（效率曲线包不计入）")
+    assert obs and obs["measured"] == "69", (
+        f"观测包应 69，实测 {obs and obs['measured']}（分类：{obs and obs['note']}）"
+    )
 
 
 def test_measured_pack_dd6_row14_anomaly_is_visible(qa_rows):

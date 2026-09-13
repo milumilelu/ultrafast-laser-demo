@@ -254,8 +254,19 @@ def check() -> list[Row]:
                 "运行 tools/measured_data_report.py --write-registry 生成")
         else:
             n_ds = len(reg["datasets"])
-            add("权限注册表", "注册表条目数 = 实测记录数（65+4）",
-                "69", str(n_ds), n_ds == 69)
+            # 分类计数：观测包必须正好 65+4=69；效率曲线包单独计。
+            # **不得混在一起** —— 两者「一行」的含义不同（一条已发表记录 vs 一个数据点）。
+            cls_counts: dict[str, int] = {}
+            for d in reg["datasets"]:
+                c = d.get("dataset_class", "unknown")
+                cls_counts[c] = cls_counts.get(c, 0) + 1
+            n_obs = cls_counts.get("observation_pack", 0)
+            add("权限注册表", "观测包条目数 = 65+4（效率曲线包不计入）",
+                "69", str(n_obs), n_obs == 69,
+                "分类计数：" + "、".join(f"{k}={v}" for k, v in sorted(cls_counts.items())))
+            add("权限注册表", "无未分类（unknown）条目",
+                "0", str(cls_counts.get("unknown", 0)), cls_counts.get("unknown", 0) == 0,
+                "新文件必须在 datasets._FILE_CLASS 显式登记")
             n_obs = sum(1 for d in reg["datasets"] if d.get("observation_access"))
             add("权限注册表", "全部记录均有 observation_access（可浏览/回放）",
                 "全部", f"{n_obs}/{n_ds}", n_obs == n_ds)
@@ -340,6 +351,8 @@ def main() -> int:
               f"｜increment_access={s['increment_access_true']}"
               f"｜有风险提示 {s['records_with_risk_notes']}")
         print(f"  语义分布：{s['by_output_semantics']}")
+        if s.get("by_dataset_class"):
+            print(f"  分类计数：{s['by_dataset_class']}")
         if "--check" not in sys.argv:
             return 0
 

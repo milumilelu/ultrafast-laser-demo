@@ -196,7 +196,9 @@ def _measured_rows() -> list[dict]:
 
     out: list[dict] = []
     for p in sorted(MEASURED.glob("*.csv")):
-        out += list(csv.DictReader(p.read_text(encoding="utf-8-sig").splitlines()))
+        for r in csv.DictReader(p.read_text(encoding="utf-8-sig").splitlines()):
+            r["_file"] = p.name   # 带上来源文件名，便于按分类过滤
+            out.append(r)
     return out
 
 
@@ -209,12 +211,19 @@ def test_all_measured_records_are_observable_and_none_incremental():
     ``TablePulseLaw`` / 标定核，而不是把端点数据改名混入。
     """
     rows = _measured_rows()
-    assert len(rows) == 69, f"应为 65+4=69 条，实测 {len(rows)}"
-    decisions = DS.evaluate_all(rows)  # 任一硬门槛未过会抛
+    # 观测包 = 65 激光 + 4 对照 = 69。**不含** U09 的效率曲线包
+    # （那是「一个功率级别下的数据点」，与「一条已发表记录」不是同一回事）。
+    obs = [r for r in rows
+           if DS.dataset_class_of(r.get("_file", "")) == DS.DATASET_CLASS_OBSERVATION]
+    assert len(obs) == 69, f"观测包应为 65+4=69 条，实测 {len(obs)}"
+    decisions = DS.evaluate_all(obs)  # 任一硬门槛未过会抛
     assert all(d.observation_access for d in decisions)
     assert sum(1 for d in decisions if d.increment_access) == 0
     s = DS.summarize(decisions)
     assert s["records"] == 69 and s["increment_access_true"] == 0
+    # 全表（含效率曲线包）：仍然零增量权限
+    all_dec = DS.evaluate_all(rows)
+    assert sum(1 for d in all_dec if d.increment_access) == 0
 
 
 @pytest.mark.skipif(not (MEASURED / "registry.json").exists(), reason="注册表未生成")

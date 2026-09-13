@@ -9,9 +9,45 @@
     "published_on": "2025-11-26",
     "version": 1,
     "license": "CC BY 4.0",
-    "status": "located_not_downloaded",
-    "rows": null,
-    "next_action": "Download original XLSX from author repository; inspect sheet units, laser condition, experimental vs fit columns; ingest actual efficiency curves. Do not claim unknown row count."
+    "status": "downloaded_and_parsed",
+    "rows": 230,
+    "next_action": "已接入；若后续要用于体积评估器，按 volume_per_energy 语义路由。",
+    "sha256": "6d9747ae3cfe3a45333ef5a9bb65f136e9e701343e64ef4cde540ce04a8748f3",
+    "actual_size_bytes": 157952,
+    "sheets": 10,
+    "parsed_rows": 230,
+    "downloaded_on": "2026-09-13",
+    "parsed_csv": "data/measured/cfrp_efficiency_curves.csv",
+    "parser": "tools/cfrp_xlsx_to_csv.py",
+    "units": {
+      "measured_ablated_v_1e6um3": "10^6 µm³（去除体积）",
+      "measured_depth_um": "µm",
+      "efficiency_1e6um3_per_J": "10^6 µm³/J",
+      "conversion": "1 (10^6 µm³/J) = 1e-12 m³/J"
+    },
+    "column_classes": {
+      "measured_columns": [
+        "measured_ablated_v_1e6um3",
+        "measured_depth_um"
+      ],
+      "efficiency_column": [
+        "efficiency_1e6um3_per_J",
+        "efficiency_m3_per_J"
+      ],
+      "derived_conditions": [
+        "power_W",
+        "energy_uJ",
+        "fluence_J_cm2"
+      ]
+    },
+    "conflicts": {
+      "abstract_vs_text": "摘要称混合添加剂效率峰值 6.06（10^6 µm³/J）与正文表格不一致；本表保留正文值并加 FLAG，**未平均**。"
+    },
+    "caveats": [
+      "效率是**体积效率**，不是局部深度 → 只能进体积评估器，不得反推局部深度。",
+      "切割使用**另一套 24 µm 光学系统**，不得与效率数据集合并。",
+      "配方不同允许使用（记录配方即可），不因牌号不匹配拒收。"
+    ]
   },
   {
     "id": "A02",

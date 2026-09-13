@@ -23,4 +23,4 @@ manifest,存在 manifest.json,存在,存在,通过,schema=ufdemo.experimental_pa
 权限注册表,注册表条目数 = 实测记录数（65+4）,69,69,通过,
 权限注册表,全部记录均有 observation_access（可浏览/回放）,全部,69/69,通过,
 权限注册表,无任何记录取得 increment_access（实测端点语义不是逐事件增量）,0,0,通过,
-权限注册表,registry.json 与当前数据一致（无漂移）,一致,一致,通过,不一致说明数据变了但注册表没重生成；重跑 --write-registry
+权限注册表,registry.json 与当前数据一致（无漂移）,一致,**不一致**,失败,不一致说明数据变了但注册表没重生成；重跑 --write-registry

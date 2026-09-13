@@ -122,6 +122,7 @@ class AccessDecision:
     risk_notes: tuple[str, ...] = ()
     missing_fields: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
+    dataset_class: str | None = None   # 分类（观测包 / 效率曲线包 / unknown）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -188,7 +189,7 @@ def check_data_kind(data_kind: Any) -> str | None:
     return None
 
 
-def evaluate(record: Mapping[str, Any]) -> AccessDecision:
+def evaluate(record: Mapping[str, Any], *, dataset_class: str | None = None) -> AccessDecision:
     """判定单条记录的权限。**纯函数**，不触碰文件系统、不导入 Streamlit。
 
     硬门槛任一未过 → 抛 :class:`DatasetAccessError`（**既有错误码**）。
@@ -310,6 +311,7 @@ def evaluate(record: Mapping[str, Any]) -> AccessDecision:
             "已过硬门槛（语义已登记、来源为实测、成对单位自洽）",
             "语义为端点观测语义，非逐事件增量 → increment_access=False",
         ),
+        dataset_class=dataset_class,
     )
 
 
@@ -340,13 +342,22 @@ def summarize(decisions: Sequence[AccessDecision]) -> dict[str, Any]:
         key = d.output_semantics or "(缺失)"
         by_sem[key] = by_sem.get(key, 0) + 1
     n_risky = sum(1 for d in decisions if d.risk_notes)
-    return {
+    # 分类计数（可选：仅当调用方给了 dataset_class 才统计）
+    by_class: dict[str, int] = {}
+    for d in decisions:
+        cls = getattr(d, "dataset_class", None)
+        if cls:
+            by_class[cls] = by_class.get(cls, 0) + 1
+    out = {
         "records": n,
         "observation_access_true": sum(1 for d in decisions if d.observation_access),
         "increment_access_true": n_inc,
         "records_with_risk_notes": n_risky,
         "by_output_semantics": dict(sorted(by_sem.items())),
     }
+    if by_class:
+        out["by_dataset_class"] = dict(sorted(by_class.items()))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +365,33 @@ def summarize(decisions: Sequence[AccessDecision]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 REGISTRY_SCHEMA = "ufdemo.dataset_registry/1"
+
+#: 数据集分类。**两类不可混计**：
+#: * ``observation_pack`` —— U04 导入的审计观测包（65 条激光观测 + 4 条对照），
+#:   每行是**一条已发表条件/结果记录**；
+#: * ``efficiency_curve_pack`` —— U09 从作者原始 XLSX 解析的效率曲线数据点
+#:   （每行是一个功率级别下的测量点），**不是**「一条已发表记录」，
+#:   因此**不并入 65+4 的计数**。
+DATASET_CLASS_OBSERVATION = "observation_pack"
+DATASET_CLASS_EFFICIENCY = "efficiency_curve_pack"
+
+#: 文件名 → 分类。**显式列举，不用通配符猜** ——
+#: 新文件若未登记，会被归到 ``unknown`` 并在汇总里单独列出（不静默并入）。
+_FILE_CLASS: dict[str, str] = {
+    "diamond_rsm_measured.csv": DATASET_CLASS_OBSERVATION,
+    "ceramics_dot_line_measured.csv": DATASET_CLASS_OBSERVATION,
+    "ceramics_laser_roughness_measured.csv": DATASET_CLASS_OBSERVATION,
+    "ceramics_nonlaser_controls.csv": DATASET_CLASS_OBSERVATION,
+    "sic_single_pulse_measured.csv": DATASET_CLASS_OBSERVATION,
+    "cfrp_efficiency_reported_maxima.csv": DATASET_CLASS_OBSERVATION,
+    "dd6_drilling_measured.csv": DATASET_CLASS_OBSERVATION,
+    "cfrp_efficiency_curves.csv": DATASET_CLASS_EFFICIENCY,
+}
+
+
+def dataset_class_of(filename: str) -> str:
+    """按文件名判分类；未登记 → ``"unknown"``（会在汇总里显式出现）。"""
+    return _FILE_CLASS.get(filename, "unknown")
 
 
 def registry_path(measured_dir: str | Path) -> Path:
@@ -393,11 +431,13 @@ def build_registry(measured_dir: str | Path) -> dict[str, Any]:
     datasets: list[dict[str, Any]] = []
     decisions: list[AccessDecision] = []
     for filename, rec in rows:
-        d = evaluate(rec)  # 硬门槛未过会抛 —— 生成阶段就暴露，而不是等到用
+        # 硬门槛未过会抛 —— 生成阶段就暴露，而不是等到用
+        d = evaluate(rec, dataset_class=dataset_class_of(filename))
         decisions.append(d)  # **保留原始判定**，别在汇总时重建（会丢 risk_notes）
         datasets.append({
             "case_id": d.case_id,
             "file": filename,
+            "dataset_class": dataset_class_of(filename),
             "material_family": rec.get("material_family"),
             "grade": rec.get("grade"),
             "material_name": rec.get("material_name"),
