@@ -554,35 +554,68 @@ class LaserConfig:
 
         zr = raw.get("rayleigh_range_m", None)
         m2 = raw.get("m2", None)
-        zr_internal = None
+        zr_declared = None
         if zr is not None:
-            zr_internal = unit.length_to_internal(_require_finite_positive(zr, "laser.rayleigh_range_m"))
+            zr_declared = unit.length_to_internal(
+                _require_finite_positive(zr, "laser.rayleigh_range_m")
+            )
         m2_v = None
         if m2 is not None:
             m2_v = _require_finite_positive(m2, "laser.m2")
-        if zr_internal is not None and m2_v is not None:
-            # 细则 4.2：zR 与 M2 同时输入时做一致性检查（不用其中一个覆盖另一个）
+            # M² 是**光束质量因子**，物理上 ≥ 1（=1 即理想高斯）。
+            # 小于 1 无物理意义；若要做人工数学测试请走显式测试语义，不要借这个字段。
+            if m2_v < 1.0:
+                raise UFDemoError(
+                    CONFIG_INVALID,
+                    "laser.m2 必须 ≥ 1（光束质量因子；理想高斯为 1）",
+                    field_path="laser.m2",
+                    actual=m2_v,
+                    requirement="M² ≥ 1",
+                    suggestion="核对 M² 定义；人工数学测试请另设语义，不要混用该字段。",
+                )
+
+        def _zr_implied_by_m2() -> float:
+            """由 M² 反算瑞利长度：``z_R = π w0² / (M² λ)``。
+
+            ⚠️ **M² 在分母**。此前实现写成 ``π w0² · M² / λ``（方向反了），
+            实测 `M²=2, w0=10 µm, λ=1030 nm` 会给出 `610.0180 µm` 而非 `152.5045 µm`（差 4 倍）。
+            因为仓库所有示例的 `m2` 都是 `null`、且没有任何测试用 `laser.m2`，
+            这条检查长期零覆盖，反向公式才得以存活。
+            """
             if wavelength is None:
                 raise UFDemoError(
                     CONFIG_INVALID,
-                    "同时给出 rayleigh_range_m 与 m2，但缺少 wavelength_m，无法核对一致性",
+                    "给出 m2 但缺少 wavelength_m，无法导出瑞利长度",
                     field_path="laser.wavelength_m",
                     actual=None,
-                    requirement="同时给出 zR、M2、波长，或只给出其中之一",
-                    suggestion="补 wavelength_m，或删去其中一个输入。",
+                    requirement="给出 m2 时必须同时给出波长（z_R = π w0²/(M²λ)）",
+                    suggestion="补 wavelength_m，或改用 rayleigh_range_m 直接给出 zR。",
                 )
-            zr_expected = math.pi * (w0 ** 2) * m2_v / wavelength
-            rel = abs(zr_internal - zr_expected) / max(abs(zr_internal), abs(zr_expected))
+            return math.pi * (w0 ** 2) / (m2_v * wavelength)
+
+        zr_internal = None
+        if zr_declared is not None and m2_v is not None:
+            # 细则 4.2：zR 与 M2 同时输入时做一致性检查（不用其中一个覆盖另一个）
+            zr_expected = _zr_implied_by_m2()
+            rel = abs(zr_declared - zr_expected) / max(abs(zr_declared), abs(zr_expected))
             if rel > 1e-6:
                 raise UFDemoError(
                     CONFIG_INVALID,
                     "rayleigh_range_m 与 m2 不一致",
                     field_path="laser.rayleigh_range_m",
-                    actual={"rayleigh_range_m": zr_internal, "m2": m2_v,
+                    actual={"rayleigh_range_m": zr_declared, "m2": m2_v,
                             "implied_rayleigh_range_m": zr_expected, "relative_difference": rel},
-                    requirement="zR = pi*w0^2*M2/lambda，相对差 ≤ 1e-6",
+                    requirement="zR = pi*w0^2/(M2*lambda)，相对差 ≤ 1e-6",
                     suggestion="核对高斯束约定后只保留一致的数值。",
                 )
+            zr_internal = zr_declared
+        elif zr_declared is not None:
+            zr_internal = zr_declared
+        elif m2_v is not None:
+            # **只给 M² 时必须导出 zR，不得留空**：
+            # `beam.w_of_s(w0, s, zR=None)` 把空值解释为**准直不发散**并直接返回 w0，
+            # 于是「填了 M²」看起来生效、实际按理想准直算（静默降级）。
+            zr_internal = _zr_implied_by_m2()
 
         if raw.get("repetition_rate_Hz", None) is None and energy is not None:
             freq_v = None

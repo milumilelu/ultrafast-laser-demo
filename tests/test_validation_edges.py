@@ -292,3 +292,108 @@ def test_synthetic_mode_requires_explicit_selection():
     rep = validate_run(cfg, load_material_card(raw["material_card_file"]))
     assert not rep.ok
     assert any(e["code"] == CONFIG_INVALID for e in rep.errors)
+
+
+# ---------------------------------------------------------------------------
+# F10：M² 与瑞利长度的一致性（**期望值独立推导**，不复用被测实现里的式子）
+#
+# 回归背景：`config.py` 曾写 `zr_expected = π w0² · M² / λ`，而物理关系是
+# `z_R = π w0² / (M² λ)`（M² 越大，实际束腰处发散越快、z_R 越短）。
+#
+# 为什么长期没被发现：
+#   ① 仓库里**所有示例的 `m2` 都是 `null`**；
+#   ② **没有任何测试设置 `laser.m2`** → 这条一致性检查**零覆盖**；
+#   ③ `M²=1` 时两式恒等，所以只测 M²=1 也发现不了。
+#
+# 因此本节期望值一律由标准关系独立算出，**绝不从被测实现里取**，
+# 否则实现与期望同源、测试恒真。
+# ---------------------------------------------------------------------------
+
+_M2_W0 = 10e-6  # m
+_M2_LAM = 1030e-9  # m
+_M2_VAL = 2.0
+# 独立公式：z_R = π w0² / (M² λ)
+_ZR_FROM_M2 = math.pi * _M2_W0**2 / (_M2_VAL * _M2_LAM)  # ≈ 152.5045 µm
+
+
+def _laser_raw(**over) -> dict:
+    """以示例为底，钉住波长/束腰/zR/M²，再按需覆盖。"""
+    raw = copy.deepcopy(load_example("ten_pulses.json"))
+    raw["laser"].update(
+        {
+            "wavelength_m": _M2_LAM,
+            "spot_radius_m": _M2_W0,
+            "rayleigh_range_m": None,
+            "m2": None,
+        }
+    )
+    raw["laser"].update(over)
+    return raw
+
+
+def test_m2_relation_is_divisor_not_multiplier():
+    """先把「正确值」与「乘以 M² 的错值」都钉死，防止公式被改回去还蒙混过关。"""
+    assert _ZR_FROM_M2 == pytest.approx(152.5045e-6, rel=1e-6)
+    wrong = math.pi * _M2_W0**2 * _M2_VAL / _M2_LAM
+    assert wrong == pytest.approx(610.0180e-6, rel=1e-6)
+    assert wrong / _ZR_FROM_M2 == pytest.approx(4.0, rel=1e-12)
+
+
+def test_rayleigh_m2_consistent_pair_is_accepted():
+    """正确的 (zR, M²) 成对输入必须通过。"""
+    cfg = make_config(_laser_raw(rayleigh_range_m=_ZR_FROM_M2, m2=_M2_VAL))
+    assert cfg.laser.rayleigh_range_m == pytest.approx(_ZR_FROM_M2, rel=1e-12)
+
+
+def test_rayleigh_m2_conflicting_pair_is_rejected_and_reports_implied():
+    """把「旧公式的产物」（正确 zR 的 4 倍）当输入 → 必须**拒绝**。
+
+    这条同时钉住公式方向：若实现仍是「× M²」，它算出的隐含值恰好等于这个错输入，
+    于是会**放行**，测试即失败。
+    """
+    wrong = _ZR_FROM_M2 * 4.0
+    with pytest.raises(UFDemoError) as ei:
+        make_config(_laser_raw(rayleigh_range_m=wrong, m2=_M2_VAL))
+    err = ei.value
+    assert err.code == CONFIG_INVALID
+    assert err.actual["m2"] == _M2_VAL
+    assert err.actual["implied_rayleigh_range_m"] == pytest.approx(_ZR_FROM_M2, rel=1e-9)
+
+
+def test_only_rayleigh_range_is_kept_as_declared():
+    """只给 zR（不给 M²）→ 原样保留。"""
+    cfg = make_config(_laser_raw(rayleigh_range_m=2e-5))
+    assert cfg.laser.rayleigh_range_m == pytest.approx(2e-5, rel=1e-12)
+
+
+def test_only_m2_derives_rayleigh_range_instead_of_collimated():
+    """只给 M² 时必须**导出** zR。
+
+    旧行为是 zR 留空 → `beam.w_of_s(w0, s, zR=None)` 把空值解释为**准直不发散**
+    并直接返回 w0，于是「填了 M²」看起来生效、实际求解器按理想准直算。
+    这里同时断言两种结果不同，确保不再静默退化。
+    """
+    from ufdemo.beam import w_of_s
+
+    cfg = make_config(_laser_raw(m2=_M2_VAL))
+    assert cfg.laser.rayleigh_range_m == pytest.approx(_ZR_FROM_M2, rel=1e-9)
+
+    zr = cfg.laser.rayleigh_range_m
+    w_at_zr = w_of_s(_M2_W0, zr, zr)
+    # 在 zR 处光斑应放大 √2 倍；若仍按准直处理则恒为 w0
+    assert w_at_zr == pytest.approx(_M2_W0 * math.sqrt(2.0), rel=1e-12)
+    assert abs(w_at_zr - _M2_W0) > 1e-7
+
+
+def test_m2_below_one_is_rejected():
+    """M² 是光束质量因子，物理上 ≥ 1；小于 1 必须显式拒绝而非放行。"""
+    with pytest.raises(UFDemoError) as ei:
+        make_config(_laser_raw(m2=0.5))
+    assert ei.value.code == CONFIG_INVALID
+
+
+def test_m2_without_wavelength_is_rejected():
+    """只给 M² 但缺波长 → 无法导出 zR，必须明确报错，不得静默按准直处理。"""
+    with pytest.raises(UFDemoError) as ei:
+        make_config(_laser_raw(wavelength_m=None, m2=_M2_VAL))
+    assert ei.value.code == CONFIG_INVALID
