@@ -170,6 +170,12 @@ def _require_str(value: Any, path: str, allowed: Sequence[str] | None = None) ->
     return value
 
 
+def _require_bool(value: Any, path: str) -> bool:
+    if not isinstance(value, bool):
+        raise UFDemoError(CONFIG_INVALID, f"{path} 必须是布尔值", field_path=path, actual=value, requirement="true 或 false")
+    return value
+
+
 def _require_positive_int(value: Any, path: str) -> int:
     """正整数校验（批量/限额类配置用）。布尔值被显式拒绝（bool 是 int 的子类）。"""
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -674,9 +680,13 @@ class PathConfig:
         segs_raw = raw.get("segments", [])
         if not isinstance(segs_raw, Sequence):
             raise UFDemoError(CONFIG_INVALID, "path.segments 必须是数组", field_path="path.segments", actual=segs_raw)
+        t0_v = _require_finite(raw.get("t0_s", 0.0), "path.t0_s")
+        tol_v = _require_finite(raw.get("time_tolerance_s", 1e-12), "path.time_tolerance_s")
+        if tol_v < 0.0:
+            raise UFDemoError(CONFIG_INVALID, "path.time_tolerance_s 必须为非负有限数", field_path="path.time_tolerance_s", actual=tol_v, requirement=">= 0")
         if len(segs_raw) == 0:
             # 明确允许空路径，但由 validate 阶段给出 ZERO_EVENTS 语义处理
-            return PathConfig(segments=[], t0_s=float(raw.get("t0_s", 0.0)))
+            return PathConfig(segments=[], t0_s=t0_v, time_tolerance_s=tol_v)
 
         if laser.repetition_rate_Hz is None:
             raise UFDemoError(
@@ -707,6 +717,10 @@ class PathConfig:
             b = s.get("end_xyz_m", None)
             if a is None or b is None:
                 raise UFDemoError(CONFIG_INVALID, f"{p} 需要 start_xyz_m 与 end_xyz_m", field_path=p, actual=s)
+            if not isinstance(a, Sequence) or isinstance(a, (str, bytes)) or len(a) != 3:
+                raise UFDemoError(CONFIG_INVALID, f"{p}.start_xyz_m 必须是长度为 3 的数组", field_path=f"{p}.start_xyz_m", actual=a)
+            if not isinstance(b, Sequence) or isinstance(b, (str, bytes)) or len(b) != 3:
+                raise UFDemoError(CONFIG_INVALID, f"{p}.end_xyz_m 必须是长度为 3 的数组", field_path=f"{p}.end_xyz_m", actual=b)
             start_xyz = tuple(unit.length_to_internal(_require_finite(v, f"{p}.start_xyz_m[{k}]")) for k, v in enumerate(a))
             end_xyz = tuple(unit.length_to_internal(_require_finite(v, f"{p}.end_xyz_m[{k}]")) for k, v in enumerate(b))
             speed = s.get("speed_m_s", None)
@@ -722,14 +736,14 @@ class PathConfig:
                     start_xyz_m=start_xyz,  # type: ignore[arg-type]
                     end_xyz_m=end_xyz,  # type: ignore[arg-type]
                     speed_m_s=speed_v,
-                    laser_on=bool(s.get("laser_on", True)),
+                    laser_on=_require_bool(s.get("laser_on", True), f"{p}.laser_on"),
                     label=str(s.get("label", "")),
                 )
             )
         return PathConfig(
             segments=segs,
-            t0_s=float(raw.get("t0_s", 0.0)),
-            time_tolerance_s=float(raw.get("time_tolerance_s", 1e-12)),
+            t0_s=t0_v,
+            time_tolerance_s=tol_v,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -814,17 +828,19 @@ class SolverConfig:
             )
         drift_limit = _require_finite_positive(raw.get("geometry_drift_limit", 0.25), "solver.geometry_drift_limit")
         max_cell_block = _require_positive_int(raw.get("max_cell_block", 1 << 22), "solver.max_cell_block")
+        budget_factor = _require_finite_positive(raw.get("budget_safety_factor", 1.5), "solver.budget_safety_factor")
+        cancel_interval = _require_positive_int(raw.get("cancel_check_interval", 256), "solver.cancel_check_interval")
         return SolverConfig(
             mode=mode,
             geometry_feedback=gf,
-            history_enabled=bool(raw.get("history_enabled", False)),
+            history_enabled=_require_bool(raw.get("history_enabled", False), "solver.history_enabled"),
             tail_epsilon=eps,
             memory_budget_bytes=budget,
-            budget_safety_factor=float(raw.get("budget_safety_factor", 1.5)),
-            cancel_check_interval=int(raw.get("cancel_check_interval", 256)),
-            multiline_incubation=bool(raw.get("multiline_incubation", False)),
-            structured_interface=bool(raw.get("structured_interface", False)),
-            dynamic_angle=bool(raw.get("dynamic_angle", False)),
+            budget_safety_factor=budget_factor,
+            cancel_check_interval=cancel_interval,
+            multiline_incubation=_require_bool(raw.get("multiline_incubation", False), "solver.multiline_incubation"),
+            structured_interface=_require_bool(raw.get("structured_interface", False), "solver.structured_interface"),
+            dynamic_angle=_require_bool(raw.get("dynamic_angle", False), "solver.dynamic_angle"),
             acceleration=accel,
             batch_size=batch_size,
             min_batch_size=min_batch_size,
@@ -1026,7 +1042,7 @@ class ThresholdProtocolConfig:
                 field_path="threshold_protocol",
                 actual=type(raw).__name__,
             )
-        enabled = bool(raw.get("enabled", False))
+        enabled = _require_bool(raw.get("enabled", False), "threshold_protocol.enabled")
         basis = str(raw.get("fluence_basis", "per_event_incident"))
         if basis in _REJECTED_THRESHOLD_BASES:
             raise UFDemoError(
@@ -1059,7 +1075,7 @@ class ThresholdProtocolConfig:
             observable_name=str(raw.get("observable_name", "fluence_above_threshold")),
             fluence_basis=basis,
             candidate_index=ci,
-            record_mask=bool(raw.get("record_mask", True)),
+            record_mask=_require_bool(raw.get("record_mask", True), "threshold_protocol.record_mask"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1215,30 +1231,28 @@ def estimate_events(path: PathConfig, laser: LaserConfig) -> int:
         return 0
     f = laser.repetition_rate_Hz
     t0 = path.t0_s
-    if t0 < 0:
-        t0 = 0.0
-    start_index = int(math.ceil(t0 * f - 1e-9))
+    if not (math.isfinite(float(t0)) and math.isfinite(float(f)) and f > 0):
+        return 0
+    # iter_events 使用相对整数时钟 t_j=t0+j/f，j 从 0 开始。
     t_end_max = max(s.end_s for s in path.segments)
     if t_end_max <= t0:
         return 0
-    last_index = int(math.floor(t_end_max * f - 1e-12))
-    n_clock = max(0, last_index - start_index + 1)
-    # 只有落在出光段内的事件才真正出光
-    tol = path.time_tolerance_s
-    active = 0
-    on_segments = [s for s in path.segments if s.laser_on and s.end_s > s.start_s]
-    if not on_segments:
+    scale = max(1.0, abs((t_end_max - t0) * f))
+    idx_tol = max(1e-9, 1e-12 * scale)
+    j_end = int(math.floor((t_end_max - t0) * f + idx_tol))
+    if j_end < 0:
         return 0
-    # 逐段计数，避免全量扫描
-    for s in on_segments:
-        a = int(math.ceil(max(s.start_s, start_index / f) * f - tol * f))
-        b = int(math.floor(min(s.end_s, (last_index + 1) / f) * f - tol * f))
-        a = max(a, start_index)
-        b = min(b, last_index)
-        if b >= a:
-            active += b - a + 1
-    # 去掉重叠段重复计数（区间左闭右开，正常不重叠）
-    del n_clock
+    tol = max(0.0, float(path.time_tolerance_s))
+    active = 0
+    for s in path.segments:
+        if not s.laser_on or s.end_s <= s.start_s:
+            continue
+        j_lo = int(math.ceil((s.start_s - t0 - tol) * f - idx_tol))
+        j_hi = int(math.ceil((s.end_s - t0 - tol) * f - idx_tol)) - 1
+        j_lo = max(0, j_lo)
+        j_hi = min(j_end, j_hi)
+        if j_hi >= j_lo:
+            active += j_hi - j_lo + 1
     return active
 
 
@@ -1430,6 +1444,20 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
 
     def fail(err: UFDemoError) -> None:
         errors.append(err.to_dict())
+
+    # 当前响应核只实现无历史单脉冲语义；拒绝 history_enabled，避免
+    # 配置声明与实际计算静默不一致。
+    if config.solver.history_enabled:
+        fail(
+            UFDemoError(
+                NOT_IMPLEMENTED,
+                "solver.history_enabled 当前尚未实现",
+                field_path="solver.history_enabled",
+                actual=True,
+                requirement="history_enabled=false（当前响应核仅支持无历史单脉冲）",
+                suggestion="关闭 history_enabled；启用历史耦合需提供经过验证的孵化响应核。",
+            )
+        )
 
     # 1. 模式准入
     if allowed and config.run_mode not in allowed:

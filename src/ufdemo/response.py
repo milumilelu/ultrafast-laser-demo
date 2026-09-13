@@ -135,7 +135,13 @@ class ThresholdEvaluator:
 
         thr = protocol.get("threshold_internal")
         name = protocol.get("observable_name", "threshold_exceedance")
-        if thr is None or not (isinstance(thr, (int, float)) and thr > 0):
+        if (
+            thr is None
+            or not isinstance(thr, (int, float))
+            or isinstance(thr, bool)
+            or not math.isfinite(float(thr))
+            or float(thr) <= 0
+        ):
             return ThresholdResult(
                 output_semantics=SEMANTIC_THRESHOLD_ONLY,
                 available=False,
@@ -144,6 +150,14 @@ class ThresholdEvaluator:
                 reason="缺少可用阈值（null 不得按 0 处理）",
             )
         arr = np.asarray(fluence, dtype=np.float64)
+        if not np.all(np.isfinite(arr)):
+            return ThresholdResult(
+                output_semantics=SEMANTIC_THRESHOLD_ONLY,
+                available=False,
+                threshold_internal=float(thr),
+                observable_name=name,
+                reason="入射能流含 NaN/Inf，拒绝生成阈值掩膜",
+            )
         return ThresholdResult(
             output_semantics=SEMANTIC_THRESHOLD_ONLY,
             available=True,

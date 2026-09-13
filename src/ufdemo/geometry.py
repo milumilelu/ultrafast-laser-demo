@@ -373,9 +373,10 @@ def first_intersection_visibility(
         return visible
 
     h_win = h[iy0:iy1, ix0:ix1]
-    # 解析快速路径：完全平坦（或起伏小于一个步长）的窗口不可能自遮挡
-    # （射线从表面沿 +k 上升，无更高的上游表面），直接返回全可见。
-    if float(np.max(h_win)) - float(np.min(h_win)) <= step:
+    # 解析快速路径只能在**全局**表面近似平坦时使用。局部窗口平坦并不
+    # 排除窗口外上游高墙；斜入射射线可能先穿过该高墙后才离开窗口。
+    # 因此这里必须检查 global_height（若提供），而不是仅检查 h_win。
+    if float(np.max(h)) - float(np.min(h)) <= step:
         return visible
 
     dz = float(to_source[2]) * step
@@ -425,7 +426,10 @@ def first_intersection_visibility(
             + h11 * txi * tyi
         )
         below = cz[ii] < hs
-        high = cz[ii] > h_max + 1.0
+        # 高度使用 SI/归一化内部单位，固定加 1.0 会在微米或无量纲网格
+        # 下变成不可能达到的巨大阈值；当前步长上移 dz 即足够判定已越过
+        # 全局最高点。
+        high = cz[ii] > h_max + dz
         if below.any():
             blocked[ii[below]] = True
         # 退出活跃集：离开计算域 / 已远高于全场最高点 / 已判遮挡。

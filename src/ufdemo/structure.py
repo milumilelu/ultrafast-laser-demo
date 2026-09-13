@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -199,7 +200,12 @@ def build_phase(raw: Mapping[str, Any], *, phase_id: int, unit: Any, source_hint
             suggestion="δ/L_ref 与 δ/delta_ref 相差 L_ref/delta_ref 倍（本工程默认 100 倍）。",
         )
     for label, value in (("threshold", thr), ("delta", delta)):
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not (value > 0):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            or not (value > 0)
+        ):
             raise UFDemoError(
                 RESPONSE_SEMANTICS_INVALID,
                 f"相 {name!r} 的 {label} 必须是有限正值",
@@ -1079,7 +1085,12 @@ def load_structure(config: Any, parent_material: Any = None) -> Structure | None
 
 
 def _req_pos(value: Any, path: str) -> float:
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or not (value > 0):
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+        or not (value > 0)
+    ):
         raise UFDemoError(
             CONFIG_INVALID,
             "结构尺寸必须是有限正值",

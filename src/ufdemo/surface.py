@@ -317,7 +317,24 @@ class SurfaceState:
             iy0, iy1, ix0, ix1 = section
         win = (slice(iy0, iy1), slice(ix0, ix1))
 
-        d = np.asarray(delta_h, dtype=np.float64)[win]
+        expected = (iy1 - iy0, ix1 - ix0)
+        full_shape = (self.grid.ny, self.grid.nx)
+
+        def _window_array(value: Any, *, name: str, dtype: Any = None) -> Any:
+            arr = np.asarray(value, dtype=dtype)
+            if arr.shape == full_shape:
+                return arr[win]
+            if arr.shape == expected:
+                return arr
+            raise UFDemoError(
+                NUMERIC_NONFINITE,
+                f"{name} 形状与网格/窗口不匹配",
+                field_path=f"surface.apply_block_increment.{name}",
+                actual=list(arr.shape),
+                requirement=f"全网格 {list(full_shape)} 或窗口 {list(expected)}",
+            )
+
+        d = _window_array(delta_h, name="delta_h", dtype=np.float64)
         if not np.all(np.isfinite(d)):
             raise UFDemoError(NUMERIC_NONFINITE, "块增量含非有限值", field_path="surface.apply_block_increment", actual="non-finite")
         if np.any(d < 0.0):
@@ -337,7 +354,7 @@ class SurfaceState:
         counter_before = 0
         counter_after = 0
         if touch_counts is not None:
-            tc = np.asarray(touch_counts)[win]
+            tc = _window_array(touch_counts, name="touch_counts")
             exp = self.exposure_count[win]
             counter_before = int(exp.max()) if exp.size else 0
             if tc.any():
@@ -356,10 +373,10 @@ class SurfaceState:
             self.counters_max = max(self.counters_max, counter_after)
 
         if fluence_sum is not None:
-            self.cumulative_fluence[win] += np.asarray(fluence_sum, dtype=np.float64)[win]
+            self.cumulative_fluence[win] += _window_array(fluence_sum, name="fluence_sum", dtype=np.float64)
 
         if illum_counts is not None:
-            ic = np.asarray(illum_counts)[win]
+            ic = _window_array(illum_counts, name="illum_counts")
             illum = self.illumination_count[win]
             if ic.any():
                 if int(illum.max()) + int(ic.max()) >= UINT32_MAX:
@@ -381,7 +398,7 @@ class SurfaceState:
                     requirement="threshold_protocol=true 时才会分配该观测量",
                 )
             if exceed_counts is not None:
-                ec = np.asarray(exceed_counts)[win]
+                ec = _window_array(exceed_counts, name="exceed_counts")
                 cnt = self.threshold_exceedance_count[win]
                 if ec.any():
                     if int(cnt.max()) + int(ec.max()) >= UINT32_MAX:
@@ -392,7 +409,7 @@ class SurfaceState:
                         )
                     cnt += ec.astype(cnt.dtype)
             if exceed_or is not None:
-                eo = np.asarray(exceed_or, dtype=bool)[win]
+                eo = _window_array(exceed_or, name="exceed_or", dtype=bool)
                 n_exceed_added = int(np.count_nonzero(eo))
                 self.threshold_exceeded_mask[win] |= eo
 

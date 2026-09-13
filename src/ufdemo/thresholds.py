@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import re
+import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -160,7 +161,12 @@ def assert_not_removal(protocol: ThresholdProtocol, *, field_path: str = "thresh
 
 
 def _finite_positive(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 and float(v) == float(v)
+    return (
+        isinstance(v, (int, float))
+        and not isinstance(v, bool)
+        and math.isfinite(float(v))
+        and float(v) > 0
+    )
 
 
 def _declare_multipulse(*texts: Any) -> str | None:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Mapping
+import math
 
 from .errors import CONFIG_INVALID, UFDemoError
 
@@ -48,15 +49,38 @@ class RoiSpec:
                 requirement="radius_m + center_xy_m，或 bounds_xy_m",
             )
 
-        def _len(value: Any) -> float:
+        def _len(value: Any, path: str) -> float:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise UFDemoError(CONFIG_INVALID, f"{path} 必须是有限数值", field_path=path, actual=value)
             v = float(value)
-            return v if unit is None else float(unit.length_to_internal(v))
+            out = v if unit is None else float(unit.length_to_internal(v))
+            if not math.isfinite(out):
+                raise UFDemoError(CONFIG_INVALID, f"{path} 换算后不是有限数值", field_path=path, actual=value)
+            return out
+
+        radius_v = _len(radius, f"output.roi[{idx}].radius_m") if radius is not None else None
+        if radius_v is not None and radius_v <= 0.0:
+            raise UFDemoError(CONFIG_INVALID, f"ROI {name} 的 radius_m 必须为正", field_path=f"output.roi[{idx}].radius_m", actual=radius)
+        if center is not None:
+            if not isinstance(center, (list, tuple)) or len(center) != 2:
+                raise UFDemoError(CONFIG_INVALID, f"ROI {name} 的 center_xy_m 必须是长度为 2 的数组", field_path=f"output.roi[{idx}].center_xy_m", actual=center)
+            center_v = tuple(_len(v, f"output.roi[{idx}].center_xy_m[{k}]") for k, v in enumerate(center))
+        else:
+            center_v = None
+        if bounds is not None:
+            if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+                raise UFDemoError(CONFIG_INVALID, f"ROI {name} 的 bounds_xy_m 必须是长度为 4 的数组", field_path=f"output.roi[{idx}].bounds_xy_m", actual=bounds)
+            bounds_v = tuple(_len(v, f"output.roi[{idx}].bounds_xy_m[{k}]") for k, v in enumerate(bounds))
+            if bounds_v[0] > bounds_v[1] or bounds_v[2] > bounds_v[3]:
+                raise UFDemoError(CONFIG_INVALID, f"ROI {name} 的 bounds 必须满足 x0<=x1 且 y0<=y1", field_path=f"output.roi[{idx}].bounds_xy_m", actual=bounds)
+        else:
+            bounds_v = None
 
         return RoiSpec(
             name=name,
-            radius_m=_len(radius) if radius is not None else None,
-            center_xy_m=tuple(_len(v) for v in center) if center is not None else None,  # type: ignore[arg-type]
-            bounds_xy_m=tuple(_len(v) for v in bounds) if bounds is not None else None,  # type: ignore[arg-type]
+            radius_m=radius_v,
+            center_xy_m=center_v,  # type: ignore[arg-type]
+            bounds_xy_m=bounds_v,  # type: ignore[arg-type]
         )
 
 

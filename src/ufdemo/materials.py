@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -57,7 +58,12 @@ ALL_CAPABILITIES: tuple[str, ...] = (
 
 
 def _finite_positive(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 and float(value) == float(value)
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) > 0
+    )
 
 
 def _missing(value: Any) -> bool:
