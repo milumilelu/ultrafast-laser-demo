@@ -58,6 +58,56 @@ const HEADED = flag("--headed");
 const DO_SOLVE = !flag("--no-solve");     // U03 的多数路径需要真实求解，默认开启
 const OUT = path.resolve(opt("--out", path.join(ROOT, "runs", "browser-probe")));
 
+/* ---------------- 全局看门狗：任何挂死都必须变成「带原因的失败」 ----------------
+ *
+ * 为什么必须有（本工程在探针上**踩过三次挂死**，每次都是十几分钟无输出）：
+ *   ① 复用被杀留下的 `.profile` → Chrome 拒绝启动；
+ *   ② `await browser.close()` 在 Windows 下不 resolve；
+ *   ③ `fs.rmSync(profileDir)` 同步阻塞在文件系统层（maxRetries 无法中断）。
+ * 三次的共同特征是：**result.json 早已写好或根本不必写，进程却永不退出**，
+ * 于是包装器等 900s 超时，把「探针成功」误报成「未运行」，验收凭空少一整组。
+ *
+ * 已分别修掉上述三处，但「不能无限等待」这件事应该有**结构性保证**，
+ * 而不是依赖把每个坑都想到。看门狗到点就写出**带看门狗原因**的 result.json
+ * 并强退 —— 这样最坏情况也是「明确失败 + 原因」，而不是静默挂死。
+ *
+ * 默认 300s（正常全程约 45–60s，留足余量）；`--watchdog=<秒>` 可覆写，0 关闭。
+ */
+const WATCHDOG_S_DEFAULT = 300;
+function watchdogSeconds() {
+  const arg = process.argv.find((a) => a.startsWith("--watchdog="));
+  if (!arg) return WATCHDOG_S_DEFAULT;
+  const v = Number(arg.split("=")[1]);
+  return Number.isFinite(v) && v >= 0 ? v : WATCHDOG_S_DEFAULT;
+}
+let watchdogFired = false;
+const WATCHDOG_S = watchdogSeconds();
+if (WATCHDOG_S > 0) {
+  const t = setTimeout(() => {
+    watchdogFired = true;
+    const payload = {
+      base: BASE, browser: null, exe: null, headed: HEADED, solveRan: DO_SOLVE,
+      ranAt: new Date().toISOString(),
+      summary: { pass, fail: fail + 1, skipped },
+      checks: checks.concat([{
+        u03: null, name: `看门狗：探针在 ${WATCHDOG_S}s 内未完成`,
+        status: "fail",
+        detail: "探针挂死（不是断言失败）。常见原因：Chrome 未启动 / profile 被占用 / " +
+                "CDP 连接不返回。进程与 chrome 数可用命令行核对。",
+      }]),
+      consoleErrors, pageErrors, failedRequests: failedReqs, apiCalls, actionErrors,
+      watchdog: { fired: true, seconds: WATCHDOG_S },
+    };
+    try {
+      fs.mkdirSync(OUT, { recursive: true });
+      fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(payload, null, 2));
+    } catch { /* 连结果都写不出就只能强退 */ }
+    console.error(`\n[看门狗] 探针超过 ${WATCHDOG_S}s 未完成，已写出失败结果并退出。`);
+    process.exit(3);
+  }, WATCHDOG_S * 1000);
+  t.unref?.();  // 不阻止正常退出
+}
+
 /* ---------------- puppeteer-core：从受管 node 工作区解析 ---------------- */
 const WS = process.env.WB_NODE_WS || "C:/Users/RZF/.workbuddy/binaries/node/workspace";
 const require = createRequire(WS.replace(/\/?$/, "/"));
@@ -159,6 +209,10 @@ const browser = await puppeteer.launch({
   executablePath: br.exe,
   headless: HEADED ? false : true,
   userDataDir: profileDir,
+  // 显式超时：Chrome 起不来时**快速失败**，不要无限等 DevTools 端点。
+  // 实测遇到过 Chrome 未启动、探针静默挂着的情况（见文件顶部看门狗说明）。
+  timeout: 60000,
+  protocolTimeout: 120000,
   args: ["--no-first-run", "--no-default-browser-check", "--disable-gpu",
          "--disable-features=Translate", "--window-size=1440,1000"],
 });
