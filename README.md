@@ -1,6 +1,10 @@
 # ultrafast-demo —— 七种材料超快激光加工 Demo（M0 + 批次 D–K）
 
-> 版本：`0.9.0-k1`｜日期：2026-09-11｜状态：**批次 A–K 已实施并通过验收；M0 已放行，M1/M2/M3 条件齐备待审批**
+> 版本：`0.9.1`｜日期：2026-09-13｜状态：**批次 A–L 已实施并通过验收；M0 已放行，M1/M2/M3 条件齐备待审批**
+>
+> 版本口径：批次**不写进版本号**（`0.9.0-k1` 不是合法 PEP 440，会让 `pip install` / 构建直接失败）。
+> 批次由独立元数据 `[tool.ufdemo] build_batch` 承载，运行时读 `ufdemo.BUILD_BATCH`
+> 与 `io.code_version()["build_batch"]`。
 >
 > 依据：上层目录 `ultrafast_laser_demo_execution_spec.md`（执行细则）与
 > `ultrafast_laser_demo_task_plan.md`（任务书）。
@@ -8,8 +12,9 @@
 > 已交付：M0 最小 CLI 闭环（A–C）+ YSZ/SiC 文献参考评估器（D）+ Streamlit 界面（E）
 > + 查表（F）+ 分相结构（G）+ 受限阈值协议 / 七材料能力入口 / 水印同源（H）
 > + 冻结几何批量加速与性能基准（I）+ 斜入射 / 动态角度 / 可见性（J）
-> + 本地 Web 界面（K，替代 Streamlit）。
-> **A–J 全部批次已交付**，详见 `docs/reports/progress.md`。
+> + 本地 Web 界面（K，替代 Streamlit）+ 发布与接口加固（L：统一错误序列化 / 合法版本号 /
+> wheel 资源定位 / 绑定提交的发布证据 / 浏览器级回归）。
+> **A–L 全部批次已交付**，详见 `docs/reports/progress.md`。
 
 ---
 

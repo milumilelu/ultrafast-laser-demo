@@ -116,6 +116,26 @@ Python 侧 `tests/test_webcontract.py`（23 项，含起真实 HTTP 服务的端
 > 环境限制：本机无 Playwright/Selenium 也无系统浏览器，因此**没有**做真实
 > 浏览器渲染验证。这一点如实记录，不冒充已做。
 
+> **⚠️ 勘误（2026-09-11 晚，实测推翻上述理由）**：本机**有**系统浏览器——
+> Chrome `152.0.7977.84` 与 Edge `152.0.4191.66`，均在默认安装路径。
+> 原文「也无系统浏览器」是**误诊**，成因见下：
+>
+> 1. **Windows 上浏览器从不注册进 PATH** —— `which chrome` / `where msedge` 必然找不到，
+>    但 `C:\Program Files\Google\Chrome\Application\chrome.exe` 一直存在；
+> 2. **Playwright 默认只找自己下载的浏览器** —— `ms-playwright` 缓存为空时报
+>    `Executable doesn't exist at ...\ms-playwright\chromium_headless_shell-...`，
+>    该措辞极易被读成「本机没浏览器」；
+> 3. 当时 Playwright / Selenium **确实未安装** —— 但「库没装」≠「没有浏览器」。
+>
+> 三条独立事实被合并成了一个错误结论。**现已用 `puppeteer-core` + 系统 Chrome
+> 跑通真实浏览器验证 29 通过 / 0 失败 / 1 跳过**（2026-09-13 复测更新：探针已扩到逐条覆盖
+> U03 九条主路径，此前记录的 15 通过是扩覆盖前的数字），脚本见
+> `tools/browser_probe.mjs`（`puppeteer-core` 不下载 Chromium）。
+> 下面「后果」里的「未做」一条据此更新。
+>
+> 若将来改用 Playwright：必须 `channel="chrome"` 或 `executable_path=`，
+> **不要**执行 `playwright install`。
+
 ## 后果
 
 * **好消息**：界面现代化且**连真实求解器**；两侧共用同一纯逻辑层；
@@ -123,7 +143,13 @@ Python 侧 `tests/test_webcontract.py`（23 项，含起真实 HTTP 服务的端
   （非法错误码、响应重复传参）由测试抓出。
 * **代价**：多了一个本地服务进程要管；Streamlit 界面暂时并存（作为过渡备用入口），
   尚未下线——**下线时机待人工决策**（需确认新界面覆盖了全部使用场景）。
-* **未做**：真实浏览器渲染验证（无浏览器可用）；移动端深度适配；PWA/离线。
+* **未做**：~~真实浏览器渲染验证（无浏览器可用）~~ → **已补**（2026-09-11 起，
+  `tools/browser_probe.mjs`，Chrome 152；2026-09-13 复测 **29 通过 / 0 失败 / 1 跳过**；
+  见上勘误）；移动端深度适配；PWA/离线。
+  浏览器级九条主路径**已逐条覆盖**（启动/选真实数据/提交/错误提示/曲线单位/
+  换参数后旧结果标记/读历史/回放不重算/下载）；仍**唯一未实现**的是「下载」——
+  前端确实没有下载控件（`index.html` 无 `a[download]`、`main.js` 无 `Blob`），
+  验收里如实标「未实现」而非「未运行」。
 * **不承诺**：不承诺多用户并发、鉴权、远程部署能力。
 
 ## 相关文件
