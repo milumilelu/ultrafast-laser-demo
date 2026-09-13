@@ -36,7 +36,8 @@
         "max_incidence_deg": 60.0,
         "min_nz": 0.5,
         "note": "软件数值/展示范围，不是七类材料的物理边界。"
-      }
+      },
+      "tilted_initial_surface": false
     },
     "phase": {
       "final_phase_cell_counts": {},
@@ -76,7 +77,7 @@
       "used_for_depth": false
     }
   },
-  "elapsed_s": 0.020903600001474842,
+  "elapsed_s": 0.02876969997305423,
   "errors": [],
   "events_processed": 105,
   "events_total": 105,

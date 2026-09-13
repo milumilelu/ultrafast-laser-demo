@@ -1,10 +1,10 @@
 # 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）
 
-- 生成时间（UTC）：2026-09-11T06:20:10.737002+00:00
-- 代码版本：commit=7fb03e7141f40b94fca94ede8120ae48de2123f4｜工作区有改动=True｜源码清单哈希=89b28636c51547c7…
+- 生成时间（UTC）：2026-09-13T07:04:40.963706+00:00
+- 代码版本：commit=e68d668ae7e3c1b29dc05da6167c528e97a4d480｜工作区有改动=True｜源码清单哈希=f5894a803c837e27…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
-- 汇总：通过 138｜失败 0｜未运行 1
+- 汇总：通过 168｜失败 0｜未运行 2
 
 > 公式核查、数值实现验证、实验复现三栏分开记录。本报告不含任何实验复现结论：
 > A–C 只做到「公式核查 + 数值实现验证」；D 的 YSZ/SiC 参考量也只做到「公式核查」；
@@ -78,10 +78,10 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-11T06:19:49.408616+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-13T07:03:26.497947+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260911T061949_hdrw |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260913T070326_h36x |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
@@ -96,7 +96,7 @@
 | G09-UI | app.py（Streamlit） | 参考模式：加速面板如实说明未启用批量（不假装加速过） | grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明 | grouped=False｜effective_mode=reference｜boundary_note 存在=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 几何修正：入射角/动态角度可切换，且支持范围与近似标注可见 | solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围 | solve_count=0→1｜斜入射=True｜动态角度=True｜光轴夹角=59.99999999999999｜法向厚度转换=0｜支持范围 n_z≥0.5、入射角≤60.0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 正入射：不显示几何修正面板（未启用即不显示） | geometry_diagnostics 为空字典 | 空字典=True |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 158 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 239 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
@@ -111,6 +111,37 @@
 | G09-demo | app.py（端到端链路） | 界面结果区渲染 | 结果页重跑无异常 | 异常=0 错误=0 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 分相诊断面板 | 结果区出现「相结构诊断」面板 | 相结构诊断｜laminated_fiber_composite｜算法 structure_v1｜种子 20260911｜相数 2 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 历史读取同源 | 读回历史带出同源结构诊断且不求解 | solve_count=0 read_count=1｜结构类型=laminated_fiber_composite｜截断诊断行=6｜phase_id=有 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 运行环境 | 真实系统浏览器 | chrome 152.0.7977.84｜C:/Program Files/Google/Chrome/Application/chrome.exe |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 首页返回 200（实际 200） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 页面未显示 boot-error 面板 |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 无未捕获 JS 异常 |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 无失败请求（favicon 除外） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 无 console error（favicon 404 除外） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 6/6 个面板可切换并激活 |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 可选中真实材料卡并回读一致（zirconia_ysz_machining_effective_n3） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 材料卡元信息随选择更新（#material-meta 非空） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 真实算例模板可载入并写入参数（alsic_particle_composite.json，E=11.606702） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 载入模板后材料卡随之回填（期望 alsic_sicp_aa2024_1030nm，实际 alsic_sicp_aa2024_1030nm） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 载入模板后运行模式随之回填（期望 synthetic_demo，实际 synthetic_demo） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 提交后求解次数 +1（0 → 1，等待 3s） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 确实发生了 POST /api/solve |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 形貌 canvas 已真实绘制（800×800） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 越界入射角后显示结构化错误（含错误码/原因/要求） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 错误提示在超时前出现（未无限等待） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 准入失败不计入求解次数（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 3 条曲线的轴名/单位都非空且非 "[object Object]" |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 改参数后出现过期标记并说明「显示的是上一次运行」 |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 改参数本身不触发求解（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 读历史后求解次数不变（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 读历史后读取次数 +1（0 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 读历史未触发 POST /api/solve |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 拖动时间轴/切截面/换图层/转置共 4 次，求解次数不变（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 快照元信息完整（事件/时刻/遍次均非 undefined） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 回放画布已按快照尺寸绘制（805×805） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | U03-9 下载 |  | 未运行 |  |  | 未运行 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 查表后求解次数不变（1 → 1） |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 查表未触发 POST /api/solve |  | 符合 |  |  | 通过 | 数值实现验证 |
+| U03-browser | webui（真实浏览器） | 所有被点击的控件都真实响应（无「点不到」） |  | 符合 |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/sic_threshold_vs_effective_n.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=threshold_fluence |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/synthetic_volume_per_energy.curve.json | 曲线去向（语义路由） | evaluator（event_kernel 仅限 event_depth_increment） | evaluator｜可进事件核=False｜派生=removal_volume,removal_volume_per_energy |  |  | 通过 | 数值实现验证 |
 | G09-table | curves/ysz_analytic_depth_vs_fluence.curve.json | 曲线去向（语义路由） | event_kernel（event_kernel 仅限 event_depth_increment） | event_kernel｜可进事件核=True｜派生=removal_depth_per_pulse,local_depth |  |  | 通过 | 数值实现验证 |
@@ -163,6 +194,7 @@
 
 ## 未运行项与原因
 
+- **U03-browser**（数值实现验证）：前端未实现下载/导出（index.html 无下载控件、main.js 无 Blob/createObjectURL）
 - **G09**（数值实现验证）：批次 H（T14）已交付受限阈值协议与七材料能力入口（见上方 G09-threshold / G09-entries / G09-watermark 行）；**查表曲线接入逐事件主循环仍不开放**（细则第 7 节：只有 event_depth_increment 且协议适用时才可进入，本批不启用该通道）
 
 ## 复现命令

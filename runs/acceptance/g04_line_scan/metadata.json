@@ -16,11 +16,13 @@
   "card_sha256": "0c78992d673697115ffdfc4444b5ffc4f16604d26e4973d0d38825b5213f7dcd",
   "card_version": "1.0.0",
   "code": {
-    "commit": "7fb03e7141f40b94fca94ede8120ae48de2123f4",
+    "build_batch": "L",
+    "commit": "e68d668ae7e3c1b29dc05da6167c528e97a4d480",
     "git_available": true,
     "python": "3.13.14",
-    "source_file_count": 19,
-    "source_manifest_sha256": "89b28636c51547c7718a1185ccf88b9a6236474f3ecf389dd719957f0161eb6a",
+    "source_file_count": 21,
+    "source_manifest_sha256": "f5894a803c837e2762fc5d15c2cb5601a4653c56a48f9a4143ec6443c8aad4ac",
+    "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
   "config_sha256": "8e610d924c2d3187f51988fb70ffc44862359c08ebce2daf9328d4d02e9ca15e",
@@ -143,7 +145,7 @@
     "unit_system": "SI",
     "warnings": []
   },
-  "written_at_utc": "2026-09-11T06:19:38.644259+00:00",
+  "written_at_utc": "2026-09-13T07:03:13.846767+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",
@@ -156,6 +158,7 @@
     "snapshots/snap_0002.npz",
     "snapshots/index.json",
     "events.csv",
-    "final_surface.npz"
+    "final_surface.npz",
+    "metadata.json"
   ]
 }
