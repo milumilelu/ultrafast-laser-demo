@@ -415,18 +415,38 @@ def render_md(rep: dict[str, Any]) -> str:
     return "\n".join(L)
 
 
+def _code_diff_paths(base: str, head: str) -> list[str] | None:
+    """返回 ``base..head`` 之间**非报告类**的改动路径；无法判断时返回 ``None``。
+
+    报告类路径 = ``docs/reports/`` 与 ``runs/``。这两处只放产物，不是被测代码。
+
+    为什么要这个：证据必须「先提交代码、再采证据」，而采完证据又要提交报告
+    —— 那一次提交会让 HEAD 前进，于是刚采的报告立刻「SHA 不符」。
+    但两份提交之间**被测代码逐位相同**（只多了报告文件），证据依然成立。
+    不做这个区分，就会陷入「提交即失效、重采又失效」的死循环。
+    """
+    out = sh(["git", "diff", "--name-only", base, head])
+    if out.returncode != 0:
+        return None
+    paths = [p.strip() for p in out.stdout.splitlines() if p.strip()]
+    return [p for p in paths if not (p.startswith("docs/reports/") or p.startswith("runs/"))]
+
+
 def verify(sha: str | None = None) -> int:
     """检查现有报告是否仍对应当前 HEAD。
 
     选取顺序（**不要**改成「按文件名排序取最后一个」）：
     1. 显式给了 ``sha`` → 用那一份；
-    2. 否则**优先找 commit_sha 等于当前 HEAD 的报告** —— 重新采集之后
-       必然存在一份对应当前 HEAD 的，这才是「本次证据」；
-    3. 再退到**按修改时间最新**的一份。
+    2. 否则**优先找 commit_sha 等于当前 HEAD 的报告**；
+    3. 再找 commit_sha 是当前 HEAD 祖先、且两者之间**只差报告文件**的报告；
+    4. 最后退到**按修改时间最新**的一份。
 
-    踩过的坑：原先用 ``sorted(...)[-1]`` 按**字母序**取最后一份。
-    提交哈希是随机的，旧报告 ``f2572e2…`` 恰好排在 ``d14d548…`` 之后，
-    于是**重新采集成功后 ``--verify`` 仍报「已作废」** —— 与事实相反、极易误导。
+    踩过的两个坑：
+    - 原先用 ``sorted(...)[-1]`` 按**字母序**取最后一份。提交哈希随机，
+      旧报告 ``f2572e2…`` 恰好排在 ``d14d548…`` 之后 → **重新采集成功后
+      ``--verify`` 仍报「已作废」**，与事实相反。
+    - 采完证据提交报告会让 HEAD 前进 → 报告立刻 SHA 不符。故引入第 3 条：
+      只差报告文件时视为**代码等价**，证据仍然有效（并在输出里说明）。
     """
     head = git("rev-parse", "HEAD")
     cands = sorted(REPORTS.glob("release_evidence_*.json"))
@@ -434,33 +454,59 @@ def verify(sha: str | None = None) -> int:
         print("未找到任何 release_evidence_*.json")
         return 2
 
-    target: Path | None = None
     if sha:
         p = REPORTS / f"release_evidence_{sha}.json"
-        target = p if p.exists() else None
-        if target is None:
+        if not p.exists():
             print(f"未找到 sha={sha} 的报告")
             return 2
-    else:
-        # 2) 优先当前 HEAD；3) 退到最新修改
-        for p in cands:
-            try:
-                if json.loads(p.read_text(encoding="utf-8")).get("commit_sha") == head:
-                    target = p
-                    break
-            except Exception:  # noqa: BLE001 - 坏报告跳过，不阻断
-                continue
-        if target is None:
-            target = max(cands, key=lambda q: q.stat().st_mtime)
-            print("（未找到与当前 HEAD 对应的报告，退到最新修改的一份）")
+        data = json.loads(p.read_text(encoding="utf-8"))
+        ok = data["commit_sha"] == head
+        print(f"报告 {p.name}")
+        print(f"  报告 SHA : {data['commit_sha']}")
+        print(f"  当前 HEAD: {head}")
+        print(f"  结论     : {'有效' if ok else '**已作废**（HEAD 已变，请重新采集）'}")
+        return 0 if ok else 1
 
-    data = json.loads(target.read_text(encoding="utf-8"))
-    ok = data["commit_sha"] == head
+    def _load(p: Path) -> dict:
+        return json.loads(p.read_text(encoding="utf-8"))
+
+    # 2) 精确匹配 HEAD
+    for p in cands:
+        try:
+            if _load(p).get("commit_sha") == head:
+                print(f"报告 {p.name}")
+                print(f"  报告 SHA : {head}")
+                print(f"  当前 HEAD: {head}")
+                print("  结论     : 有效（与 HEAD 精确一致）")
+                return 0
+        except Exception:  # noqa: BLE001 - 坏报告跳过
+            continue
+
+    # 3) 祖先且只差报告文件 → 代码等价
+    for p in sorted(cands, key=lambda q: q.stat().st_mtime, reverse=True):
+        try:
+            rsha = _load(p).get("commit_sha") or ""
+        except Exception:  # noqa: BLE001
+            continue
+        if not rsha:
+            continue
+        code_diff = _code_diff_paths(rsha, head)
+        if code_diff is None or code_diff:
+            continue
+        print(f"报告 {p.name}")
+        print(f"  报告 SHA : {rsha}")
+        print(f"  当前 HEAD: {head}")
+        print(f"  结论     : **有效**（自 {rsha[:7]} 起只有报告类文件变动，被测代码逐位相同）")
+        return 0
+
+    # 4) 退到最新修改的一份，并如实说明
+    target = max(cands, key=lambda q: q.stat().st_mtime)
+    data = _load(target)
     print(f"报告 {target.name}")
-    print(f"  报告 SHA : {data['commit_sha']}")
+    print(f"  报告 SHA : {data.get('commit_sha')}")
     print(f"  当前 HEAD: {head}")
-    print(f"  结论     : {'有效' if ok else '**已作废**（HEAD 已变，请重新采集）'}")
-    return 0 if ok else 1
+    print("  结论     : **已作废**（报告对应提交与当前 HEAD 之间有代码改动，请重新采集）")
+    return 1
 
 
 def archive_stale_pytest_log() -> str | None:
