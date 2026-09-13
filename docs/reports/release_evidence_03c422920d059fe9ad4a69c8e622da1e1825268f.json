@@ -1,0 +1,78 @@
+{
+  "schema": "ufdemo.release_evidence/1",
+  "commit_sha": "03c422920d059fe9ad4a69c8e622da1e1825268f",
+  "working_tree_dirty": true,
+  "working_tree_status": [
+    "?? docs/reports/release_evidence_d14d5488c1597a9c65ae4e2eedb9846f14c81d19.json",
+    "?? docs/reports/release_evidence_d14d5488c1597a9c65ae4e2eedb9846f14c81d19.md"
+  ],
+  "collected_at": "2026-09-13T15:34:25+0800",
+  "python": "3.13.14",
+  "python_executable": "C:\\Users\\RZF\\.workbuddy\\binaries\\python\\envs\\ufdemo\\Scripts\\python.exe",
+  "steps": {
+    "pytest": {
+      "status": "run",
+      "argv": "pytest -q --junitxml",
+      "returncode": 0,
+      "summary_text": "426 passed in 127.08s (0:02:07)",
+      "junit": {
+        "tests": 426,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_s": 126.783
+      },
+      "junit_passed_consistent": true,
+      "tail": "........................................................................ [ 67%]\n........................................................................ [ 84%]\n..................................................................       [100%]\n426 passed in 127.08s (0:02:07)",
+      "ok": true
+    },
+    "node": {
+      "status": "run",
+      "argv": "node webui/test/contract_test.mjs",
+      "returncode": 0,
+      "passed": 32,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "  PASS  x_name 取 label||name（sic_threshold_vs_effective_n）\n\n结果：32 通过，0 失败"
+    },
+    "browser": {
+      "status": "run",
+      "argv": "node tools/browser_probe.mjs",
+      "returncode": 0,
+      "passed": 29,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "\n结果：29 通过 / 0 失败 / 1 跳过\n产物：C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\runs\\_release_evidence\\browser\\result.json"
+    },
+    "package": {
+      "status": "run",
+      "argv": "python tools/package_smoke.py",
+      "returncode": 0,
+      "passed": 21,
+      "failed": 0,
+      "reason": null,
+      "ok": true,
+      "tail": "====================================================================\n结果：21 通过｜0 失败｜0 跳过\n===================================================================="
+    },
+    "dataqa": {
+      "status": "not_run",
+      "reason": "tools/measured_data_report.py 尚未交付（U04 未实施）",
+      "ok": false
+    }
+  },
+  "summary": {
+    "run": [
+      "pytest",
+      "node",
+      "browser",
+      "package"
+    ],
+    "not_run": [
+      "dataqa"
+    ],
+    "failed": [],
+    "all_run_steps_ok": true
+  }
+}
