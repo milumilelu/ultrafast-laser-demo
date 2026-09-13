@@ -6,13 +6,18 @@
 
 已实施批次：A–C（M0 最小闭环，G01–G04）+ D（T07 参考评估器，G05）+
 E（T09 界面，G09-UI）+ F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）
-+ 端到端演示可用性（G09-demo）。
++ 端到端演示可用性（G09-demo）+ **U03 浏览器级验收（U03-browser，真实系统浏览器）**。
 未运行的项目（G07–G08、逐事件核查表接入、M1/M2/M3 相关）明确标记为「未运行」，
 不得用预期数值代替通过记录。
 
+浏览器级验收走 `tools/browser_check.py`（`puppeteer-core` + 本机系统 Chrome/Edge，
+**不下载 Chromium**），逐条覆盖 U03 的 9 条主路径。它**不是**「本机无浏览器」的替代品——
+本机有 Chrome/Edge，只是不在 PATH（误诊复盘见 `docs/reports/browser_test_capability.md`）。
+无浏览器环境可用 `--no-browser` 跳过（届时如实记「未运行」）。
+
 用法::
 
-    python tools/run_acceptance.py [--out runs/acceptance] [--skip-tests]
+    python tools/run_acceptance.py [--out runs/acceptance] [--skip-tests] [--no-browser]
 """
 
 from __future__ import annotations
@@ -111,6 +116,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "runs" / "acceptance"))
     ap.add_argument("--skip-tests", action="store_true")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="跳过 U03 浏览器级验收（默认跑；仅用于无浏览器的环境）")
     args = ap.parse_args()
 
     D.mkdir(parents=True, exist_ok=True)
@@ -436,6 +443,34 @@ def main() -> int:
         else:
             add("G09-demo", "app.py（端到端链路）", "", r["check"], r["expected"], r["measured"], "", "",
                 r["status"] == "通过", str(demo_probe_dir), "数值实现验证", r["note"])
+
+    # ---------------- U03 / 浏览器级验收（真实系统浏览器）----------------
+    # 本机**有**系统浏览器（Chrome/Edge，绝对路径），此前记「未运行」是误诊。
+    # 详见 docs/reports/browser_test_capability.md 与 tools/browser_check.py 模块 docstring。
+    #
+    # 注意：**不**与 --skip-tests 耦合。--skip-tests 的语义是「不跑 pytest」，
+    # 与「浏览器要不要真实求解」无关；且浏览器组用隔离端口 + 隔离 UFDEMO_RUNS_DIR，
+    # 真实求解不会污染工作区 runs/。
+    from browser_check import run_browser_checks, write_reports as write_browser_reports  # noqa: E402
+
+    browser_probe_dir = out_root / "_browser_check"
+    if args.no_browser:
+        browser_rows = [{
+            "u03": "U03-浏览器级", "check": "U03 浏览器级",
+            "expected": "驱动系统浏览器跑 9 条主路径",
+            "measured": "未运行", "status": "未运行", "note": "--no-browser 已跳过",
+        }]
+    else:
+        browser_rows = run_browser_checks(browser_probe_dir)
+    browser_csv, browser_md = write_browser_reports(browser_rows, browser_probe_dir)
+    for r in browser_rows:
+        if r["status"] in ("未运行", "未实现"):
+            not_run("U03-browser", "webui（真实浏览器）", r["check"], r["expected"], r["note"],
+                    "数值实现验证")
+        else:
+            add("U03-browser", "webui（真实浏览器）", "", r["check"], r["expected"],
+                r["measured"], "", "", r["status"] == "通过", str(browser_probe_dir),
+                "数值实现验证", r["note"])
 
     # ---------------- G09 / 查表（批次 F：T10）----------------
     from table_report import (  # noqa: E402
@@ -1000,7 +1035,37 @@ def main() -> int:
             cwd=str(ROOT), capture_output=True, text=True,
             env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")},
         )
-        (D / "pytest_output.txt").write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
+        # **必须绑定提交**（审查缺陷 F07）：这份日志过去是裸的 pytest 输出，
+        # 与任何提交都不对应 —— 于是 368 / 394 / 395 这些数字被混放，
+        # 审阅者无法判断某个数字属于哪份代码。头部写死 SHA + 采集时间 +
+        # 工作树是否干净，并提示「HEAD 变了这份记录即作废」。
+        # 结构化、可机器核对的全量证据见 tools/release_evidence.py。
+        sha = "unknown"
+        dirty_note = "未知"
+        try:
+            _sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT),
+                                  capture_output=True, text=True, timeout=10)
+            if _sha.returncode == 0:
+                sha = _sha.stdout.strip()
+            _st = subprocess.run(["git", "status", "--porcelain"], cwd=str(ROOT),
+                                 capture_output=True, text=True, timeout=10)
+            if _st.returncode == 0:
+                _lines = [x for x in _st.stdout.splitlines() if x.strip()]
+                dirty_note = "否" if not _lines else f"是（{len(_lines)} 项未提交）"
+        except Exception:  # noqa: BLE001 - 非 git 环境不影响验收本身
+            pass
+        header = (
+            "# pytest 验收记录（**已绑定提交**）\n"
+            f"# commit_sha   : {sha}\n"
+            f"# collected_at : {__import__('time').strftime('%Y-%m-%dT%H:%M:%S%z')}\n"
+            f"# 工作树不干净 : {dirty_note}\n"
+            "# 说明：若 HEAD 与该 SHA 不一致，本记录**作废**，请重跑验收。\n"
+            "# 结构化全量证据（pytest/Node/浏览器/安装冒烟/数据QA，逐项 run|not_run）：\n"
+            "#   python tools/release_evidence.py\n"
+            "# ---- 以下为 pytest 原始输出 ----\n"
+        )
+        (D / "pytest_output.txt").write_text(
+            header + proc.stdout + "\n" + proc.stderr, encoding="utf-8")
         tail = [ln for ln in proc.stdout.strip().splitlines() if ln.strip()][-1:]
         print("pytest:", tail[0] if tail else "(no output)")
         if proc.returncode != 0:
@@ -1015,6 +1080,8 @@ def main() -> int:
     print(f"报告：{ui_md_path}")
     print(f"报告：{demo_csv}")
     print(f"报告：{demo_md}")
+    print(f"报告：{browser_csv}")
+    print(f"报告：{browser_md}")
     print(f"报告：{struct_csv}")
     print(f"报告：{g06_csv}")
     print(f"报告：{g06_md_path}")
@@ -1028,6 +1095,18 @@ def main() -> int:
     n_demo_fail = sum(1 for r in demo_rows if r["status"] == "失败")
     n_demo_nr = sum(1 for r in demo_rows if r["status"] == "未运行")
     print(f"端到端演示检查：通过 {n_demo_pass}｜失败 {n_demo_fail}｜未运行 {n_demo_nr}")
+    n_br_pass = sum(1 for r in browser_rows if r["status"] == "通过")
+    n_br_fail = sum(1 for r in browser_rows if r["status"] == "失败")
+    n_br_nr = sum(1 for r in browser_rows if r["status"] == "未运行")
+    n_br_ni = sum(1 for r in browser_rows if r["status"] == "未实现")
+    print(f"U03 浏览器级检查：通过 {n_br_pass}｜失败 {n_br_fail}｜未运行 {n_br_nr}｜未实现 {n_br_ni}")
+    if n_br_fail:
+        # 说明：这些失败**计入**整体退出码（所以现在跑验收会返回 1）。
+        # 这是刻意的——U03 的实施步骤第 1 条就要求「先在当前代码上跑出失败，固化 F04」，
+        # 工程当前确实有 4 条 U03 检查不通过。不得为了让验收变绿而把它们降级或跳过；
+        # 修完 api.js 的 toCurve 与 renderResultPanel 的水印读取后应自然转绿。
+        print("!! U03 浏览器级存在失败项（见 docs/reports/browser_check.md 的「已知待修」）",
+              file=sys.stderr)
     print(f"G06 检查：通过 {len(g06_rows) - n_g06_fail}｜失败 {n_g06_fail}｜结构实例 {len(structure_rows)}")
     return 0 if (n_fail == 0 and n_g06_fail == 0 and n_demo_fail == 0) else 1
 

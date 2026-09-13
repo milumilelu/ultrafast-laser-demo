@@ -6,6 +6,10 @@ __pycache__/
 .venv/
 venv/
 
+# 构建产物（tools/package_smoke.py / pip wheel 会在仓库根建这两个目录）
+build/
+dist/
+
 # 运行输出：保留 acceptance 与显式指定的实例，其余临时运行不纳入版本管理
 runs/*
 !runs/acceptance/
