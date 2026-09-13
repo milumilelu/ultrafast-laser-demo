@@ -726,6 +726,7 @@ def submit(
     project_root: str | Path,
     label: str = "ui_run",
     code_info: Mapping[str, Any] | None = None,
+    curves_dir: str | Path | None = None,
 ) -> FrozenRun:
     """冻结当前参数、求解一次并把结果写入新目录。
 
@@ -766,7 +767,10 @@ def submit(
     run_id = make_run_id(label)
     run_dir = new_run_dir(out_base, run_id)
 
-    result = solve(cfg, material)
+    # U07：把曲线目录传下去 —— 否则 `solver.response_curve` 指定的实测曲线
+    # 加载不到，界面上「用真实数据求解」这条路永远走不通。
+    result = solve(cfg, material,
+                   curves_dir=str(curves_dir) if curves_dir else None)
     result.run_id = run_id
     saved = save_run(result, run_dir, project_root=project_root, code_info=code_info)
 

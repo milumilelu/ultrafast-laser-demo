@@ -57,6 +57,11 @@ SOURCE_TYPES: tuple[str, ...] = (
     "synthetic_definition",
     "research_card_migration",
     "user_supplied_table",
+    # U07：**实测来源**。此前枚举里只有「解析定义 / 合成 / 迁移 / 用户表」，
+    # 结果真实实验数据在曲线卡层**无处安放** —— 曲线目录里只能有 fixture，
+    # 求解器也就永远吃不到真实数据。这两个值补上那条通路。
+    "published_measurement",     # 已发表论文中明确给出的实测数值
+    "digitized_measurement",     # 从实验图人工数字化读取（容差另行标注）
 )
 
 UNIT_SYSTEMS: tuple[str, ...] = ("SI", "dimensionless")
@@ -817,6 +822,10 @@ class SolverConfig:
     local_abs_tol_internal: float = 0.0
     geometry_drift_limit: float = 0.25
     max_cell_block: int = 1 << 22
+    #: **响应曲线卡文件名**（U07）。非空时，逐事件核改由该实测曲线驱动
+    #: （`TabulatedEventLaw`），而不是材料卡的解析对数律。
+    #: 这是「真实数据 → 真实求解」的唯一入口；留空则维持原行为。
+    response_curve: str | None = None
     extra: Mapping[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -887,6 +896,8 @@ class SolverConfig:
             local_abs_tol_internal=float(abs_tol),
             geometry_drift_limit=drift_limit,
             max_cell_block=max_cell_block,
+            response_curve=(str(raw["response_curve"]).strip()
+                            if str(raw.get("response_curve") or "").strip() else None),
             extra=dict(raw.get("extra", {}) or {}),
         )
 
@@ -909,6 +920,7 @@ class SolverConfig:
             "local_abs_tol_internal": self.local_abs_tol_internal,
             "geometry_drift_limit": self.geometry_drift_limit,
             "max_cell_block": self.max_cell_block,
+            "response_curve": self.response_curve,
         }
 
 
@@ -1346,6 +1358,18 @@ def check_reference_conditions(config: RunConfig, material: Any) -> list[UFDemoE
         return errs
     if getattr(material, "fixture_only", False):
         return errs
+    # --- U07：**曲线驱动的求解不走参考评估器** -----------------------------
+    # 下面这些条件（protocol_id / 能流基准 / 有效脉冲数定义 / 重复频率）
+    # 约束的是**协议复现**那条路径。本次若由实测曲线驱动逐事件求解，
+    # 评估器根本不会被调用 —— 硬套这些条件是把「对象判错」，不是守红线。
+    # 曲线自身的适用条件（波长/脉宽是否匹配）仍由核构造时的闸门检查，
+    # 那才是真正该管的「这条曲线能不能用」。
+    #
+    # ⚠️ 必须用 getattr 链：能力入口探针用**轻量桩配置**（SimpleNamespace）
+    # 调用本函数，它没有 `solver` 字段 —— 直接 `config.solver.x` 会抛
+    # AttributeError，把两条 red-line 探针打成「失效」（本工程实测踩到）。
+    if getattr(getattr(config, "solver", None), "response_curve", None):
+        return errs
 
     given = dict(config.reference_conditions or {})
     mid = getattr(material, "id", "?")
@@ -1500,16 +1524,33 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
 
     # 1. 模式准入
     if allowed and config.run_mode not in allowed:
-        fail(
-            UFDemoError(
-                MATERIAL_CAPABILITY_MISSING,
-                f"材料卡 {config.material_id} 不允许 run_mode={config.run_mode}",
-                field_path="run_mode",
-                actual=config.run_mode,
-                requirement=f"取值属于 {list(allowed)}",
-                suggestion="改用允许的模式，或先把材料卡升级到该模式。",
+        # --- U07 豁免：**深度来源可以来自曲线，而不只是材料卡** -------------
+        # 原规则的意图是「没有深度来源就不能出物理深度」。材料卡没有 δ 时
+        # 它确实不能；但若本次运行指定了**实测增量曲线**，深度来源就存在了。
+        # 判据应从「卡自己有没有」改成「有没有深度来源」——
+        # **这是把门槛判对，不是放宽**：
+        #   · 只对 `reference_case` 生效（threshold_only 等不受影响）；
+        #   · 曲线是否真为 `event_depth_increment` 仍由核构造时的**既有闸门**
+        #     （`assert_curve_can_enter_event_kernel`）把关，拦不住就抛错；
+        #   · 准入报告里**明写**深度来源是曲线，避免被读成「材料卡已具备该能力」。
+        curve_name = getattr(config.solver, "response_curve", None)
+        if curve_name and config.run_mode == "reference_case":
+            notes.append(
+                f"深度来源：响应曲线 `{curve_name}`（材料卡 "
+                f"`{config.material_id}` 自身只声明 {list(allowed)}；"
+                "本次的物理深度由该曲线提供，不代表材料卡已具备通用深度能力）"
             )
-        )
+        else:
+            fail(
+                UFDemoError(
+                    MATERIAL_CAPABILITY_MISSING,
+                    f"材料卡 {config.material_id} 不允许 run_mode={config.run_mode}",
+                    field_path="run_mode",
+                    actual=config.run_mode,
+                    requirement=f"取值属于 {list(allowed)}",
+                    suggestion="改用允许的模式，或先把材料卡升级到该模式。",
+                )
+            )
 
     if config.run_mode == "calibrated_case":
         # 细则 2.1：必须关联独立验证报告、有效条件和批准使用的卡版本
@@ -1544,7 +1585,17 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
         )
 
     # 3. 严格参考模式的条件与协议匹配（细则 2.2）
-    for e in check_reference_conditions(config, material):
+    _ref_errs = check_reference_conditions(config, material)
+    if not _ref_errs and getattr(config.solver, "response_curve", None) \
+            and config.run_mode == "reference_case":
+        # 不静默跳过：报告里明写「为什么这次没做协议校验」——
+        # 否则以后有人看到「没有协议错误」会以为协议被核对过了。
+        notes.append(
+            f"已跳过材料卡参考协议校验：本次由响应曲线 "
+            f"`{getattr(config.solver, 'response_curve', None)}` 驱动逐事件求解，"
+            "不调用参考评估器；曲线的适用条件（波长/脉宽）由核构造时校验。"
+        )
+    for e in _ref_errs:
         fail(e)
     if config.run_mode == "reference_case":
         notes.append("reference_case：输出物理单位，但一直显示验证状态；软件跑通不提升实验验证状态。")
@@ -1874,16 +1925,38 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
                         f"父卡逐事件核不可用：{cap_reason}"
                     )
             else:
-                fail(
-                    UFDemoError(
-                        MATERIAL_CAPABILITY_MISSING,
-                        f"材料卡不支持逐事件去除增量：{cap_reason}",
-                        field_path="material_id",
-                        actual=config.material_id,
-                        requirement="需要 event_depth_increment 能力（完整阈值 + 去除尺度 + 匹配条件）",
-                        suggestion="补齐 δ 与阈值并确认条件；不得用相近材料、不同脉宽或纳秒数据补成“完整参数”。",
+                # --- U07：增量来源可以是**实测曲线**，而不只是材料卡 ----------
+                # 材料卡的 `response` 里没有 δ / 阈值，是因为**它那批数据**
+                # （平均去除率、阈值参考等）不适合当逐事件增量 —— 这条拒绝本身是对的。
+                # 但本次运行若指定了 `solver.response_curve`，**材料卡的 response
+                # 根本不会被使用**：增量由曲线提供。此时不该被"卡的能力"拦住。
+                #
+                # 边界（确保没有放开不该放的）：
+                #   · 只对 `reference_case` 生效；
+                #   · 必须**显式**指定曲线（留空即维持原拒绝）；
+                #   · 曲线是否为 `event_depth_increment`、固定条件是否匹配，
+                #     仍由核构造时的**既有闸门**把关（拦不住就抛错，不会静默错算）；
+                #   · 报告里明写来源，避免被读成「材料卡已具备增量能力」。
+                _cn = getattr(config.solver, "response_curve", None)
+                if _cn and config.run_mode == "reference_case":
+                    notes.append(
+                        f"逐事件增量来源：响应曲线 `{_cn}`（材料卡 `{config.material_id}` "
+                        f"自身的 response 未被使用；卡内拒绝理由：{cap_reason}）"
                     )
-                )
+                else:
+                    fail(
+                        UFDemoError(
+                            MATERIAL_CAPABILITY_MISSING,
+                            f"材料卡不支持逐事件去除增量：{cap_reason}",
+                            field_path="material_id",
+                            actual=config.material_id,
+                            requirement="需要 event_depth_increment 能力（完整阈值 + 去除尺度 + 匹配条件），或显式指定 solver.response_curve",
+                            suggestion=(
+                                "补齐 δ 与阈值并确认条件；或指定一条实测增量曲线"
+                                "（solver.response_curve）；不得用相近材料、不同脉宽或纳秒数据补成「完整参数」。"
+                            ),
+                        )
+                    )
 
     return ValidationReport(
         ok=not errors,

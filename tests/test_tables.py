@@ -43,6 +43,9 @@ INVALID = ROOT / "tests" / "fixtures" / "curves_invalid"
 FIXTURE = "analytic_fixture_depth_vs_fluence"
 SIC = "sic_threshold_vs_effective_n"
 VOL = "synthetic_volume_per_energy"
+#: U07 之后新增的**实测**增量曲线（SiC 单脉冲坑深，来源 Micromachines 15(5):573）。
+#: 它让「曲线目录」不再只有 fixture —— 求解器终于能吃真实数据。
+MEASURED_SIC = "sic4h_measured_single_pulse_crater"
 
 FTH_J_CM2 = 1.0
 DELTA_M = 1.0e-7
@@ -74,7 +77,7 @@ def vol_curve() -> T.ResponseCurve:
 
 def test_all_example_curves_load():
     curves = T.load_curves(CURVES)
-    assert {c.curve_id for c in curves} == {FIXTURE, SIC, VOL}
+    assert {c.curve_id for c in curves} == {FIXTURE, SIC, VOL, MEASURED_SIC}
 
 
 def test_required_fields_match_spec():
@@ -596,7 +599,8 @@ def test_points_file_missing(tmp_path):
 
 def test_iter_curve_cards_sorted_and_complete():
     cards = T.iter_curve_cards(CURVES)
-    assert len(cards) == 3
+    # 3 张 fixture（公式重算 / 人工解析 / 合成）+ 1 张实测
+    assert len(cards) == 4
     assert [p.name for p in cards] == sorted(p.name for p in cards)
 
 
@@ -680,7 +684,7 @@ def test_cli_table_all_curves(capsys):
     rc = main(["table", str(CURVES), "--all-curves", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert len(payload) == 3
+    assert len(payload) == 4   # 3 fixture + 1 measured
 
 
 def test_cli_table_defaults_to_range_ends(capsys):

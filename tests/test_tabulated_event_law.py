@@ -152,7 +152,7 @@ def test_below_range_rejected_by_default(probe_curve):
     """**低于下界默认拒绝** —— 低于量测区间不等于无去除。"""
     law = TabulatedEventLaw(probe_curve)
     with pytest.raises(UFDemoError) as ei:
-        law.increment(np.array([[1.0]]), None)
+        law.increment(np.array([[1.0e4]]), None)
     assert ei.value.code == "TABLE_OUT_OF_RANGE"
 
 
@@ -160,7 +160,7 @@ def test_above_range_rejected_never_extrapolated(probe_curve):
     """**高于上界一律拒绝**，不外推、不钳到端点。"""
     law = TabulatedEventLaw(probe_curve)
     with pytest.raises(UFDemoError) as ei:
-        law.increment(np.array([[1e6]]), None)
+        law.increment(np.array([[1e10]]), None)
     assert ei.value.code == "TABLE_OUT_OF_RANGE"
 
 
@@ -168,18 +168,18 @@ def test_zero_below_mode_records_zero_only_when_declared(probe_curve):
     """显式声明 ``zero_below`` 时下界以下记 0；**上界以上仍然拒绝**。"""
     law = TabulatedEventLaw(probe_curve, threshold_rule={
         "mode": "zero_below", "reason": "测试用：假定下界以下无去除"})
-    res = law.increment(np.array([[1.0, 10.0]]), None)
+    res = law.increment(np.array([[1.0e4, 1.0e5]]), None)
     v = np.asarray(res.values)
     assert v[0, 0] == 0.0            # 显式声明才记 0
     assert v[0, 1] == pytest.approx(0.05 * 10.0)
     with pytest.raises(UFDemoError):
-        law.increment(np.array([[1e6]]), None)   # 上界仍拒绝
+        law.increment(np.array([[1e10]]), None)   # 上界仍拒绝
 
 
 def test_endpoints_are_inclusive(probe_curve):
     """正好落在两端点应可查（闭区间）。"""
     law = TabulatedEventLaw(probe_curve)
-    res = law.increment(np.array([[2.0, 20.0]]), None)
+    res = law.increment(np.array([[2.0e4, 2.0e5]]), None)
     v = np.asarray(res.values)
     assert v[0, 0] == pytest.approx(0.05 * 2.0)
     assert v[0, 1] == pytest.approx(0.05 * 20.0)
@@ -191,7 +191,7 @@ def test_history_enabled_rejected(probe_curve):
 
     law = TabulatedEventLaw(probe_curve)
     with pytest.raises(UFDemoError) as ei:
-        law.increment(np.array([[10.0]]), HistoryState(exposure_count=np.zeros((1, 1), dtype=np.uint32)))
+        law.increment(np.array([[1.0e5]]), HistoryState(exposure_count=np.zeros((1, 1), dtype=np.uint32)))
     assert ei.value.code == RESPONSE_SEMANTICS_INVALID
 
 
@@ -203,10 +203,10 @@ def test_history_enabled_rejected(probe_curve):
 def test_values_match_tables_lookup_pointwise(probe_curve):
     """查表核的每个取值都必须等于 ``tables.lookup``（同一插值实现）。"""
     law = TabulatedEventLaw(probe_curve)
-    xs = [2.0, 3.7, 5.0, 7.3, 10.0, 13.9, 20.0]
-    res = law.increment(np.array([xs]), None)
+    xs_si = [2.0e4, 3.7e4, 5.0e4, 7.3e4, 1.0e5, 1.39e5, 2.0e5]   # J/m²（内部 SI）
+    res = law.increment(np.array([xs_si]), None)
     got = np.asarray(res.values)[0]
-    ref = T.lookup(probe_curve, xs, method="linear").values
+    ref = T.lookup(probe_curve, [v / 1e4 for v in xs_si], method="linear").values  # SI → J/cm²
     for a, b in zip(got, ref):
         assert a == pytest.approx(b, rel=1e-12)
 
@@ -220,7 +220,7 @@ def test_discriminating_case_differs_from_log_law(probe_curve):
     law = TabulatedEventLaw(probe_curve)
     # 阈值/去除尺度按曲线自身单位（J/cm^2）给，且查询点落在 [2, 20] 的有效区间内。
     log_law = FixedThresholdLogLaw(threshold_internal=1.0, delta_internal=1e-5)
-    F = np.array([[10.0]])
+    F = np.array([[1.0e5]])   # J/m²（内部 SI）
     tab = float(np.asarray(law.increment(F, None).values)[0, 0])
     log = float(np.asarray(log_law.increment(F, None).values)[0, 0])
     assert tab > 0.0 and log > 0.0
@@ -230,8 +230,8 @@ def test_discriminating_case_differs_from_log_law(probe_curve):
 def test_increment_is_per_event_not_amortized(probe_curve):
     """**逐事件**推进：同一能流查两次各得一份增量，不是把累计量摊到 N 次。"""
     law = TabulatedEventLaw(probe_curve)
-    a = float(np.asarray(law.increment(np.array([[10.0]]), None).values)[0, 0])
-    b = float(np.asarray(law.increment(np.array([[10.0]]), None).values)[0, 0])
+    a = float(np.asarray(law.increment(np.array([[1.0e5]]), None).values)[0, 0])
+    b = float(np.asarray(law.increment(np.array([[1.0e5]]), None).values)[0, 0])
     assert a == pytest.approx(b), "两次同样输入应给同样增量（逐事件、无状态）"
     assert a == pytest.approx(0.05 * 10.0)
 

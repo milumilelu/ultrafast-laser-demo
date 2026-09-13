@@ -187,6 +187,10 @@ class ResponseCurve:
     notes: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
+    #: 曲线自带的阈值/截断规则（U07）。形如
+    #: ``{"mode": "zero_below", "reason": "..."}``。缺省 ``None`` 表示
+    #: **下界以下一律拒绝**（严格口径）。
+    threshold_rule: dict[str, Any] | None = None
 
     # -- 便捷属性 -----------------------------------------------------------
     @property
@@ -732,6 +736,10 @@ def load_curve(card_path: str | Path) -> ResponseCurve:
         notes=[str(n) for n in (raw.get("notes") or [])],
         limitations=[str(n) for n in (raw.get("limitations") or [])],
         source_ids=[str(s) for s in ((raw.get("source") or {}).get("source_ids") or [])],
+        # U07：曲线自带的**阈值/截断规则**。实测曲线的最小能流往往不是真阈值，
+        # 光斑边缘必然低于它 —— 若一律拒绝就越界到跑不动。规则必须由**曲线**
+        # 显式声明（并带理由），而不是求解器替它决定。缺省不写 → 保持严格拒绝。
+        threshold_rule=(dict(raw["threshold_rule"]) if raw.get("threshold_rule") else None),
     )
 
 

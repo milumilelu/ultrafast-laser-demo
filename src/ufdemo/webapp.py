@@ -333,6 +333,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     out_base=ctx.runs_dir,
                     project_root=ctx.project_root,
                     label=str(body.get("label") or "web_run"),
+                    curves_dir=ctx.curves_dir,   # U07：实测曲线驱动的求解
                 )
             self._send_json(payload)
         elif path == "/api/preview":

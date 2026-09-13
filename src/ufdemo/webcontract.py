@@ -284,6 +284,7 @@ def solve_payload(
     out_base: str | Path,
     project_root: str | Path,
     label: str = "web_run",
+    curves_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """用**真实求解器**跑一次并返回契约。
 
@@ -324,7 +325,8 @@ def solve_payload(
         )
     try:
         frozen = U.submit(
-            state, material, out_base=out_base, project_root=project_root, label=label
+            state, material, out_base=out_base, project_root=project_root, label=label,
+            curves_dir=curves_dir,   # U07：让 solver.response_curve 能被加载
         )
     except UFDemoError as err:
         # 准入失败 → 带上完整校验报告，前端逐条显示

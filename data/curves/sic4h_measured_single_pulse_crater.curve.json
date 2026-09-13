@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "curve_id": "sic4h_measured_single_pulse_crater",
+  "entry_class": "measured",
+  "material_id": "sic_4h_cface_1035nm_multishot",
+  "material_identity": {
+    "family": "SiC",
+    "grade": "monocrystalline 4H-SiC",
+    "material_identity_confirmed_by_user": false
+  },
+  "x_quantity": {
+    "name": "peak_fluence",
+    "unit": "J/cm^2",
+    "label": "峰值能流（入射表面峰值）",
+    "kind": "fluence"
+  },
+  "y_quantity": {
+    "name": "removal_depth_per_pulse",
+    "unit": "m",
+    "label": "单脉冲去除深度（坑深）",
+    "kind": "depth"
+  },
+  "output_semantics": "event_depth_increment",
+  "depth_direction": "surface_normal",
+  "fluence_basis": "incident_surface_peak",
+  "fixed_conditions": {
+    "wavelength_m": {
+      "value": 1.03e-06,
+      "rel_tol": 0.01,
+      "note": "原文 1030 nm；材料卡标称 1035 nm，差 0.5% 在容差内"
+    },
+    "pulse_duration_s": {
+      "value": 3e-13,
+      "rel_tol": 0.1,
+      "note": "原文 300 fs"
+    }
+  },
+  "protocol": {
+    "protocol_id": "measured_single_pulse_crater_depth",
+    "required_history": {
+      "mode": "none"
+    },
+    "note": "单脉冲、无历史耦合；每个事件独立查表。"
+  },
+  "source_figure_or_table": "Micromachines 2024, 15(5):573 — 正文实验值（Figures 3 & 7）",
+  "valid_range": {
+    "x": [
+      6.92,
+      10.82
+    ],
+    "note": "4 个实测峰值能流 6.92–10.82 J/cm²。**最小实测能流不是阈值** —— 真实阈值更低且未测。"
+  },
+  "points_file": "sic4h_measured_single_pulse_crater.points.csv",
+  "duplicate_policy": "reject",
+  "evidence_status": "literature_reported",
+  "source_type": "published_measurement",
+  "threshold_rule": {
+    "mode": "zero_below",
+    "reason": "实测下界以下未采样；按「无去除」处理是**保守截断**（真实阈值 < 6.92 J/cm²，故本卡低估低能流区去除）。该假设已列入 limitations，不得当作实测阈值。"
+  },
+  "source": {
+    "source_ids": [
+      "D03"
+    ],
+    "doi": "10.3390/mi15050573",
+    "url": "https://www.mdpi.com/2072-666X/15/5/573",
+    "locator": "Results 正文实验值（Figures 3 & 7）",
+    "license": "CC BY 4.0"
+  },
+  "notes": [
+    "本卡由 `tools/make_measured_curves.py` 从实测 CSV 生成，**不是**解析 fixture。",
+    "4 个点**全部**来自论文实验值；同文的模型预测值已排除。",
+    "单脉冲、无重复测量 → 证据状态只能停在 `literature_reported`。"
+  ],
+  "limitations": [
+    "**峰值中心关系近似局部响应**：实测报的是中心坑深，当作局域增量用等于假设「局域去除只由局域能流决定」；Gaussian 径向分布**未独立标定**。",
+    "**不含完整阈值律与光斑尾部响应**：最小实测能流 6.92 J/cm² 不是阈值。",
+    "**低能流区系统性低估**：下界以下按 0 计（保守截断），真实去除可能大于 0。",
+    "**4 点无重复测量**：不构成实验复现，也不得升级证据状态。",
+    "**不适用**于扫描/多遍的累计深度（那是另一语义，见 U06/U09 的数据）。"
+  ]
+}

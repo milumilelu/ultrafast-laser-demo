@@ -284,6 +284,38 @@ class FixedThresholdLogLaw:
         return res
 
 
+#: 曲线卡单位 → SI 因子（U07）。
+#: **必须有这一层**：曲线卡上的 x/y 用的是**惯用单位**（如 J/cm²、µm），
+#: 而求解器内部一律 SI（J/m²、m）。不换算的话，J/cm² 的曲线收到 J/m² 的
+#: 能流会全部「高于上界」而被拒 —— 实测就是这个 bug：6.92 J/cm² 的曲线
+#: 收到 69200 J/m² 后直接 `TABLE_OUT_OF_RANGE`，真实曲线一条都用不了。
+_UNIT_TO_SI: dict[str, float] = {
+    # 能流
+    "j/m^2": 1.0, "j/m²": 1.0, "j/m2": 1.0,
+    "j/cm^2": 1.0e4, "j/cm²": 1.0e4, "j/cm2": 1.0e4,
+    "mj/cm^2": 1.0e1, "mj/cm²": 1.0e1,
+    # 长度
+    "m": 1.0, "um": 1.0e-6, "µm": 1.0e-6, "μm": 1.0e-6, "nm": 1.0e-9,
+    # 计数/无量纲
+    "1": 1.0, "": 1.0,
+}
+
+
+def _unit_to_si_factor(unit: Any, *, where: str) -> float:
+    """曲线单位 → SI 因子。**未知单位一律报错**，不默认 1.0（那会静默错算）。"""
+    key = str(unit or "").strip().lower()
+    if key not in _UNIT_TO_SI:
+        raise UFDemoError(
+            RESPONSE_SEMANTICS_INVALID,
+            f"查表核不支持该单位：{unit!r}",
+            field_path=where,
+            actual=unit,
+            requirement=f"取值属于 {sorted(set(_UNIT_TO_SI))}",
+            suggestion="在 _UNIT_TO_SI 里登记该单位；**不要**默认按 1.0 处理（会静默错算）。",
+        )
+    return _UNIT_TO_SI[key]
+
+
 class TabulatedEventLaw:
     """逐事件**查表**去除核（U07）—— 用实测响应曲线驱动局部增量。
 
@@ -338,13 +370,25 @@ class TabulatedEventLaw:
         self.curve = curve
         self.method = str(method)
         self.unit_mode = unit_mode
+        # --- 单位换算（U07）---------------------------------------------------
+        # 曲线用**惯用单位**（J/cm²、µm），求解器内部用 **SI**（J/m²、m）。
+        # 在这里一次性建好两个因子，避免每次 increment 重算，也避免漏换算。
+        self.x_to_si = _unit_to_si_factor(
+            (curve.x_quantity or {}).get("unit"), where="curve.x_quantity.unit")
+        self.y_to_si = _unit_to_si_factor(
+            (curve.y_quantity or {}).get("unit"), where="curve.y_quantity.unit")
         self.depth_direction = (
             depth_direction or getattr(curve, "depth_direction", None) or "surface_normal"
         )
         self.assumptions = tuple(assumptions) if assumptions else self.DEFAULT_ASSUMPTIONS
 
         # --- 阈值规则：**默认拒绝**低于量程的点 -------------------------------
-        rule = dict(threshold_rule or {})
+        # 调用方没显式给时，用**曲线自带**的规则（U07）——
+        # 这样「下界以下怎么算」是曲线属性，跟着数据走，而不是求解器替它决定。
+        if threshold_rule is None:
+            rule = dict(getattr(curve, "threshold_rule", None) or {})
+        else:
+            rule = dict(threshold_rule)
         mode = str(rule.get("mode", "reject"))
         if mode not in ("reject", "zero_below"):
             raise UFDemoError(
@@ -430,11 +474,18 @@ class TabulatedEventLaw:
                 suggestion="关闭历史，或改用已标定的历史耦合核。",
             )
 
-        lo, hi = self.curve.valid_range
+        # --- 单位换算：曲线用惯用单位，输入是内部 SI ------------------------
+        # 曲线卡的 `valid_range` 与点位都是**曲线单位**（如 J/cm²）；
+        # 传进来的 `F` 是内部 **SI**（J/m²）。所有比较在 SI 下做，
+        # 查表时再折回曲线单位 —— 中间不做隐式换算。
+        lo_c, hi_c = self.curve.valid_range
+        lo, hi = lo_c * self.x_to_si, hi_c * self.x_to_si
         tol = 1e-9 * max(1.0, abs(lo), abs(hi))
         flat = F.ravel()
         below = flat < (lo - tol)
         above = flat > (hi + tol)
+        unit_txt = str((self.curve.x_quantity or {}).get("unit", ""))
+        si_txt = str((self.curve.x_quantity or {}).get("unit_si") or "SI 内部单位")
 
         # --- 越界：**绝不返回 0、绝不外推** ---------------------------------
         if bool(above.any()):
@@ -443,7 +494,8 @@ class TabulatedEventLaw:
                 "高于曲线有效区间上界：拒绝外推",
                 field_path="response.fluence",
                 actual=[float(v) for v in flat[above][:8]],
-                requirement=f"局部能流必须 ≤ {hi!r}",
+                requirement=(f"局部能流必须 ≤ {hi_c:g} {unit_txt}"
+                             f"（= {hi:g} {si_txt}）"),
                 suggestion=(
                     "上界之外没有实测依据，**不**外推、不钳到端点。"
                     "请收窄工况，或补充该能流区间的实测响应。"
@@ -456,7 +508,8 @@ class TabulatedEventLaw:
                 field_path="response.fluence",
                 actual=[float(v) for v in flat[below][:8]],
                 requirement=(
-                    f"局部能流必须 ≥ {lo!r}；除非曲线显式声明 threshold_rule="
+                    f"局部能流必须 ≥ {lo_c:g} {unit_txt}"
+                    f"（= {lo:g} {si_txt}）；除非曲线显式声明 threshold_rule="
                     "{'mode': 'zero_below', 'reason': ...}"
                 ),
                 suggestion=(
@@ -468,9 +521,10 @@ class TabulatedEventLaw:
         values = np.zeros_like(F)
         in_range = ~below  # above 已在上面抛错，走到这里就没有 above
         if bool(in_range.any()):
-            xs = [float(v) for v in flat[in_range]]
+            # SI → **曲线单位**（查表按卡上单位取值），结果再折回 SI。
+            xs_curve = [float(v) / self.x_to_si for v in flat[in_range]]
             # **复用查表**：保证与 tables.lookup 逐点一致，不存在第二套插值。
-            res = tables.lookup(self.curve, xs, method=self.method)
+            res = tables.lookup(self.curve, xs_curve, method=self.method)
             got = res.values
             if got is None or any(v is None for v in got):
                 raise UFDemoError(
@@ -480,7 +534,8 @@ class TabulatedEventLaw:
                     actual=None,
                     requirement="区间内查询必须返回数值",
                 )
-            values.ravel()[in_range] = np.asarray([float(v) for v in got], dtype=np.float64)
+            values.ravel()[in_range] = np.asarray(
+                [float(v) * self.y_to_si for v in got], dtype=np.float64)
 
         result = IncrementResult(
             output_semantics=SEMANTIC_EVENT_INCREMENT,
@@ -506,7 +561,8 @@ class TabulatedEventLaw:
         return result
 
 
-def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None):
+def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None,
+                    laser: Mapping[str, Any] | None = None):
     """由材料卡（或曲线）构造脉冲律。
 
     **按曲线类型分派**（U07 / F05）：
@@ -517,6 +573,10 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
       （**不静默退回对数律**，否则「接了曲线」是假的）；
     * 没传 ``curve`` → 维持原行为（:class:`FixedThresholdLogLaw`）。
 
+    ``laser`` 给定时用于**固定条件比对**（应在闸门里抛 ``CONDITION_MISMATCH``）。
+    **必须传运行时激光条件**，而不是材料卡的声明值 —— 否则「这条曲线适不适用于
+    本次运行」根本没被检查过。
+
     ``curve=None`` 时行为与改动前**逐位一致**，既有算例不受影响。
     """
     if curve is not None:
@@ -524,7 +584,9 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
             curve,
             unit_mode=getattr(unit, "mode", "SI"),
             depth_direction=getattr(curve, "depth_direction", None),
-            laser=(dict(getattr(material, "laser_conditions", {}) or {}) or None),
+            # 优先用调用方给的**运行时**条件；没给才退回材料卡声明值。
+            laser=(dict(laser) if laser is not None
+                   else (dict(getattr(material, "laser_conditions", {}) or {}) or None)),
         )
 
     r = dict(getattr(material, "response", {}) or {})

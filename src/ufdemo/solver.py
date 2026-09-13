@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .beam import BeamOptions, beam_patch
@@ -25,7 +26,13 @@ from .config import (
     SolverConfig,
     validate_run,
 )
-from .errors import NUMERIC_NONFINITE, RESPONSE_SEMANTICS_INVALID, RESOURCE_BUDGET_EXCEEDED, UFDemoError
+from .errors import (
+    CONFIG_INVALID,
+    NUMERIC_NONFINITE,
+    RESPONSE_SEMANTICS_INVALID,
+    RESOURCE_BUDGET_EXCEEDED,
+    UFDemoError,
+)
 from .metrics import RoiSpec, cross_section, domain_statistics, removal_volume, roi_statistics
 from .materials import CAP_EVENT_INCREMENT, MaterialSpec, build_watermark, resolve_material
 from .paths import PulseEvent, iter_events
@@ -174,6 +181,7 @@ def solve(
     progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
     *,
     material_dir: str | None = None,
+    curves_dir: str | None = None,
 ) -> RunResult:
     """执行一次求解。
 
@@ -318,7 +326,44 @@ def solve(
             # 每个暴露相各自的响应核；逐事件只调用当前相那一个
             phase_laws = structure.laws(unit_mode=config.unit.mode)
         else:
-            law = build_pulse_law(material, unit=config.unit)
+            # --- U07：真实数据驱动求解 ---------------------------------------
+            # `config.solver.response_curve` 非空时，逐事件核改由**实测曲线**
+            # 驱动（`TabulatedEventLaw`），而不是材料卡的解析对数律。
+            # 这是「真实数据 → 真实求解」的唯一入口。
+            response_curve_obj = None
+            curve_name = getattr(config.solver, "response_curve", None)
+            if curve_name:
+                if not curves_dir:
+                    raise UFDemoError(
+                        CONFIG_INVALID,
+                        "config.solver.response_curve 指定了曲线卡，但未提供 curves_dir",
+                        field_path="solver.response_curve",
+                        actual=curve_name,
+                        requirement="同时提供 curves_dir='data/curves'",
+                        suggestion="调用方（CLI/界面）需把曲线目录传进来。",
+                    )
+                from . import tables as _T  # noqa: PLC0415
+
+                curve_path = Path(curves_dir) / str(curve_name)
+                if not curve_path.exists():
+                    raise UFDemoError(
+                        CONFIG_INVALID,
+                        f"找不到响应曲线卡：{curve_name}",
+                        field_path="solver.response_curve",
+                        actual=str(curve_path),
+                        requirement="文件存在于 curves_dir 下",
+                    )
+                response_curve_obj = _T.load_curve(curve_path)
+            law = build_pulse_law(
+                material, unit=config.unit, curve=response_curve_obj,
+                # 用**运行时**激光条件做固定条件比对（不是材料卡的），
+                # 否则「曲线是否适用于本次运行」这件事根本没被检查。
+                laser={
+                    "wavelength_m": config.laser.wavelength_m,
+                    "pulse_duration_s": config.laser.pulse_duration_s,
+                    "repetition_rate_Hz": config.laser.repetition_rate_Hz,
+                },
+            )
 
     rois = [RoiSpec.from_dict(r, i, config.unit) for i, r in enumerate(config.output.roi or ())]
     cs_cfg = dict(config.output.cross_section or {}) if config.output.cross_section else None

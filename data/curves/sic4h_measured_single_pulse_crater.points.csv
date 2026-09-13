@@ -1,0 +1,7 @@
+# ufdemo curve points — 单位见同目录 *.curve.json 的 x_quantity/y_quantity
+# Micromachines 15(5):573 实验值（Figures 3 & 7 正文明确数值）；1030 nm / 300 fs / 单脉冲；未混入同文模型预测值
+x,y
+6.92,3.5e-07
+8.1,5.1e-07
+9.99,6.6e-07
+10.82,7.2e-07

@@ -239,10 +239,16 @@ def test_curves_payload_exposes_entry_class():
     for c in payload["curves"]:
         assert "entryClass" in c, f"{c.get('curveId')} 缺 entryClass"
         assert c["entryClass"] in ("measured", "fixture")
-    # 当前仓库三张卡都是 fixture（公式重算/人工解析/合成），
-    # 因此**不应**有任何卡片声称自己是实测数据
-    assert all(c["entryClass"] == "fixture" for c in payload["curves"]), (
-        "现有曲线卡都不是实测数据，不得标为 measured"
+    # U07 之后仓库里**同时**有 fixture 与 measured 两类卡：
+    # 三张 fixture（公式重算/人工解析/合成）+ 一张实测（SiC 单脉冲坑深）。
+    # 断言两类都存在，且**分类不靠猜**——由卡片显式声明。
+    classes = {c["entryClass"] for c in payload["curves"]}
+    assert classes == {"fixture", "measured"}, f"应有两类卡，实际 {classes}"
+    measured = [c for c in payload["curves"] if c["entryClass"] == "measured"]
+    assert measured, "实测卡应存在（U07 的 SiC 单脉冲坑深）"
+    # 实测卡必须真的能进事件核（否则"实测"两个字没有意义）
+    assert all(c["outputSemantics"] == "event_depth_increment" for c in measured), (
+        "实测卡的语义应是 event_depth_increment"
     )
 
 

@@ -96,13 +96,13 @@
 
         <div class="section-title">路径（首段）</div>
         <div class="form-grid cols-3">
-          <div class="field"><label>速度 (m/s)</label><input type="number" id="p-v" min="0" max="100" step="0.1"></div>
+          <div class="field"><label>速度 (mm/s)</label><input type="number" id="p-v" min="0" max="100000" step="1"></div>
           <div class="field"><label>起点 x (µm)</label><input type="number" id="p-x0" step="5"></div>
           <div class="field"><label>终点 x (µm)</label><input type="number" id="p-x1" step="5"></div>
         </div>
 
-        <div class="section-title">求解模式（批次 I：冻结几何批量）</div>
-        <p class="hint">分组把块内事件的光束与提交合并到块级；分相、历史耦合、动态角度与斜入射下会自动回退逐脉冲参考。</p>
+        <div class="section-title">求解模式（大算例加速）</div>
+        <p class="hint">把一批事件合并起来算，用来加速。若开了分相 / 历史 / 斜入射，会自动退回逐脉冲（更慢但更准）。</p>
         <div class="form-grid cols-3">
           <div class="field"><label for="p-mode">求解路径</label>
             <select id="p-mode">
@@ -121,8 +121,8 @@
           </div>
         </div>
 
-        <div class="section-title">几何修正（批次 J：斜入射 / 动态角度）</div>
-        <p class="hint">只做几何修正：未提供吸收依据时<strong>不预测吸收差异</strong>。n_z≥0.5、入射角≤60° 是软件展示范围，超出即停止并给出位置，不裁剪角度继续。</p>
+        <div class="section-title">几何修正（斜入射 / 表面倾角）</div>
+        <p class="hint">只修正几何（能量投影与厚度方向），<strong>不预测吸收差异</strong>。入射角超过 60° 会停下并说明位置，不会悄悄按小角度继续算。</p>
         <div class="form-grid cols-3">
           <div class="field"><label for="p-inc">入射角 (°)：相对光轴</label>
             <input type="number" id="p-inc" min="0" max="60" step="1" value="0">
@@ -132,8 +132,8 @@
           </div>
         </div>
 
-        <div class="section-title">受限阈值协议（批次 H）</div>
-        <p class="hint">超阈判定<strong>只用本事件入射能流</strong>，不用累计剂量；只出分类掩膜，<strong>不产生深度</strong>，也不代表任何热学量。</p>
+        <div class="section-title">阈值观测（只做标记）</div>
+        <p class="hint">只看<strong>本次</strong>能流是否超过阈值，不用累计量。结果是一张「超阈 / 未超阈」标记图，<strong>不代表去除深度</strong>，也不代表温度。</p>
         <div class="form-grid cols-2">
           <div class="field"><label for="p-thr-wrap">&nbsp;</label>
             <label class="check"><input type="checkbox" id="p-thr"> 开启协议</label>
@@ -176,8 +176,8 @@
     <!-- 参考评估器 -->
     <section class="tabpanel" id="tab-ref">
       <div class="card">
-        <h2>文献参考评估器（批次 D）</h2>
-        <p class="hint">只复现文献定义的公式与协议量：<strong>不求解网格</strong>，不产生形貌；平均率与累计深度不得进入逐事件主循环。</p>
+        <h2>文献参考评估器</h2>
+        <p class="hint">只复现论文里的公式与协议量，<strong>不出形貌</strong>。平均率、累计深度这类量不能用来算形貌。</p>
         <div class="control-row">
           <div class="field" style="min-width:280px">
             <label for="ref-case">参考算例</label>
@@ -193,8 +193,7 @@
     <section class="tabpanel" id="tab-table">
       <div class="card">
         <h2>查表（曲线插值，不触发求解）</h2>
-        <p class="hint">读取固定材料/波长/脉宽/历史协议下的一维响应曲线：默认<strong>分段线性</strong>；
-          越界返回状态与原因，<strong>低于量测区间不返回 0，也不外推或钳到端点</strong>。</p>
+        <p class="hint">读一条「输入 → 输出」曲线并查值。区间外会<strong>明确报错</strong>：<strong>不外推、不补 0、不钳到端点</strong>。</p>
 
         <div class="field" style="max-width:420px">
           <label for="t-curve">曲线卡（*.curve.json）</label>
@@ -232,15 +231,15 @@
       </div>
     </section>
 
-    <!-- 七材料能力入口（批次 H） -->
+    <!-- 材料能力清单 -->
     <section class="tabpanel" id="tab-caps">
       <div class="card">
         <h2>七材料能力入口（批次 H）</h2>
-        <p class="hint">三类条目的含义不同：<strong>opened</strong> = 已绑真实能力并查得可用；
-          <strong>blocked</strong> = 已绑红线拦截（实跑须抛期望错误码）；
-          <strong>deferred</strong> = 规格要求开放而实现<strong>尚未支持</strong>的缺口，<em>不得</em>读作已开放。</p>
+        <p class="hint">三类含义不同：<strong>可用</strong> = 已绑定且验证通过；
+          <strong>被拦</strong> = 有红线拦截（故意拒绝，实跑会抛错）；
+          <strong>未实现</strong> = 规格要求但代码还没做，<em>不是</em>已开放。</p>
         <div id="caps-summary"></div>
-        <div class="section-title">逐条核验结果（探针实跑）</div>
+        <div class="section-title">逐条核验结果（真实跑出来的）</div>
         <div id="caps-table" style="max-height:520px;overflow-y:auto"></div>
         <div id="caps-note" class="watermark"></div>
       </div>
@@ -284,8 +283,8 @@
           <div class="row">
             <div class="field"><label for="pe-power">功率 P（W）</label>
               <input type="number" id="pe-power" step="0.1" value="14.7"></div>
-            <div class="field"><label for="pe-speed">扫描速度 v（m/s）</label>
-              <input type="number" id="pe-speed" step="0.01" value="2.77"></div>
+            <div class="field"><label for="pe-speed">扫描速度 v（mm/s）</label>
+              <input type="number" id="pe-speed" step="1" value="2770"></div>
             <div class="field"><label for="pe-passes">遍数 N</label>
               <input type="number" id="pe-passes" step="1" value="117"></div>
             <button id="pe-run">预测（不触发求解）</button>
