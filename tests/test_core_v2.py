@@ -624,3 +624,133 @@ def test_baseline_does_not_modify_original_card():
                       pulse_duration_fs=500.0, holdout_groups=2, max_nfev=20)
     after = hashlib.sha256((ROOT / FIXTURE).read_bytes()).hexdigest()
     assert before == after, "反推过程改了原始材料卡 —— 参数化必须在内存里做"
+
+
+# ---------------------------------------------------------------------------
+# C5：h/N 目标筛选
+# ---------------------------------------------------------------------------
+
+#: 一个"能出深度"的参数化响应（避免依赖任何真实材料卡）
+_PLAN_OVERRIDE = {
+    "kind": "log_fixed", "output_semantics": "event_depth_increment",
+    "fluence_basis": "incident_peak_fluence", "depth_direction": "surface_normal",
+    "threshold_J_m2": 1.0e5, "delta_m": 1.0e-6,
+}
+
+
+def _plan_kw(**over):
+    kw = dict(
+        material_card_file=FIXTURE, region_um=(12.0, 12.0), dx_um=1.0,
+        pulse_duration_fs=500.0, repetition_rate_kHz=10.0, scan_speed_mm_s=50.0,
+        response_override=_PLAN_OVERRIDE,
+    )
+    kw.update(over)
+    return kw
+
+
+def test_plan_reports_infeasible_instead_of_fake_optimum():
+    """**无可行方案时必须如实返回原因**，不得硬给一个"最优标签"。"""
+    from ufdemo.planning import plan_for_target
+
+    # 目标定得极高 → 所有候选都达不到
+    res = plan_for_target(target_depth_um=1e5, tolerance_um=1.0, **_plan_kw())
+    assert res.recommended is None, "不该给出推荐"
+    assert res.infeasible_reason, "必须说明为什么没有方案"
+    assert "达不到" in res.infeasible_reason or "超过" in res.infeasible_reason
+    assert any("未给出推荐方案" in n for n in res.notes)
+
+
+def test_plan_returns_recommendation_when_feasible():
+    """有可行候选时给出推荐，且**按理想时间排序**（并列看均匀性）。"""
+    from ufdemo.planning import plan_for_target
+
+    # 放宽横向约束与容差，制造可行解
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_plan_kw(spacings_um=(4.0, 6.0), pass_counts=(1, 2)),
+    )
+    assert res.feasible_candidates, "放宽约束后应有可行候选"
+    assert res.recommended is not None
+    times = [c.ideal_time_s for c in res.feasible_candidates]
+    assert times == sorted(times), "可行候选应按理想时间升序"
+    assert res.infeasible_reason is None
+    # **不变量**：推荐必须就是列表第一项 —— 否则界面推荐与表格对不上
+    assert res.recommended is res.feasible_candidates[0]
+
+
+def test_candidate_metrics_declared_as_model_predictions():
+    """候选指标齐备，且 notes 明确覆盖/过切是**模型预测**。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(target_depth_um=5.0, tolerance_um=50.0,
+                          min_coverage=0.0, max_overcut_fraction=1.0,
+                          **_plan_kw(spacings_um=(4.0,), pass_counts=(1,)))
+    c = res.candidates[0]
+    assert c.mean_depth_um is not None and c.mean_depth_um > 0
+    assert c.coverage_fraction is not None and 0.0 <= c.coverage_fraction <= 1.0
+    assert c.over_depth_fraction is not None
+    assert c.under_depth_fraction is not None
+    assert c.depth_std_um is not None
+    text = " ".join(res.notes)
+    assert "模型预测" in text and "二维形貌验证" in text
+
+
+def test_candidate_focus_z_never_changes():
+    """**所有候选的焦点 Z 恒定**（含多遍候选）—— 不做层间调焦。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(target_depth_um=5.0, tolerance_um=50.0,
+                          min_coverage=0.0, max_overcut_fraction=1.0,
+                          **_plan_kw(spacings_um=(4.0, 6.0), pass_counts=(1, 3)))
+    for c in res.candidates:
+        zs = {s.start_xyz_m[2] for s in c.plan.segments} | {s.end_xyz_m[2] for s in c.plan.segments}
+        assert zs == {0.0}, f"h={c.spacing_um} N={c.pass_count} 的 Z 不是常量：{zs}"
+
+
+def test_plan_covers_full_search_grid():
+    """默认枚举 h={2,4,6,8,10} × N={1..5} = 25 个候选，**每个都真的跑过求解器**。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(target_depth_um=1e5, tolerance_um=1.0, **_plan_kw())
+    assert len(res.candidates) == 25
+    # 每个候选都有数值结果（说明真的求过解），而不是占位
+    solved = [c for c in res.candidates if c.mean_depth_um is not None]
+    assert len(solved) == 25, f"只有 {len(solved)} 个候选有数值结果"
+
+
+def test_plan_rejects_bad_candidate_inputs():
+    """非法输入必须报错（间距 0 / 遍数 0 / 速度 0）。"""
+    from ufdemo.planning import plan_for_target
+
+    for over in ({"spacings_um": (0.0,)}, {"pass_counts": (0,)}, {"scan_speed_mm_s": 0.0}):
+        with pytest.raises(UFDemoError):
+            plan_for_target(target_depth_um=5.0, tolerance_um=1.0, **_plan_kw(**over))
+
+
+def test_plan_uses_same_solver_as_calibration(tmp_path):
+    """规划与标定**共用同一条装配路径**（不另建求解器）。
+
+    做法：同一 (h,N) 分别走 `evaluate_candidate` 与 `predict_mean_depth`，
+    两者必须给出**相同**的均值深度。
+    """
+    from ufdemo.planning import evaluate_candidate
+    from ufdemo.calibration import ExperimentRow, PredictionSpec, predict_mean_depth
+
+    h, n = 4.0, 2
+    c = evaluate_candidate(
+        h, n, material_card_file=FIXTURE, region_um=(12.0, 12.0), dx_um=1.0,
+        pulse_duration_fs=500.0, repetition_rate_kHz=10.0, scan_speed_mm_s=50.0,
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        response_override=_PLAN_OVERRIDE,
+    )
+    row = ExperimentRow(sample_id="x", pulse_duration_fs=500.0, repetition_rate_kHz=10.0,
+                        scan_speed_mm_s=50.0, hatch_spacing_um=h, pass_count=n,
+                        mean_depth_um=0.0)
+    spec = PredictionSpec(material_card_file=FIXTURE, window_um=12.0, dx_um=1.0,
+                          response_override=_PLAN_OVERRIDE)
+    out = predict_mean_depth(row, spec=spec)
+    assert c.mean_depth_um == pytest.approx(out["predicted_depth_um"], rel=1e-9), (
+        "规划与标定算出的深度不一致 → 说明用了两套装配路径"
+    )
