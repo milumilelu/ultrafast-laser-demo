@@ -418,3 +418,209 @@ def test_invalid_plan_inputs_rejected():
                     scan_speed_mm_s=200.0)
         with pytest.raises(UFDemoError):
             serpentine_plan(**{**base, **kw})
+
+
+# ---------------------------------------------------------------------------
+# C2：上游轮廓适配与对照
+# ---------------------------------------------------------------------------
+
+
+def test_upstream_synthetic_case_roundtrip(tmp_path):
+    """虚拟上游样例能落盘/载入，且**明确标记为虚拟**。"""
+    from ufdemo.upstream import write_synthetic_upstream_case, load_upstream_case
+
+    jp, pp = write_synthetic_upstream_case(tmp_path, n_pulses=2, depth_um=9.0, radius_um=6.0)
+    assert jp.exists() and pp.exists()
+    prof, wnote = load_upstream_case(jp)
+    assert prof.is_synthetic is True, "虚拟输入必须自带标记，不得被读成真实上游结果"
+    assert prof.geometry == "axisymmetric_pit"
+    assert prof.center_depth_um == pytest.approx(9.0, rel=1e-6)
+    assert prof.n_pulses == 2
+    assert "sqrt(2)" in wnote or "1.414" in wnote, "必须给出半径定义换算提示"
+
+
+def test_upstream_rejects_geometry_mixing(tmp_path):
+    """**几何混用必须被拒**：轴对称坑 ↔ 单线横截面不可直接对照。"""
+    import json
+    from ufdemo.upstream import (
+        write_synthetic_upstream_case, load_upstream_case, compare_profiles,
+    )
+
+    jp, _ = write_synthetic_upstream_case(tmp_path, depth_um=9.0)
+    pit, _ = load_upstream_case(jp)
+    case = json.loads(jp.read_text(encoding="utf-8"))
+    case["geometry"] = "line_cross_section"
+    jp.write_text(json.dumps(case, ensure_ascii=False), encoding="utf-8")
+    line, _ = load_upstream_case(jp)
+    with pytest.raises(UFDemoError):
+        compare_profiles(pit, line)
+
+
+def test_upstream_metrics_are_computed_on_same_grid(tmp_path):
+    """对照指标在**同一重采样网格**上计算；自比时 RMSE 为 0。"""
+    from ufdemo.upstream import (
+        write_synthetic_upstream_case, load_upstream_case, compare_profiles,
+    )
+
+    jp, _ = write_synthetic_upstream_case(tmp_path, depth_um=9.0, radius_um=6.0)
+    prof, _ = load_upstream_case(jp)
+    m = compare_profiles(prof, prof)
+    assert m.profile_rmse_um == pytest.approx(0.0, abs=1e-12)
+    assert m.center_depth_upstream_um == pytest.approx(9.0, rel=1e-6)
+    assert m.width_upstream_um is not None and m.width_upstream_um > 0
+    assert m.area_upstream_um2 is not None and m.area_upstream_um2 > 0
+
+
+def test_upstream_reads_old_q4_columns(tmp_path):
+    """兼容旧 Q4 列名，且 ``target`` 与 ``actual_mesh`` **分开保留**。"""
+    import json
+    from ufdemo.upstream import load_upstream_case
+
+    (tmp_path / "profile.csv").write_text(
+        "r_um,target_depth_um,actual_mesh_depth_um\n"
+        "0.0,10.4,10.0\n1.0,8.3,8.0\n2.0,2.1,2.0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "upstream_case.json").write_text(json.dumps({
+        "case_id": "q4", "geometry": "axisymmetric_pit", "profile_file": "profile.csv",
+        "laser": {"spot_radius_m": 1e-6},
+    }, ensure_ascii=False), encoding="utf-8")
+    prof, _ = load_upstream_case(tmp_path / "upstream_case.json")
+    # 深度取 **actual_mesh**（真实几何），target 另存
+    assert prof.depth_um[0] == pytest.approx(10.0)
+    assert prof.target_depth_um is not None and prof.target_depth_um[0] == pytest.approx(10.4)
+    assert prof.center_depth_um == pytest.approx(10.0)
+
+
+def test_upstream_bad_geometry_declaration_rejected(tmp_path):
+    """非法/缺失几何类型必须报错 —— 不允许"猜"是坑还是线。"""
+    import json
+    from ufdemo.upstream import load_upstream_case
+
+    (tmp_path / "profile.csv").write_text("x_um,depth_um\n0,1\n", encoding="utf-8")
+    (tmp_path / "upstream_case.json").write_text(json.dumps({
+        "case_id": "x", "profile_file": "profile.csv",
+    }), encoding="utf-8")
+    with pytest.raises(UFDemoError):
+        load_upstream_case(tmp_path / "upstream_case.json")
+
+
+# ---------------------------------------------------------------------------
+# C3：从实验 CSV 反推基线（Fth、δ）
+# ---------------------------------------------------------------------------
+
+
+def _closure_rows(true_fth: float, true_delta: float, *, window_um=8.0, dx_um=1.0):
+    """用已知 (Fth, δ) 生成一组"实验值"，用于闭合验证。"""
+    from ufdemo.calibration import PredictionSpec as PS
+
+    base = PS(material_card_file=FIXTURE, window_um=window_um, dx_um=dx_um)
+    override = {
+        "kind": "log_fixed", "output_semantics": "event_depth_increment",
+        "fluence_basis": "incident_peak_fluence", "depth_direction": "surface_normal",
+        "threshold_J_m2": true_fth, "delta_m": true_delta,
+    }
+    rows = []
+    for f, h, n in ((2.0, 4.0, 1), (2.0, 8.0, 3), (2.0, 6.0, 2),
+                    (10.0, 4.0, 2), (10.0, 8.0, 1), (10.0, 6.0, 3)):
+        r = ExperimentRow(sample_id=f"F{f:g}-h{h:g}-N{n}", pulse_duration_fs=500.0,
+                          repetition_rate_kHz=f, scan_speed_mm_s=50.0,
+                          hatch_spacing_um=h, pass_count=n, mean_depth_um=1.0)
+        sp = PS(material_card_file=base.material_card_file, window_um=window_um, dx_um=dx_um,
+                response_override=override)
+        r.mean_depth_um = predict_mean_depth(r, spec=sp)["predicted_depth_um"]
+        rows.append(r)
+    return base, rows
+
+
+def test_baseline_closure_recovers_known_parameters():
+    """**闭合验证**：数据由同一模型生成时，反推必须能恢复真值。
+
+    这条是 C3 的核心正确性证据 —— 它把"代码有问题"和"模型/数据不够"
+    这两件事分开：闭合能精确恢复，说明机制对；真实数据误差大，
+    那是模型形式/数据的问题，不是实现 bug。
+    """
+    from ufdemo.calibration import identify_baseline
+
+    TRUE_FTH, TRUE_DELTA = 1.0e5, 1.0e-6
+    spec, rows = _closure_rows(TRUE_FTH, TRUE_DELTA)
+    est = identify_baseline(rows, spec=spec, material_family="closure",
+                            pulse_duration_fs=500.0, holdout_groups=2, max_nfev=40)
+    assert est.delta_m == pytest.approx(TRUE_DELTA, rel=1e-3)
+    assert est.threshold_J_m2 == pytest.approx(TRUE_FTH, rel=1e-3)
+
+
+def test_baseline_requires_multiple_frequencies():
+    """**单一频率必须被拒**：F 固定时 Fth 与 δ 共线，两个参数定不出来。"""
+    from ufdemo.calibration import identify_baseline
+
+    spec, rows = _closure_rows(1.0e5, 1.0e-6)
+    single = [r for r in rows if r.repetition_rate_kHz == 2.0]
+    # 补几行同频率的，凑够 MIN_ROWS
+    extra = [ExperimentRow(sample_id=f"X{i}", pulse_duration_fs=500.0,
+                           repetition_rate_kHz=2.0, scan_speed_mm_s=50.0,
+                           hatch_spacing_um=h, pass_count=n, mean_depth_um=1.0)
+             for i, (h, n) in enumerate(((3.0, 1), (5.0, 2), (7.0, 3)))]
+    with pytest.raises(UFDemoError) as ei:
+        identify_baseline(single + extra, spec=spec, pulse_duration_fs=500.0)
+    assert "频率" in str(ei.value)
+
+
+def test_baseline_drops_nonpositive_rows_and_lists_them():
+    """均值 ≤ 0 的行被剔除**并列出来**（不强行拟合）。"""
+    from ufdemo.calibration import select_baseline_window
+
+    base = dict(pulse_duration_fs=500.0, repetition_rate_kHz=2.0,
+                scan_speed_mm_s=50.0, hatch_spacing_um=4.0, pass_count=1)
+    rows = [
+        ExperimentRow(sample_id="ok", mean_depth_um=5.0, **base),
+        ExperimentRow(sample_id="neg", mean_depth_um=-1.2, **base),
+        ExperimentRow(sample_id="zero", mean_depth_um=0.0, **base),
+    ]
+    kept, dropped = select_baseline_window(rows, pulse_duration_fs=500.0)
+    assert [r.sample_id for r in kept] == ["ok"]
+    assert {d["sampleId"] for d in dropped} == {"neg", "zero"}
+    assert all("非正" in d["reason"] for d in dropped)
+
+
+def test_baseline_split_has_no_leakage():
+    """反推的 train/holdout 划分**不跨工况组**（含频率）。"""
+    from ufdemo.calibration import _group_split_rows
+
+    spec, rows = _closure_rows(1.0e5, 1.0e-6)
+    tr, ho, info = _group_split_rows(rows, holdout_groups=2, seed=1)
+    assert info["leakage_groups"] == []
+    assert {r.condition_key for r in tr} & {r.condition_key for r in ho} == set()
+
+
+def test_baseline_estimate_marks_evidence_status(tmp_path):
+    """落盘的基线必须标**工程有效**（不是独立实测常数），并保留来源。"""
+    from ufdemo.calibration import identify_baseline, save_baseline, baseline_to_card_patch
+    import json as _json
+
+    spec, rows = _closure_rows(1.0e5, 1.0e-6)
+    est = identify_baseline(rows, spec=spec, material_family="closure",
+                            pulse_duration_fs=500.0, holdout_groups=2, max_nfev=40)
+    p = save_baseline(est, tmp_path / "baseline.json")
+    d = _json.loads(p.read_text(encoding="utf-8"))
+    assert d["evidenceStatus"] == "engineering_effective_from_experiment"
+    assert d["nTrain"] > 0
+    assert d["frequencySpanHz"] and len(d["frequencySpanHz"]) >= 2
+
+    patch = baseline_to_card_patch(est)
+    assert patch["_provenance"]["method"] == "identify_baseline_from_experiment_csv"
+    assert "非独立实测常数" in patch["_provenance"]["note"]
+
+
+def test_baseline_does_not_modify_original_card():
+    """反推**不得**改动磁盘上的原始材料卡（用一个字节对比）。"""
+    import hashlib
+
+    spec, rows = _closure_rows(1.0e5, 1.0e-6)
+    from ufdemo.calibration import identify_baseline
+
+    before = hashlib.sha256((ROOT / FIXTURE).read_bytes()).hexdigest()
+    identify_baseline(rows, spec=spec, material_family="closure",
+                      pulse_duration_fs=500.0, holdout_groups=2, max_nfev=20)
+    after = hashlib.sha256((ROOT / FIXTURE).read_bytes()).hexdigest()
+    assert before == after, "反推过程改了原始材料卡 —— 参数化必须在内存里做"

@@ -1,0 +1,48 @@
+{
+  "schema": "ufdemo.baseline_estimate/1",
+  "materialFamily": "AlSiC",
+  "pulseDurationFs": 223.0,
+  "thresholdJm2": 78496.26958124377,
+  "thresholdJcm2": 7.849626958124378,
+  "deltaM": 3.6524720632752554e-06,
+  "deltaNm": 3652.4720632752556,
+  "nTrain": 21,
+  "nHoldout": 3,
+  "nDropped": 0,
+  "trainMaeUm": 10.29473605847608,
+  "trainMedianRelErr": 0.43737342878109525,
+  "holdoutMaeUm": 3.847865135768972,
+  "holdoutMedianRelErr": 0.5873252344980104,
+  "frequencySpanHz": [
+    2000.0,
+    5000.0,
+    10000.0,
+    20000.0,
+    40000.0
+  ],
+  "identifiability": {
+    "delta_x2": 1.1518090148147613,
+    "fth_x2": 0.23892310988846324,
+    "note": "相对幅度越大越可辨识；两者接近说明参数耦合。",
+    "split": {
+      "n_rows": 24,
+      "n_groups": 24,
+      "n_train": 21,
+      "n_holdout": 3,
+      "leakage_groups": [],
+      "seed": 20260913
+    }
+  },
+  "droppedRows": [],
+  "notes": [
+    "反推值是**工程有效参数**，不是独立实测的材料常数。",
+    "只有**留出集**误差才说明能否迁移；训练集误差是拟合优度。",
+    "训练集覆盖 5 个频率档（全部 5 档）—— 跨频率才能解耦 Fth 与 δ。",
+    "与 C4 的标定增益 a **不同时放开**（两者都控幅度，会互相抵消）。"
+  ],
+  "sourceFiles": [
+    "tests/fixtures/analytic_fixture.json"
+  ],
+  "codeVersion": "0.9.1",
+  "evidenceStatus": "engineering_effective_from_experiment"
+}

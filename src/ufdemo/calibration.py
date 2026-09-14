@@ -362,6 +362,9 @@ class PredictionSpec:
     window_um: float = 40.0        # **代表窗口**边长（μm）
     dx_um: float = 0.2             # 网格步长
     observation: ObservationSpec = field(default_factory=ObservationSpec)
+    #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
+    #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
+    response_override: Mapping[str, Any] | None = None
 
     def describe_approximation(self) -> str:
         return (
@@ -466,7 +469,15 @@ def predict_mean_depth(
 
     cfg = build_row_config(row, spec=spec, gain=gain, bg=bg)
     card_path = Path(cfg.material_card_file)
-    material = load_material_card(card_path)
+    if spec.response_override:
+        # C3 反推：参数化材料卡在**内存**里生效，磁盘上的原始卡一个字节都不改。
+        from .materials import MaterialSpec
+
+        raw = json.loads(card_path.read_text(encoding="utf-8"))
+        raw["response"] = {**(raw.get("response") or {}), **dict(spec.response_override)}
+        material = MaterialSpec.from_dict(raw)
+    else:
+        material = load_material_card(card_path)
 
     res = solve(cfg, material)
     if res.status != "completed" or res.surface is None:
@@ -790,3 +801,337 @@ def load_calibration(path: str | Path) -> dict[str, Any]:
             field_path="calibration.gain", actual=g, requirement="正有限数",
         )
     return d
+
+
+# ---------------------------------------------------------------------------
+# C3：从实验 CSV 反推基线（Fth、δ）
+# ---------------------------------------------------------------------------
+#
+# 为什么必须**跨频率**才能反推：
+# 同一 (脉宽, 频率) 下峰值能流 F 是**固定的**，此时 ln(F/Fth) 只随 Fth 整体平移，
+# 与 δ 完全共线 —— 只能定出乘积 δ·ln(F/Fth)，两个参数各自定不出来。
+# 只有让 F 跨若干档，Fth 才可辨识。实测验证：单频率组内拟合出的参数
+# 在别的频率上系统性偏离；跨 5 档频率则能同时定住两者。
+#
+# 关键边界（任务书 §4）：
+# * 反推出的 Fth/δ 是**有效参数**（engineering-effective），不是独立实测材料常数；
+# * **拟合用与检查用的工况必须分开**（按工况组划分），否则是自证；
+# * 与 C4 的 a **不同时放开**：这里是先定基线，a 留到标定阶段。
+
+#: 单脉宽反推时的最少工况数（少于这个数不给结论）。
+MIN_ROWS_FOR_BASELINE = 6
+
+
+def select_baseline_window(
+    rows: Sequence[ExperimentRow], *, pulse_duration_fs: float,
+    drop_negative: bool = True,
+) -> tuple[list[ExperimentRow], list[dict[str, Any]]]:
+    """挑出**同一脉宽**的工况，作为一次反推的窗口。
+
+    ``drop_negative=True`` 时剔除均值 ≤ 0 的行 —— 纯去除模型无法解释非正去除，
+    把它们混进去会**把基线往错误方向拉**（任务书 §5.2：单独报告，不强行拟合）。
+    被剔除的行会如实返回，供报告列出。
+    """
+    kept: list[ExperimentRow] = []
+    dropped: list[dict[str, Any]] = []
+    for r in rows:
+        if abs(r.pulse_duration_fs - float(pulse_duration_fs)) > 1e-9:
+            continue
+        if drop_negative and r.mean_depth_um <= 0:
+            dropped.append({
+                "sampleId": r.sample_id, "meanDepthUm": r.mean_depth_um,
+                "reason": "均值非正：纯去除模型无法解释，未参与基线反推",
+            })
+            continue
+        kept.append(r)
+    return kept, dropped
+
+
+def _group_split_rows(
+    rows: Sequence[ExperimentRow], *, holdout_groups: int, seed: int,
+) -> tuple[list[ExperimentRow], list[ExperimentRow], dict[str, Any]]:
+    """按**全工况指纹**（含频率）分组划分。
+
+    ⚠️ 与 ``group_split`` 的区别：这里的分组键必须含频率 ——
+    跨频率反推时若把同一频率的行拆到两侧，留出集里就没有新的 F 档，
+    检查会退化成"同 F 下的插值"，看不出基线是否真的可迁移。
+    """
+    by: dict[tuple, list[ExperimentRow]] = {}
+    for r in rows:
+        by.setdefault(r.condition_key, []).append(r)
+    keys = sorted(by.keys(), key=lambda k: str(k))
+    info: dict[str, Any] = {"n_rows": len(rows), "n_groups": len(keys)}
+    if len(keys) <= 1:
+        return list(rows), [], {**info, "note": "只有 1 个工况组，无法留出"}
+    import random
+
+    rng = random.Random(seed)
+    sh = keys[:]
+    rng.shuffle(sh)
+    n_hold = max(1, min(int(holdout_groups), len(keys) - 1))
+    hold_keys = set(sh[:n_hold])
+    train = [r for k in keys if k not in hold_keys for r in by[k]]
+    hold = [r for k in keys if k in hold_keys for r in by[k]]
+    info.update({
+        "n_train": len(train), "n_holdout": len(hold),
+        "leakage_groups": sorted(str(k) for k in
+                                 ({r.condition_key for r in train} & {r.condition_key for r in hold})),
+        "seed": seed,
+    })
+    return train, hold, info
+
+
+@dataclass
+class BaselineEstimate:
+    """从实验 CSV 反推出的**有效基线**（engineering-effective）。
+
+    ⚠️ 不是独立实测的材料常数：它来自对**同批实验**的拟合，
+    所以只有**留出集**上的误差才说明它能否迁移。
+    """
+
+    material_family: str
+    pulse_duration_fs: float
+    threshold_J_m2: float
+    delta_m: float
+    n_train: int = 0
+    n_holdout: int = 0
+    n_dropped: int = 0
+    train_mae_um: float | None = None
+    train_median_rel: float | None = None
+    holdout_mae_um: float | None = None
+    holdout_median_rel: float | None = None
+    frequency_span_Hz: tuple[float, ...] = ()
+    identifiability: Mapping[str, Any] = field(default_factory=dict)
+    dropped_rows: tuple[Mapping[str, Any], ...] = ()
+    notes: tuple[str, ...] = ()
+    source_files: tuple[str, ...] = ()
+    code_version: str = ""
+
+    @property
+    def threshold_J_cm2(self) -> float:
+        return self.threshold_J_m2 / 1e4
+
+    @property
+    def delta_nm(self) -> float:
+        return self.delta_m * 1e9
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "ufdemo.baseline_estimate/1",
+            "materialFamily": self.material_family,
+            "pulseDurationFs": self.pulse_duration_fs,
+            "thresholdJm2": self.threshold_J_m2,
+            "thresholdJcm2": self.threshold_J_cm2,
+            "deltaM": self.delta_m,
+            "deltaNm": self.delta_nm,
+            "nTrain": self.n_train,
+            "nHoldout": self.n_holdout,
+            "nDropped": self.n_dropped,
+            "trainMaeUm": self.train_mae_um,
+            "trainMedianRelErr": self.train_median_rel,
+            "holdoutMaeUm": self.holdout_mae_um,
+            "holdoutMedianRelErr": self.holdout_median_rel,
+            "frequencySpanHz": list(self.frequency_span_Hz),
+            "identifiability": dict(self.identifiability),
+            "droppedRows": [dict(d) for d in self.dropped_rows],
+            "notes": list(self.notes),
+            "sourceFiles": list(self.source_files),
+            "codeVersion": self.code_version,
+            "evidenceStatus": "engineering_effective_from_experiment",
+        }
+
+
+def identify_baseline(
+    rows: Sequence[ExperimentRow],
+    *,
+    spec: PredictionSpec,
+    material_family: str = "",
+    pulse_duration_fs: float | None = None,
+    holdout_groups: int = 3,
+    seed: int = 20260913,
+    threshold_bounds_J_m2: tuple[float, float] = (1e2, 1e7),
+    delta_bounds_m: tuple[float, float] = (1e-9, 1e-4),
+    residual_scale_um: float = 1.0,
+    max_nfev: int = 60,
+    bg: Any | None = None,
+) -> BaselineEstimate:
+    """反推有效阈值 ``Fth`` 与有效去除尺度 ``δ``。
+
+    拟合在 **log 空间**做（深度跨 2–3 个量级，线性空间里小值会被淹没）：
+    ``resid = [ln(D_pred) - ln(D_exp)] / s``。
+
+    用 SciPy ``least_squares``（有边界 + ``soft_l1`` 抗离群），不自造优化器。
+    """
+    try:
+        import numpy as np
+        from scipy.optimize import least_squares
+    except ImportError as exc:  # pragma: no cover
+        raise UFDemoError(
+            CONFIG_INVALID, "基线反推需要 SciPy",
+            field_path="baseline", actual=None, requirement="安装 scipy",
+        ) from exc
+
+    if pulse_duration_fs is None:
+        cands = sorted({r.pulse_duration_fs for r in rows})
+        if not cands:
+            raise UFDemoError(
+                CONFIG_INVALID, "没有可用工况",
+                field_path="baseline.rows", actual=0, requirement="≥ 1 行",
+            )
+        pulse_duration_fs = cands[0]
+
+    win, dropped = select_baseline_window(rows, pulse_duration_fs=pulse_duration_fs)
+    if len(win) < MIN_ROWS_FOR_BASELINE:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            f"脉宽 {pulse_duration_fs:g} fs 的可用工况不足（{len(win)} < {MIN_ROWS_FOR_BASELINE}）",
+            field_path="baseline.rows", actual=len(win),
+            requirement=f"≥ {MIN_ROWS_FOR_BASELINE} 行",
+            suggestion="换一个脉宽，或补数据；**不得**用相近脉宽凑。",
+        )
+
+    freqs = tuple(sorted({r.repetition_rate_kHz * 1e3 for r in win}))
+    train, hold, split_info = _group_split_rows(win, holdout_groups=holdout_groups, seed=seed)
+    bg = bg or load_shared_background()
+
+    # 反推**必须跨频率**：单一 F 档时 Fth 与 δ 共线，定不出两个参数。
+    if len({r.repetition_rate_kHz for r in train}) < 2:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "训练集只有单一重复频率，无法同时定出 Fth 与 δ",
+            field_path="baseline.frequency_span",
+            actual=sorted({r.repetition_rate_kHz for r in train}),
+            requirement="≥ 2 个不同重复频率（否则 ln(F/Fth) 与 δ 共线）",
+            suggestion="把该脉宽下的多个频率都放进训练集。",
+        )
+
+    def predict_all(fth: float, delta: float, set_rows: Sequence[ExperimentRow]) -> list[float | None]:
+        sp = PredictionSpec(
+            material_card_file=spec.material_card_file,
+            window_um=spec.window_um, dx_um=spec.dx_um,
+            observation=spec.observation,
+            response_override={
+                "kind": "log_fixed",
+                "output_semantics": "event_depth_increment",
+                "fluence_basis": "incident_peak_fluence",
+                "depth_direction": "surface_normal",
+                "threshold_J_m2": float(fth),
+                "delta_m": float(delta),
+            },
+        )
+        out: list[float | None] = []
+        for r in set_rows:
+            res = predict_mean_depth(r, spec=sp, gain=1.0, bg=bg)
+            out.append(res.get("predicted_depth_um") if res.get("ok") else None)
+        return out
+
+    def residual(x: Any) -> Any:
+        fth = math.exp(float(x[0]))       # 在 log 空间拟合：两个量都跨若干数量级
+        delta = math.exp(float(x[1]))
+        preds = predict_all(fth, delta, train)
+        rs = []
+        for p, r in zip(preds, train):
+            if p is None or p <= 0:
+                # 预测不出（条件不匹配/阈值以上无去除）→ 给一个**明确的大残差**，
+                # 不静默当 0，也不剔除 —— 否则优化器会往"预测全为零"的方向跑。
+                rs.append(math.log(1e6))
+                continue
+            rs.append(math.log(p) - math.log(r.mean_depth_um))
+        return np.asarray(rs, dtype=float)
+
+    x0 = np.asarray([math.log(1e5), math.log(3.9e-7)])   # 初值：10 J/cm²、390 nm
+    lo = np.asarray([math.log(threshold_bounds_J_m2[0]), math.log(delta_bounds_m[0])])
+    hi = np.asarray([math.log(threshold_bounds_J_m2[1]), math.log(delta_bounds_m[1])])
+    sol = least_squares(residual, x0=x0, bounds=(lo, hi), loss="soft_l1", max_nfev=max_nfev)
+    fth = math.exp(float(sol.x[0]))
+    delta = math.exp(float(sol.x[1]))
+
+    def metrics(set_rows: Sequence[ExperimentRow]) -> tuple[float | None, float | None]:
+        preds = predict_all(fth, delta, set_rows)
+        pairs = [(p, r.mean_depth_um) for p, r in zip(preds, set_rows)
+                 if p is not None and r.mean_depth_um > 0]
+        if not pairs:
+            return None, None
+        mae = sum(abs(p - e) for p, e in pairs) / len(pairs)
+        rel = sorted(abs(p - e) / e for p, e in pairs)
+        med = rel[len(rel) // 2] if len(rel) % 2 else 0.5 * (rel[len(rel) // 2 - 1] + rel[len(rel) // 2])
+        return float(mae), float(med)
+
+    tr_mae, tr_rel = metrics(train)
+    ho_mae, ho_rel = (metrics(hold) if hold else (None, None))
+
+    # 参数敏感性：报告 d(深度)/d(δ) 与 d/d(Fth) 的相对幅度，说明可辨识性
+    base_pred = predict_all(fth, delta, train[:3])
+    sens: dict[str, Any] = {}
+    for tag, f_mul, d_mul in (("delta_x2", 1.0, 2.0), ("fth_x2", 2.0, 1.0)):
+        alt = predict_all(fth * f_mul, delta * d_mul, train[:3])
+        diffs = [abs((b or 0) - (a or 0)) / (abs(b) + 1e-12)
+                 for a, b in zip(alt, base_pred) if b]
+        sens[tag] = float(sum(diffs) / len(diffs)) if diffs else None
+    sens["note"] = "相对幅度越大越可辨识；两者接近说明参数耦合。"
+
+    notes = [
+        "反推值是**工程有效参数**，不是独立实测的材料常数。",
+        "只有**留出集**误差才说明能否迁移；训练集误差是拟合优度。",
+        f"训练集覆盖 {len({r.repetition_rate_kHz for r in train})} 个频率档"
+        f"（全部 {len(freqs)} 档）—— 跨频率才能解耦 Fth 与 δ。",
+        "与 C4 的标定增益 a **不同时放开**（两者都控幅度，会互相抵消）。",
+    ]
+    if dropped:
+        notes.append(f"{len(dropped)} 行因均值非正被排除，已列出（不参与拟合）。")
+    if not hold:
+        notes.append("未能划分留出集：本结论**不构成**可迁移性证据。")
+
+    from . import __version__
+
+    return BaselineEstimate(
+        material_family=material_family,
+        pulse_duration_fs=float(pulse_duration_fs),
+        threshold_J_m2=fth,
+        delta_m=delta,
+        n_train=len(train),
+        n_holdout=len(hold),
+        n_dropped=len(dropped),
+        train_mae_um=tr_mae, train_median_rel=tr_rel,
+        holdout_mae_um=ho_mae, holdout_median_rel=ho_rel,
+        frequency_span_Hz=freqs,
+        identifiability={**sens, "split": split_info},
+        dropped_rows=tuple(dropped),
+        notes=tuple(notes),
+        source_files=(spec.material_card_file,),
+        code_version=str(__version__),
+    )
+
+
+def save_baseline(est: BaselineEstimate, path: str | Path) -> Path:
+    """落盘基线估计（**不覆写任何原始材料卡**）。"""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(est.to_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return p
+
+
+def baseline_to_card_patch(est: BaselineEstimate) -> dict[str, Any]:
+    """把基线估计转成可以合并进材料卡的 ``response`` patch。
+
+    ⚠️ 这只是**候选**：``evidence_status`` 必须由人工确认后才能升级，
+    本函数不替人做这个决定，因此返回的 patch 里显式标注来源。
+    """
+    return {
+        "kind": "log_fixed_effective",
+        "output_semantics": "event_depth_increment",
+        "fluence_basis": "incident_peak_fluence",
+        "depth_direction": "surface_normal",
+        "threshold_J_m2": est.threshold_J_m2,
+        "threshold_kind": "engineering_effective_from_experiment",
+        "delta_m": est.delta_m,
+        "_provenance": {
+            "method": "identify_baseline_from_experiment_csv",
+            "pulse_duration_fs": est.pulse_duration_fs,
+            "n_train": est.n_train,
+            "n_holdout": est.n_holdout,
+            "holdout_median_rel_err": est.holdout_median_rel,
+            "note": "工程有效参数（对同批实验拟合所得），非独立实测常数；"
+                    "不可直接当作材料卡已标定，需人工确认后才可升级证据状态。",
+        },
+    }

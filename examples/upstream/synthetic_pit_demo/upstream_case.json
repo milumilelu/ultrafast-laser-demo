@@ -1,0 +1,26 @@
+{
+  "schema": "ufdemo.upstream_case/1",
+  "case_id": "synthetic_pit_N2",
+  "is_synthetic": true,
+  "synthetic_note": "**虚拟输入**（非真实上游结果）：仅用于展示与端到端测试。任何由它得出的对照结论都不得当作上游验证。",
+  "geometry": "axisymmetric_pit",
+  "x_axis": "r",
+  "depth_sign": "positive_is_removal",
+  "unit_note": "r_um（径向，**不是扫描方向**）；深度 μm",
+  "n_pulses": 2,
+  "n_passes": 1,
+  "material_family": "SiC",
+  "material_grade": null,
+  "laser": {
+    "wavelength_m": 1.03e-06,
+    "pulse_duration_s": 3e-13,
+    "spot_radius_m": 1e-06,
+    "spot_radius_definition": "exp[-2r^2/w^2]"
+  },
+  "focus": {
+    "z_focus": "original_surface",
+    "defocus": "ignored"
+  },
+  "upstream_version": "synthetic",
+  "profile_file": "profile.csv"
+}
