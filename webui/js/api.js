@@ -76,6 +76,14 @@ const API = {
   guardDepthExport(unitSystem, filename) {
     return this.post("/api/guard-depth-export", { unitSystem, filename });
   },
+
+  /* ---- V2（C2–C5）：三工作区 ---- */
+  experimentTables() { return this.get("/api/experiment-tables"); },
+  baselines() { return this.get("/api/baselines"); },
+  upstreamCases() { return this.get("/api/upstream"); },
+  calibrate(body) { return this.post("/api/calibrate", body); },
+  plan(body) { return this.post("/api/plan", body); },
+  upstreamCompare(body) { return this.post("/api/upstream-compare", body); },
 };
 
 /* ---------------- 契约适配 ---------------- */

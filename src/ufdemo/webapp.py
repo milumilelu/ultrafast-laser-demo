@@ -27,6 +27,7 @@ import mimetypes
 import sys
 import threading
 import traceback
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,12 @@ class AppContext:
         from . import default_measured_dir as _dmd
 
         self.measured_dir = Path(measured_dir) if measured_dir is not None else _dmd()
+        # V2（C2–C5）：三工作区要用到的目录。
+        # · 实验 CSV 常在**仓库外**（上层 `数据/`）→ 不存在时如实报"未找到"，不伪造；
+        # · 基线候选与上游样例在仓库内。
+        self.experiment_dir = self.project_root.parent / "数据"
+        self.baselines_dir = self.project_root / "data" / "baselines"
+        self.upstream_dir = self.project_root / "examples" / "upstream"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -290,6 +297,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
         elif path == "/api/diamond-evaluator":
             # U06：过程响应评估器摘要（支持范围 + 三档指标 + 门槛判定）。
             self._send_json(W.diamond_evaluator_payload(ctx.measured_dir))
+        elif path == "/api/shared-background":
+            self._send_json(W.shared_background_payload())
+        elif path == "/api/pulse-energy":
+            q = urllib.parse.urlparse(self.path).query
+            f = float((urllib.parse.parse_qs(q).get("f") or ["0"])[0] or 0)
+            self._send_json(W.pulse_energy_payload(f))
+        elif path == "/api/experiment-tables":
+            self._send_json(W.experiment_tables_payload(self.ctx.experiment_dir))
+        elif path == "/api/baselines":
+            self._send_json(W.baselines_payload(self.ctx.baselines_dir))
+        elif path == "/api/upstream":
+            self._send_json(W.upstream_payload(self.ctx.upstream_dir))
         elif path == "/api/references":
             self._send_json(W.references_payload(ctx.examples_dir))
         elif path == "/api/runs":
@@ -448,6 +467,21 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     ctx.examples_dir, str(case), project_root=ctx.project_root
                 )
             )
+        elif path == "/api/calibrate":
+            body = self._read_body()
+            from .webcontract import calibrate_payload as _cal
+
+            self._send_json(_cal(body, project_root=self.ctx.project_root))
+        elif path == "/api/plan":
+            body = self._read_body()
+            from .webcontract import plan_payload as _plan
+
+            self._send_json(_plan(body, project_root=self.ctx.project_root))
+        elif path == "/api/upstream-compare":
+            body = self._read_body()
+            from .webcontract import upstream_compare_payload as _cmp
+
+            self._send_json(_cmp(body, project_root=self.ctx.project_root))
         elif path == "/api/material-entries":
             # 七材料能力入口（批次 H）：逐条实跑探针，可能较慢；单独端点便于按需请求
             self._send_json(W.material_entries_payload(ctx.material_dir))

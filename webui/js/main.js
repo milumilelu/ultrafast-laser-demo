@@ -81,183 +81,11 @@ function mulberry32(seed) {
 }
 
 /* ============================================================
- * 内置模拟求解器（仅演示，非真实物理求解）
+ * 说明：本文件**不含**任何模拟/假数据求解器。
+ * 早期版本曾内置一个 `mockSolve()`，它在主流程里从未被调用，
+ * 且容易让人误以为界面在跑真实物理 —— 已按任务书 §7.2 删除。
+ * 现在唯一的求解入口是后端 `POST /api/solve`（真实求解器）。
  * ============================================================ */
-
-function mockSolve(params, material, runMode, opts = {}) {
-  const normalized = !material.physical;
-  const nx = Math.min(201, Math.max(3, params.nx | 0));
-  const ny = Math.min(201, Math.max(3, params.ny | 0));
-  const dx = params.dx, dy = params.dy;
-  const xs = new Float64Array(nx), ys = new Float64Array(ny);
-  for (let i = 0; i < nx; i++) xs[i] = (i - (nx - 1) / 2) * dx;
-  for (let j = 0; j < ny; j++) ys[j] = (j - (ny - 1) / 2) * dy;
-
-  /* 脉冲序列 */
-  let centers = [];
-  const v = params.v, f = Math.max(1e-9, params.f);
-  if (v > 0 && params.x1 !== params.x0) {
-    const spacingUm = (v / f) * 1e6;
-    const L = Math.abs(params.x1 - params.x0);
-    let n = Math.min(400, Math.max(1, Math.floor(L / Math.max(spacingUm, 1e-6)) + 1));
-    for (let k = 0; k < n; k++) centers.push(params.x0 + ((params.x1 - params.x0) * k) / Math.max(1, n - 1));
-  } else {
-    for (let k = 0; k < 100; k++) centers.push(params.x0);
-  }
-  const nPulses = centers.length;
-
-  /* 峰值能流 */
-  let F0, FthBase, deltaEff, fluenceUnit, depthUnit, lengthUnit;
-  if (normalized) {
-    F0 = (params.E * 1e3) / (2 * Math.PI * params.w0 * params.w0); // F_ref
-    fluenceUnit = "F_ref"; depthUnit = "δ_ref"; lengthUnit = "L_ref";
-  } else {
-    F0 = (2 * params.E * 1e-6) / (Math.PI * Math.pow(params.w0 * 1e-6, 2)); // J/m²
-    fluenceUnit = "J/cm²"; depthUnit = "µm"; lengthUnit = "µm";
-  }
-
-  const resp = material.response;
-  const isThresholdOnly = runMode === "threshold_only" || !resp || resp.kind === "threshold_only";
-  const incub = resp && resp.kind === "incubation";
-  if (resp) {
-    FthBase = incub ? resp.Fth1 : resp.Fth;
-    deltaEff = resp.delta_eff_m || 0;
-  }
-
-  /* 复合结构：相标签场（种子随机颗粒） */
-  let phaseId = null;
-  if (opts.composite) {
-    const rnd = mulberry32(DEMO.COMPOSITE_DIAGNOSTICS.seed);
-    phaseId = new Float64Array(nx * ny);
-    const particles = [];
-    for (let p = 0; p < 70; p++) {
-      particles.push({
-        cx: (rnd() - 0.5) * nx * dx * 0.9,
-        cy: (rnd() - 0.5) * ny * dy * 0.9,
-        r: (0.03 + rnd() * 0.075) * nx * dx,
-      });
-    }
-    for (let j = 0; j < ny; j++)
-      for (let i = 0; i < nx; i++) {
-        for (const pt of particles) {
-          const ddx = xs[i] - pt.cx, ddy = ys[j] - pt.cy;
-          if (ddx * ddx + ddy * ddy < pt.r * pt.r) { phaseId[j * nx + i] = 1; break; }
-        }
-      }
-  }
-
-  const depth = new Float64Array(nx * ny);
-  const dose = new Float64Array(nx * ny);
-  const mask = new Float64Array(nx * ny);
-  const ncell = new Float64Array(nx * ny);
-  const w0 = params.w0;
-  const snapshots = [];
-  const snapAt = new Set(
-    [0.25, 0.5, 0.75, 1].map((q) => Math.min(nPulses - 1, Math.round(q * nPulses) - 1))
-  );
-
-  if (!isThresholdOnly) {
-    for (let p = 0; p < nPulses; p++) {
-      const cx = centers[p];
-      for (let j = 0; j < ny; j++) {
-        const ddy = ys[j];
-        for (let i = 0; i < nx; i++) {
-          const ddx = xs[i] - cx;
-          const r2 = ddx * ddx + ddy * ddy;
-          if (r2 > 9 * w0 * w0) continue;
-          const F = F0 * Math.exp((-2 * r2) / (w0 * w0));
-          const idx = j * nx + i;
-          let Fth = FthBase, dEff = deltaEff;
-          if (opts.composite && phaseId[idx] === 1) { Fth = 2.6; dEff = 0.03; }
-          else if (opts.composite) { Fth = 1.0; dEff = 0.08; }
-          if (incub) {
-            if (F >= resp.Fth_inf) {
-              ncell[idx] += 1;
-              Fth = resp.Fth_inf + (resp.Fth1 - resp.Fth_inf) * Math.exp(-resp.k_inc * (ncell[idx] - 1));
-            }
-          }
-          dose[idx] += F;
-          if (F >= FthBase) mask[idx] = 1;
-          if (F > Fth) {
-            let inc = dEff * Math.log(F / Fth);
-            if (!normalized) inc *= 1e6; // m → µm
-            depth[idx] += inc;
-          }
-        }
-      }
-      if (snapAt.has(p)) {
-        snapshots.push({
-          eventIndex: p + 1, timeS: ((p + 1) / f).toExponential(3),
-          passId: 1, final: p === nPulses - 1,
-          height: Float64Array.from(depth, (d) => -d),
-        });
-      }
-    }
-  } else {
-    /* 仅阈值判定：只累积剂量与掩膜，不产生深度 */
-    for (let p = 0; p < nPulses; p++) {
-      const cx = centers[p];
-      for (let j = 0; j < ny; j++) {
-        const ddy = ys[j];
-        for (let i = 0; i < nx; i++) {
-          const ddx = xs[i] - cx;
-          const r2 = ddx * ddx + ddy * ddy;
-          if (r2 > 9 * w0 * w0) continue;
-          const F = F0 * Math.exp((-2 * r2) / (w0 * w0));
-          const idx = j * nx + i;
-          dose[idx] += F;
-          if (F >= (FthBase || Infinity)) mask[idx] = 1;
-        }
-      }
-    }
-  }
-
-  const height = Float64Array.from(depth, (d) => -d);
-  let removal = 0, centerDepth = 0;
-  for (let k = 0; k < depth.length; k++) { removal += depth[k]; if (depth[k] > centerDepth) centerDepth = depth[k]; }
-  removal *= dx * dy;
-
-  const layers = { height, fluence_dose: dose, threshold_mask: mask };
-  const blocked = {};
-  if (phaseId) layers.phase_id = phaseId;
-  else blocked.phase_id = "未启用分相结构，本运行无相标签场（不返回全 0 假数组）";
-  if (isThresholdOnly) {
-    blocked.height = "threshold_only 结果不提供高度场（δ 缺失，不输出深度）";
-    delete layers.height;
-  }
-
-  const wm = {
-    material_id: material.id,
-    family: material.family,
-    grade: material.grade || "（未登记牌号）",
-    run_mode: runMode,
-    unit_system: normalized ? "归一化（无量纲）" : "物理单位",
-    evidence_status: material.evidence_status,
-    physical_prediction_allowed: material.physical,
-    length_label: lengthUnit, depth_label: depthUnit, fluence_label: fluenceUnit,
-    warnings: normalized
-      ? ["归一化演示的深度单位为 δ_ref，不能标成真实 µm。", "合成结果不含实验复现结论。"]
-      : [],
-  };
-
-  return {
-    runId: opts.runId || `demo_${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}_${material.id}`,
-    status: opts.status || "completed",
-    runMode, materialId: material.id,
-    watermark: wm,
-    eventsProcessed: nPulses, eventsTotal: nPulses,
-    removalAvailable: !isThresholdOnly,
-    stats: isThresholdOnly ? {} : { removal_volume_internal: removal, center_depth_internal: centerDepth },
-    warnings: wm.warnings.slice(),
-    errors: opts.status === "failed" ? [{ code: "RUN_CANCELLED", message: "运行被中途取消，仅有部分结果。", field_path: "run" }] : [],
-    grid: { nx, ny, xs, ys },
-    layers, blocked,
-    depth: isThresholdOnly ? null : depth,
-    snapshots,
-    diagnostics: opts.composite ? DEMO.COMPOSITE_DIAGNOSTICS : null,
-    paramsKey: paramsKey(params, material.id, runMode),
-  };
-}
 
 /* ============================================================
  * 通用绘图
@@ -511,6 +339,8 @@ function buildRunConfig() {
   base.grid.dy_m = +$("#p-dy").value * um;
   base.laser.pulse_energy_J = +$("#p-E").value * um * 1; // µJ → J
   base.laser.spot_radius_m = +$("#p-w0").value * um;
+  // 频率的唯一可见输入是 kHz；Hz 字段由它派生，避免出现两个互相冲突的输入
+  if ($("#p-f-khz")) $("#p-f").value = (+$("#p-f-khz").value || 0) * 1000;
   base.laser.repetition_rate_Hz = +$("#p-f").value;
 
   const segs = base.path.segments || (base.path.segments = [{}]);
@@ -581,6 +411,9 @@ async function loadTemplate(tid) {
     $("#p-E").value = (L.pulse_energy_J / um).toFixed(6);
     $("#p-w0").value = (L.spot_radius_m / um).toFixed(3);
     $("#p-f").value = L.repetition_rate_Hz;
+    // 界面按 kHz 显示（Hz 那个是隐藏字段，两者必须同步）
+    if ($("#p-f-khz")) $("#p-f-khz").value = (L.repetition_rate_Hz / 1000).toFixed(6);
+    syncPulseEnergyReadout();
     $("#p-v").value = ((seg0.speed_m_s || 0) * 1000).toFixed(1);   // m/s → mm/s
     $("#p-x0").value = ((seg0.start_xyz_m || [0, 0, 0])[0] / um).toFixed(2);
     $("#p-x1").value = ((seg0.end_xyz_m || [0, 0, 0])[0] / um).toFixed(2);
@@ -1302,10 +1135,15 @@ async function onLoadHistory() {
  * Tab 切换与全局绑定
  * ============================================================ */
 
+/* 旧 tab 名 → 新工作区。
+ * 「结果」并入了「规划与结果」；提交计算后仍会跳到这里看形貌。 */
+const TAB_ALIAS = { result: "plan" };
+
 function switchTab(name) {
-  $$(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  $$(".tabpanel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
-  if (name === "result") paintResultCharts();
+  const target = TAB_ALIAS[name] || name;
+  $$(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === target));
+  $$(".tabpanel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + target));
+  if (target === "plan") paintResultCharts();
   if (name === "table") paintCurveChart();
 }
 
@@ -1394,8 +1232,13 @@ function bindGlobal() {
     renderParamPanel();
   });
 
-  $$("#tab-params input, #tab-params select").forEach((el) => {
+  /* ⚠️ 作用域必须是**当前实际的面板 id**。
+   * 面板从 `#tab-params` 改成 `#tab-data` 后如果忘了同步这里，
+   * 后果是**所有参数字段静默失去监听器** —— 改参数不触发重渲染，
+   * 「参数已修改但尚未提交」的过期标记再也不会出现（浏览器探针抓到了这个）。 */
+  $$("#tab-data input, #tab-data select, #tab-dev input, #tab-dev select").forEach((el) => {
     if (el.id === "template-select") return;
+    if (el.id === "p-E-readout") return;   // 只读派生字段，不参与重渲染
     el.addEventListener("input", renderParamPanel);
     el.addEventListener("change", renderParamPanel);
   });

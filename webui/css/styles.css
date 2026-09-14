@@ -1,5 +1,5 @@
 /* ============================================================
-   超快激光加工 Demo — 演示前端（纯静态，内置模拟数据）
+   超快激光加工 — 工艺仿真前端（三工作区；无内置模拟数据，一律走真实后端）
    设计：桌面优先响应式 / 浅色系 / 单强调色（青）
    ============================================================ */
 
@@ -577,3 +577,77 @@ details.expander .body { padding: 4px 14px 14px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ============================================================
+   V2（C1–C6）：三工作区新增样式
+   ============================================================ */
+
+/* 折叠块：共用条件 / 开发工具都用它 —— 默认收起，减少首屏噪音 */
+details.fold {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 14px;
+  margin: 10px 0;
+}
+details.fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-2);
+  list-style: none;
+  user-select: none;
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before {
+  content: "▸ ";
+  color: var(--accent);
+  font-weight: 700;
+}
+details.fold[open] > summary::before { content: "▾ "; }
+details.fold[open] > summary { margin-bottom: 10px; }
+details.fold.card { padding: 14px 16px; }
+
+/* 键值表：对照指标 / 候选表都用它 */
+table.kv {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0;
+}
+table.kv th, table.kv td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.kv th {
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-2);
+}
+table.kv tr:last-child th,
+table.kv tr:last-child td { border-bottom: none; }
+table.kv td { font-variant-numeric: tabular-nums; }
+
+/* 只读派生字段（脉冲能量）：让人一眼看出"这不是你填的" */
+input.readonly {
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: default;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* 开发工具：视觉上弱化，明确它不在主流程里 */
+.tabs button.tab-dev {
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tabs button.tab-dev.active { color: var(--text-2); }
+#tab-dev > .card:first-child { border-left: 3px solid var(--warn-border); }
+
+/* 让 hint 里嵌的 strong 在浅底上足够可读 */
+.hint strong { color: var(--text-2); }

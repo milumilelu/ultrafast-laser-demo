@@ -885,3 +885,268 @@ def guard_depth_export_payload(unit_system: str, filename: str) -> dict[str, Any
         return {"ok": True, "filename": name, "depthLabel": U.depth_export_label(ctx)}
     except UFDemoError as err:
         return {"ok": False, "errors": [err.to_dict()]}
+
+
+# ===========================================================================
+# V2（C2–C5）：三工作区所需的契约
+# ===========================================================================
+#
+# 设计原则（任务书 §7）：
+# * **薄 HTTP 层 → 单一业务服务 → 数值核心** —— 这里只做"参数 → 数值核心 →
+#   前端可消费的 dict"，不写业务逻辑（业务在 calibration/planning/upstream 里）；
+# * 实验表在仓库**外**（上层 `数据/`），找不到时**如实返回空 + 说明**，
+#   不伪造数据；
+# * 上游样例可能带 ``is_synthetic``，**必须原样透传**，让界面能显示"虚拟输入"。
+
+
+def experiment_tables_payload(exp_dir: str | Path) -> dict[str, Any]:
+    """列出可导入的实验 CSV（C4）。
+
+    实验表通常放在**仓库外**（`../数据/`）。找不到时返回空列表 + 原因，
+    而不是编一张假表 —— 界面据此显示"未找到实验数据目录"。
+    """
+    d = Path(exp_dir)
+    if not d.exists():
+        return {
+            "dir": str(d), "found": False,
+            "tables": [],
+            "note": f"未找到实验数据目录：{d}（实验 CSV 在仓库外，属正常情况）",
+        }
+    out: list[dict[str, Any]] = []
+    for p in sorted(d.glob("*.csv")):
+        item: dict[str, Any] = {"file": p.name, "ok": False}
+        try:
+            from .calibration import load_experiment_csv
+
+            t = load_experiment_csv(p)
+            item.update({
+                "ok": True,
+                "encoding": t.encoding,
+                "nRows": t.n_used,
+                "nRaw": t.n_raw_rows,
+                "nSkipped": len(t.skipped_rows),
+                "nNegative": sum(1 for r in t.rows if r.mean_depth_um < 0),
+                "notes": list(t.notes),
+                "pulseDurationsFs": sorted({r.pulse_duration_fs for r in t.rows}),
+                "frequenciesKHz": sorted({r.repetition_rate_kHz for r in t.rows}),
+                "spacingsUm": sorted({r.hatch_spacing_um for r in t.rows}),
+                "passCounts": sorted({r.pass_count for r in t.rows}),
+            })
+        except Exception as exc:  # 单张表读不了不该拖垮整个列表
+            item["error"] = f"{type(exc).__name__}: {exc}"
+        out.append(item)
+    return {"dir": str(d), "found": True, "tables": out, "note": ""}
+
+
+def baselines_payload(baselines_dir: str | Path) -> dict[str, Any]:
+    """列出已反推的候选基线（C3 产物）。"""
+    d = Path(baselines_dir)
+    items: list[dict[str, Any]] = []
+    if d.exists():
+        for p in sorted(d.glob("*.json")):
+            try:
+                items.append({"file": p.name, **json.loads(p.read_text(encoding="utf-8"))})
+            except Exception as exc:
+                items.append({"file": p.name, "error": f"{type(exc).__name__}: {exc}"})
+    return {
+        "dir": str(d), "baselines": items,
+        "note": "候选基线是**工程有效参数**（对同批实验拟合所得），"
+                "不是独立实测材料常数；是否升级材料卡证据状态需人工确认。",
+    }
+
+
+def upstream_payload(upstream_dir: str | Path) -> dict[str, Any]:
+    """列出可用的上游轮廓样例（C2）。"""
+    d = Path(upstream_dir)
+    items: list[dict[str, Any]] = []
+    if d.exists():
+        for case in sorted(d.glob("*/upstream_case.json")):
+            try:
+                from .upstream import load_upstream_case
+
+                prof, wnote = load_upstream_case(case)
+                items.append({
+                    "name": case.parent.name,
+                    "case": prof.to_dict(),
+                    "radiusNote": wnote,
+                })
+            except Exception as exc:
+                items.append({"name": case.parent.name,
+                              "error": f"{type(exc).__name__}: {exc}"})
+    return {"dir": str(d), "cases": items,
+            "note": "带 isSynthetic=true 的是**虚拟输入**，仅用于展示与链路测试。"}
+
+
+def upstream_compare_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[str, Any]:
+    """上下游**同工况**对照（C2）。下游用同一套求解器重放。"""
+    import json as _json
+
+    from .materials import MaterialSpec, load_material_card
+    from .solver import solve
+    from .upstream import UpstreamProfile, compare_profiles, load_upstream_case
+
+    d = Path(str(body.get("caseDir") or ""))
+    case_json = d / "upstream_case.json"
+    if not case_json.exists():
+        raise UFDemoError(CONFIG_INVALID, "找不到上游工况文件",
+                          field_path="upstream.caseDir", actual=str(d),
+                          requirement="目录内含 upstream_case.json")
+    up, _ = load_upstream_case(case_json)
+
+    cfg_raw = dict(body.get("params") or {})
+    if not cfg_raw:
+        raise UFDemoError(CONFIG_INVALID, "缺少下游参数",
+                          field_path="upstream.params", actual=None, requirement="RunConfig 字典")
+    cfg = RunConfig.from_dict(cfg_raw, base_dir=str(project_root))
+    mat_path = Path(cfg.material_card_file)
+    material = load_material_card(mat_path)
+
+    res = solve(cfg, material)
+    if res.status != "completed" or res.surface is None:
+        return {"ok": False, "status": res.status,
+                "errors": [e.get("code") for e in (res.errors or [])]}
+
+    import numpy as np
+
+    drop = res.surface.initial_height - res.surface.height
+    nx = drop.shape[1]
+    xs = (np.arange(nx) - nx // 2) * cfg.grid.dx_m
+    down = UpstreamProfile(
+        case_id="downstream", geometry=up.geometry,
+        x_um=[float(v) * 1e6 for v in xs],
+        depth_um=[float(v) * 1e6 for v in drop[drop.shape[0] // 2]],
+        x_axis=up.x_axis,
+    )
+    m = compare_profiles(up, down)
+    return {
+        "ok": True,
+        "upstream": up.to_dict(),
+        "isSynthetic": up.is_synthetic,
+        "metrics": m.to_dict(),
+        "warning": ("上游为**虚拟输入**：该对照只验证链路，不构成上游验证结论。"
+                    if up.is_synthetic else ""),
+    }
+
+
+def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[str, Any]:
+    """执行一次实验标定（C4）。**参数真正改变求解过程**。"""
+    from .calibration import (
+        PredictionSpec, calibrate_gain, group_split, load_experiment_csv,
+    )
+
+    exp_file = Path(str(body.get("experimentFile") or ""))
+    if not exp_file.exists():
+        raise UFDemoError(CONFIG_INVALID, "找不到实验 CSV",
+                          field_path="calibration.experimentFile", actual=str(exp_file),
+                          requirement="文件存在")
+    t = load_experiment_csv(exp_file)
+    tau = float(body.get("pulseDurationFs") or 0.0)
+    if tau <= 0:
+        cands = sorted({r.pulse_duration_fs for r in t.rows})
+        if not cands:
+            raise UFDemoError(CONFIG_INVALID, "实验表没有可用行",
+                              field_path="calibration.experimentFile", actual=0,
+                              requirement="≥ 1 行")
+        tau = cands[0]
+    rows = [r for r in t.rows if abs(r.pulse_duration_fs - tau) < 1e-9 and r.mean_depth_um > 0]
+    if len(rows) < 4:
+        return {"ok": False,
+                "errors": [{"code": "INSUFFICIENT_ROWS",
+                            "message": f"脉宽 {tau:g} fs 的可用行不足（{len(rows)}）"}]}
+    card = str(body.get("materialCardFile") or "")
+    if not card:
+        raise UFDemoError(CONFIG_INVALID, "缺少基座材料卡",
+                          field_path="calibration.materialCardFile", actual=None,
+                          requirement="卡路径")
+    override = dict(body.get("responseOverride") or {}) or None
+    tr, ho, info = group_split(rows, holdout_groups=max(1, len(rows) // 5))
+    spec = PredictionSpec(material_card_file=card, window_um=20.0, dx_um=0.5,
+                          response_override=override)
+    res = calibrate_gain(tr, spec=spec, holdout_rows=ho,
+                         bounds=(float(body.get("gainMin") or 0.05),
+                                 float(body.get("gainMax") or 20.0)),
+                         residual_scale_um=float(body.get("residualScaleUm") or 5.0),
+                         material_id=str(body.get("materialId") or ""))
+    d = res.to_dict()
+    d["ok"] = True
+    d["split"] = info
+    d["pulseDurationFs"] = tau
+    # 过拟合判定放在**服务层**做一次，界面直接显示，避免前端各写一套
+    hb = (res.metrics()["holdout"]["mae_before_um"], res.metrics()["holdout"]["mae_after_um"])
+    d["overfitWarning"] = bool(hb[0] is not None and hb[1] is not None and hb[1] > hb[0])
+    if d["overfitWarning"]:
+        d["overfitMessage"] = (
+            "留出集在标定后**变差** → 过拟合。训练集变好不代表模型更可信；"
+            "应改用更细的分组标定，而不是继续调全局增益。"
+        )
+    return d
+
+
+def plan_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[str, Any]:
+    """执行 h/N 目标筛选（C5）。每个候选都真的跑同一套已标定求解器。"""
+    from .planning import plan_for_target
+
+    card = str(body.get("materialCardFile") or "")
+    if not card:
+        raise UFDemoError(CONFIG_INVALID, "缺少基座材料卡",
+                          field_path="planning.materialCardFile", actual=None,
+                          requirement="卡路径")
+    region = body.get("regionUm") or [40.0, 40.0]
+    res = plan_for_target(
+        material_card_file=card,
+        target_depth_um=float(body.get("targetDepthUm") or 0.0),
+        tolerance_um=float(body.get("toleranceUm") or 0.0),
+        pulse_duration_fs=float(body.get("pulseDurationFs") or 500.0),
+        repetition_rate_kHz=float(body.get("repetitionRateKHz") or 10.0),
+        scan_speed_mm_s=float(body.get("scanSpeedMmS") or 50.0),
+        region_um=(float(region[0]), float(region[1])),
+        dx_um=float(body.get("dxUm") or 0.5),
+        gain=float(body.get("gain") or 1.0),
+        response_override=dict(body.get("responseOverride") or {}) or None,
+    )
+    d = res.to_dict()
+    d["ok"] = True
+    return d
+
+
+def shared_background_payload() -> dict[str, Any]:
+    """共用实验背景摘要（C1）。界面「数据与工况」顶部直接显示。"""
+    from .config import load_shared_background
+
+    try:
+        bg = load_shared_background()
+        r = bg.check_self_consistency()
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "ok": True,
+        "postObjectivePowerW": bg.post_objective_power_W,
+        "softwareSetpointW": bg.software_setpoint_W,
+        "wavelengthNm": bg.wavelength_m * 1e9,
+        "numericalAperture": bg.numerical_aperture,
+        "m2": bg.m2,
+        "waistUm": r["waist_derived_um"],
+        "rayleighUm": r["rayleigh_derived_um"],
+        "selfConsistent": r["ok"],
+        "waistRelDiff": r["waist_rel_diff"],
+        "rayleighRelDiff": r["rayleigh_rel_diff"],
+        "focusStrategy": bg.focus_strategy,
+        "geometryFeedback": bg.geometry_feedback,
+        "dynamicAngle": bool(bg.raw["focus"]["dynamic_angle"]),
+        "notShared": list(bg.raw["inheritance_scope"]["NOT_shared"]),
+        "provenance": dict(bg.raw.get("provenance") or {}),
+    }
+
+
+def pulse_energy_payload(repetition_rate_Hz: float) -> dict[str, Any]:
+    """按共用背景算脉冲能量（E = P_物镜后 / f）—— 界面只读显示，不让用户填两个可冲突的值。"""
+    from .config import load_shared_background
+
+    bg = load_shared_background()
+    try:
+        e = bg.pulse_energy_J(float(repetition_rate_Hz))
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "pulseEnergyJ": e, "pulseEnergyUJ": e * 1e6,
+            "postObjectivePowerW": bg.post_objective_power_W,
+            "repetitionRateHz": float(repetition_rate_Hz)}

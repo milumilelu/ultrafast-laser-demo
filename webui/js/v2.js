@@ -1,0 +1,474 @@
+/* ============================================================
+ * V2（C1–C6）：三个工作区的界面逻辑
+ *
+ *   数据与工况  →  对照与标定  →  规划与结果
+ *
+ * 设计约束（任务书 §7）：
+ *  - **薄 HTTP 层**：这里只做「取数 → 渲染」，不写物理；
+ *  - **不伪造**：实验表/上游/基线找不到时如实说"没有"，不画占位假数据；
+ *  - **虚拟输入必须标出来**：上游样例若带 isSynthetic，界面显著提示；
+ *  - **两类质量信息分开**：标量深度误差（有实验证据）
+ *    vs 覆盖/过切/均匀性（模型预测，未导入实测高度图不算验证）。
+ * ============================================================ */
+
+"use strict";
+
+const V2 = {
+  background: null,
+  tables: null,
+  upstream: null,
+  baselines: null,
+  picked: { table: null, case: null, baseline: null },
+};
+
+/* ---------------- 小工具 ---------------- */
+
+function v2Num(v, digits = 2) {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return Number(v).toFixed(digits);
+}
+
+function v2Pct(v, digits = 1) {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return (Number(v) * 100).toFixed(digits) + "%";
+}
+
+/** 表格式渲染；rows 为 [[左, 右], ...] */
+function v2KV(rows) {
+  return `<table class="kv">${rows
+    .filter((r) => r && r[1] !== undefined)
+    .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+    .join("")}</table>`;
+}
+
+/* ---------------- 共用实验背景 ---------------- */
+
+async function v2LoadBackground() {
+  const box = document.getElementById("bg-summary");
+  try {
+    V2.background = await API.get("/api/shared-background");
+  } catch (err) {
+    if (box) box.innerHTML = `<div class="empty">读不到共用背景：${err.message || err}</div>`;
+    return;
+  }
+  const b = V2.background;
+  if (!b.ok) {
+    if (box) box.innerHTML = `<div class="notice warn">共用背景不可用：${b.error}</div>`;
+    return;
+  }
+  if (!box) return;
+  const consist = b.selfConsistent
+    ? `<span class="tag yes">公式自洽</span>`
+    : `<span class="tag no">不自洽</span>`;
+  box.innerHTML =
+    v2KV([
+      ["物镜后功率", `${v2Num(b.postObjectivePowerW, 4)} W <span class="hint">（脉冲能量用它算）</span>`],
+      ["软件设定功率", `${v2Num(b.softwareSetpointW, 1)} W <span class="hint">（仅记录，不参与计算）</span>`],
+      ["波长 / NA / M²", `${v2Num(b.wavelengthNm, 0)} nm / ${v2Num(b.numericalAperture, 2)} / ${v2Num(b.m2, 2)}`],
+      ["束腰 w0（公式推导）", `${v2Num(b.waistUm, 4)} µm ${consist}`],
+      ["瑞利长度 zR（公式推导）", `${v2Num(b.rayleighUm, 4)} µm`],
+      ["焦点策略", `${b.focusStrategy} <span class="hint">+ ${b.geometryFeedback}（保留被动离焦）</span>`],
+      ["动态入射角", b.dynamicAngle ? "开启" : "停用"],
+      ["七材料**不共享**", (b.notShared || []).join("、")],
+    ]) +
+    `<div class="notice info" style="margin-top:10px">
+       来源：${(b.provenance || {}).source || "—"}。
+       <strong>光学尺寸是 nominal 值</strong>，不是槽内实测光场。
+     </div>`;
+}
+
+/** 脉冲能量只读显示：E = P_物镜后 / f（不让用户填两个可冲突的值） */
+async function syncPulseEnergyReadout() {
+  const fKhz = parseFloat((document.getElementById("p-f-khz") || {}).value || "0");
+  const out = document.getElementById("p-E-readout");
+  if (!out) return;
+  const hiddenF = document.getElementById("p-f");
+  const hiddenE = document.getElementById("p-E");
+  if (hiddenF) hiddenF.value = fKhz * 1000;
+  if (!(fKhz > 0)) {
+    out.value = "（填重复频率后自动算出）";
+    return;
+  }
+  try {
+    const r = await API.get(`/api/pulse-energy?f=${encodeURIComponent(fKhz * 1000)}`);
+    if (r.ok) {
+      out.value = `${Number(r.pulseEnergyUJ).toFixed(4)} µJ  =  ${Number(r.postObjectivePowerW).toFixed(4)} W ÷ ${(fKhz * 1000).toFixed(0)} Hz`;
+      if (hiddenE) hiddenE.value = r.pulseEnergyUJ;
+    } else {
+      out.value = `算不出：${r.error}`;
+    }
+  } catch (err) {
+    out.value = `算不出：${err.message || err}`;
+  }
+}
+
+/* ---------------- ① 实验数据 ---------------- */
+
+async function v2LoadExperimentTables() {
+  const sel = document.getElementById("exp-table");
+  if (!sel) return;
+  try {
+    V2.tables = await API.experimentTables();
+  } catch (err) {
+    sel.innerHTML = `<option value="">读取失败</option>`;
+    _expInfo(`<div class="notice warn">读不到实验表：${err.message || err}</div>`);
+    return;
+  }
+  const t = V2.tables;
+  if (!t.found) {
+    sel.innerHTML = `<option value="">（未找到实验数据目录）</option>`;
+    _expInfo(`<div class="notice info">${t.note}<br>
+      把实验 CSV 放进该目录后刷新即可。目录里的表<strong>不会被修改</strong>。</div>`);
+    return;
+  }
+  const ok = t.tables.filter((x) => x.ok);
+  sel.innerHTML = ok.length
+    ? ok.map((x) => `<option value="${x.file}">${x.file}（${x.nRows} 行，${x.encoding}）</option>`).join("")
+    : `<option value="">（目录里没有可用的 CSV）</option>`;
+  if (ok.length) {
+    V2.picked.table = ok[0].file;
+    v2RenderExperimentInfo();
+  }
+}
+
+function _expInfo(html) {
+  const box = document.getElementById("exp-info");
+  if (box) box.innerHTML = html;
+}
+
+function v2RenderExperimentInfo() {
+  const t = V2.tables;
+  if (!t || !t.found) return;
+  const item = t.tables.find((x) => x.file === V2.picked.table);
+  if (!item) return;
+  if (!item.ok) {
+    _expInfo(`<div class="notice warn">这张表读不了：${item.error}</div>`);
+    return;
+  }
+  const warns = [];
+  if (item.nNegative > 0) {
+    warns.push(
+      `<div class="notice warn"><strong>${item.nNegative} 行均值为负</strong>：
+       纯去除模型无法解释负去除，标定时会<strong>排除并列出</strong>，不会强行拟合。</div>`
+    );
+  }
+  if (item.nSkipped > 0) {
+    warns.push(
+      `<div class="notice warn">${item.nSkipped} 行缺必需字段，已<strong>单独列出</strong>（不猜值补齐）。</div>`
+    );
+  }
+  _expInfo(
+    v2KV([
+      ["编码（自动探测）", item.encoding],
+      ["行数", `采用 ${item.nRows} / 原始 ${item.nRaw}`],
+      ["脉宽档", (item.pulseDurationsFs || []).map((v) => v + " fs").join("、")],
+      ["频率档", (item.frequenciesKHz || []).map((v) => v + " kHz").join("、")],
+      ["间距档", (item.spacingsUm || []).map((v) => v + " µm").join("、")],
+      ["遍数档", (item.passCounts || []).join("、")],
+    ]) + warns.join("")
+  );
+}
+
+/* ---------------- ① 上游轮廓 ---------------- */
+
+async function v2LoadUpstream() {
+  const sel = document.getElementById("up-case");
+  const box = document.getElementById("up-info");
+  if (!sel) return;
+  try {
+    V2.upstream = await API.upstreamCases();
+  } catch (err) {
+    sel.innerHTML = `<option value="">读取失败</option>`;
+    return;
+  }
+  const cs = V2.upstream.cases || [];
+  if (!cs.length) {
+    sel.innerHTML = `<option value="">（没有上游样例）</option>`;
+    if (box) {
+      box.innerHTML = `<div class="notice info">
+        上游轮廓需要在 <code>examples/upstream/&lt;算例名&gt;/</code> 下放
+        <code>upstream_case.json</code> + <code>profile.csv</code>。
+        真实上游轮廓由上游求解器导出（带坐标、工况、输出步号）。</div>`;
+    }
+    return;
+  }
+  sel.innerHTML = cs
+    .map((c) => `<option value="${c.name}">${c.name}${c.case && c.case.isSynthetic ? "（虚拟）" : ""}</option>`)
+    .join("");
+  V2.picked.case = cs[0].name;
+  v2RenderUpstreamInfo();
+}
+
+function v2RenderUpstreamInfo() {
+  const box = document.getElementById("up-info");
+  const c = (V2.upstream.cases || []).find((x) => x.name === V2.picked.case);
+  if (!box || !c) return;
+  if (c.error) {
+    box.innerHTML = `<div class="notice warn">这个算例读不了：${c.error}</div>`;
+    return;
+  }
+  const d = c.case;
+  const synth = d.isSynthetic
+    ? `<div class="notice warn"><strong>虚拟输入</strong>：这份上游轮廓是造的，
+       只能用来验证链路。<strong>由它得出的对照结论无效</strong>。</div>`
+    : "";
+  box.innerHTML =
+    synth +
+    v2KV([
+      ["几何类型", `${d.geometryZh || d.geometry}`],
+      ["横轴", `${d.xAxis}（${d.xAxis === "r" ? "径向 —— 不是扫描方向" : "扫描方向"}）`],
+      ["中心深度", `${v2Num(d.nCenter ?? d.centerDepth, 3)} µm`],
+      ["点数", d.nPoints],
+      ["脉冲数 / 遍数", `${d.nPulses ?? "—"} / ${d.nPasses ?? "—"}`],
+      ["上游版本", d.upstreamVersion || "—"],
+    ]) +
+    (c.radiusNote ? `<div class="notice info">${c.radiusNote}</div>` : "");
+}
+
+/* ---------------- ② 上下游对照 ---------------- */
+
+async function v2RunCompare() {
+  const box = document.getElementById("cmp-result");
+  if (!box) return;
+  const c = (V2.upstream.cases || []).find((x) => x.name === V2.picked.case);
+  if (!c) {
+    box.innerHTML = `<div class="notice warn">先在上面选一个上游算例。</div>`;
+    return;
+  }
+  const dir = `${V2.upstream.dir}/${c.name}`;
+  box.innerHTML = `<div class="notice info">正在跑对照（下游要用真实求解器重放一次）…</div>`;
+  try {
+    const params = buildRunConfig();
+    const r = await API.upstreamCompare({ caseDir: dir, params });
+    if (!r.ok) {
+      box.innerHTML = `<div class="notice warn">下游重放未完成：${r.status || ""}
+        ${(r.errors || []).join("、")}</div>`;
+      return;
+    }
+    const m = r.metrics;
+    const line = (label, u, d, rel) =>
+      `<tr><th>${label}</th><td>${v2Num(u, 3)}</td><td>${v2Num(d, 3)}</td>
+       <td>${rel === null || rel === undefined ? "—" : (rel * 100).toFixed(1) + "%"}</td></tr>`;
+    box.innerHTML =
+      (r.warning ? `<div class="notice warn">${r.warning}</div>` : "") +
+      `<table class="kv"><tr><th>指标</th><th>上游</th><th>下游</th><th>相对差</th></tr>
+        ${line("中心深度 (µm)", m.centerDepth.upstreamUm, m.centerDepth.downstreamUm, m.centerDepth.relativeDiff)}
+        ${line("最大深度 (µm)", m.maxDepth.upstreamUm, m.maxDepth.downstreamUm, m.maxDepth.relativeDiff)}
+        ${line("轮廓宽度 (µm)", m.width.upstreamUm, m.width.downstreamUm, m.width.relativeDiff)}
+        ${line("截面积 (µm²)", m.area.upstreamUm2, m.area.downstreamUm2, m.area.relativeDiff)}
+      </table>
+      <div class="notice info" style="margin-top:10px">
+        轮廓 RMSE <strong>${v2Num(m.profileRmseUm, 3)} µm</strong>；
+        宽度定义 <code>${m.widthDefinition}</code>（两边用<strong>同一个定义</strong>才算得下去）。
+      </div>
+      <div class="notice info">
+        <strong>两个模型吻合 ≠ 实验正确</strong>：它们可能共享同一套假设。
+        最终加工深度仍以<strong>未参与拟合的实验记录</strong>为准。
+      </div>`;
+  } catch (err) {
+    box.innerHTML = `<div class="notice warn">对照失败：${err.message || err}</div>`;
+  }
+}
+
+/* ---------------- ② 标定 ---------------- */
+
+async function v2LoadBaselines() {
+  const sel = document.getElementById("cal-baseline");
+  if (!sel) return;
+  try {
+    V2.baselines = await API.baselines();
+  } catch (err) {
+    sel.innerHTML = `<option value="">读取失败</option>`;
+    return;
+  }
+  const bs = V2.baselines.baselines || [];
+  if (!bs.length) {
+    sel.innerHTML = `<option value="">（还没有候选基线）</option>`;
+    return;
+  }
+  sel.innerHTML = bs
+    .map((b) => `<option value="${b.file}">${b.materialFamily} / ${b.pulseDurationFs} fs（δ=${v2Num(b.deltaNm, 0)} nm）</option>`)
+    .join("");
+  V2.picked.baseline = bs[0];
+  const tau = document.getElementById("cal-tau");
+  if (tau && bs[0].pulseDurationFs) tau.value = bs[0].pulseDurationFs;
+}
+
+function v2CurrentBaseline() {
+  const sel = document.getElementById("cal-baseline");
+  const bs = (V2.baselines && V2.baselines.baselines) || [];
+  return bs.find((b) => b.file === (sel && sel.value)) || bs[0] || null;
+}
+
+async function v2RunCalibration() {
+  const box = document.getElementById("cal-result");
+  if (!box) return;
+  const bl = v2CurrentBaseline();
+  const table = (V2.tables && V2.tables.tables || []).find((x) => x.file === V2.picked.table);
+  if (!bl) {
+    box.innerHTML = `<div class="notice warn">还没有候选基线，标定无从谈起。</div>`;
+    return;
+  }
+  if (!table) {
+    box.innerHTML = `<div class="notice warn">先在「数据与工况」里选一张实验表。</div>`;
+    return;
+  }
+  const tau = parseFloat((document.getElementById("cal-tau") || {}).value || "0");
+  box.innerHTML = `<div class="notice info">正在标定（每个候选增益都要真跑一遍求解器）…</div>`;
+  try {
+    const r = await API.calibrate({
+      experimentFile: `${V2.tables.dir}/${table.file}`,
+      materialCardFile: "tests/fixtures/analytic_fixture.json",
+      pulseDurationFs: tau || bl.pulseDurationFs,
+      materialId: `${bl.materialFamily}_${tau || bl.pulseDurationFs}fs`,
+      responseOverride: {
+        kind: "log_fixed",
+        output_semantics: "event_depth_increment",
+        fluence_basis: "incident_peak_fluence",
+        depth_direction: "surface_normal",
+        threshold_J_m2: bl.thresholdJm2,
+        delta_m: bl.deltaM,
+      },
+    });
+    if (!r.ok) {
+      box.innerHTML = `<div class="notice warn">${(r.errors || []).map((e) => e.message).join("；")}</div>`;
+      return;
+    }
+    const mt = r.metrics.train, mh = r.metrics.holdout;
+    const warn = r.overfitWarning
+      ? `<div class="notice warn"><strong>⚠️ 过拟合</strong>：${r.overfitMessage}</div>`
+      : "";
+    box.innerHTML =
+      warn +
+      `<div class="metrics">
+        <div class="metric"><div class="k">标定增益 a</div><div class="v">${v2Num(r.gain, 4)}</div></div>
+        <div class="metric"><div class="k">训练行</div><div class="v">${r.nTrain}</div></div>
+        <div class="metric"><div class="k">留出行</div><div class="v">${r.nHoldout}</div></div>
+       </div>
+       <table class="kv"><tr><th></th><th>标定前</th><th>标定后</th></tr>
+        <tr><th>训练 MAE (µm)</th><td>${v2Num(mt.mae_before_um, 3)}</td><td>${v2Num(mt.mae_after_um, 3)}</td></tr>
+        <tr><th>留出 MAE (µm)</th><td>${v2Num(mh.mae_before_um, 3)}</td><td>${v2Num(mh.mae_after_um, 3)}</td></tr>
+       </table>
+       <div class="notice info" style="margin-top:10px">
+         <strong>只有留出误差说明能不能迁移</strong>；训练误差只是拟合优度。
+         增益作用在<strong>每次脉冲的几何更新之前</strong>，所以后续脉冲会按新表面重算离焦 ——
+         它不是"给最终深度乘个系数"。
+       </div>
+       ${(r.notes || []).length ? `<details class="fold"><summary>技术说明（${r.notes.length} 条）</summary>
+         <ul>${r.notes.map((n) => `<li>${n}</li>`).join("")}</ul></details>` : ""}`;
+    V2.gain = r.gain;
+  } catch (err) {
+    box.innerHTML = `<div class="notice warn">标定失败：${err.message || err}</div>`;
+  }
+}
+
+/* ---------------- ③ 规划 ---------------- */
+
+async function v2RunPlan() {
+  const box = document.getElementById("pl-result");
+  if (!box) return;
+  const bl = v2CurrentBaseline();
+  if (!bl) {
+    box.innerHTML = `<div class="notice warn">还没有基线，先去「对照与标定」。</div>`;
+    return;
+  }
+  const g = (id, dflt) => parseFloat((document.getElementById(id) || {}).value || String(dflt));
+  box.innerHTML = `<div class="notice info">正在枚举 25 个候选，每个都跑一遍求解器…</div>`;
+  try {
+    const r = await API.plan({
+      materialCardFile: "tests/fixtures/analytic_fixture.json",
+      targetDepthUm: g("pl-target", 20),
+      toleranceUm: g("pl-tol", 3),
+      regionUm: [g("pl-rx", 40), g("pl-ry", 40)],
+      pulseDurationFs: bl.pulseDurationFs,
+      repetitionRateKHz: g("p-f-khz", 10),
+      scanSpeedMmS: g("p-v", 50),
+      dxUm: 0.5,
+      gain: V2.gain || 1.0,
+      responseOverride: {
+        kind: "log_fixed",
+        output_semantics: "event_depth_increment",
+        fluency_basis: "incident_peak_fluence",
+        fluence_basis: "incident_peak_fluence",
+        depth_direction: "surface_normal",
+        threshold_J_m2: bl.thresholdJm2,
+        delta_m: bl.deltaM,
+      },
+    });
+    if (!r.ok) { box.innerHTML = `<div class="notice warn">规划失败</div>`; return; }
+    const rec = r.recommended;
+    const head = rec
+      ? `<div class="notice ok"><strong>推荐：h = ${rec.spacingUm} µm，N = ${rec.passCount}</strong>
+           → 平均 ${v2Num(rec.meanDepthUm, 2)} µm，理想时间 ${v2Num(rec.idealTimeS, 4)} s</div>`
+      : `<div class="notice warn"><strong>当前范围内无可行方案</strong><br>${r.infeasibleReason || ""}</div>`;
+    const rows = (r.candidates || [])
+      .map(
+        (c) => `<tr>
+        <td>${c.spacingUm}</td><td>${c.passCount}</td>
+        <td>${v2Num(c.meanDepthUm, 2)}</td>
+        <td>${v2Num(c.idealTimeS, 4)}</td>
+        <td>${v2Pct(c.coverageFraction)}</td>
+        <td>${v2Pct(c.overDepthFraction)}</td>
+        <td>${c.feasible ? '<span class="tag yes">可行</span>' : `<span class="tag no">${c.status}</span>`}</td>
+      </tr>`
+      )
+      .join("");
+    box.innerHTML =
+      head +
+      `<div class="section-title">全部候选（${r.nFeasible}/${r.nCandidates} 可行）</div>
+       <div style="max-height:300px;overflow-y:auto">
+       <table class="kv"><tr><th>h (µm)</th><th>N</th><th>均值 (µm)</th><th>时间 (s)</th>
+         <th>覆盖</th><th>过切</th><th>状态</th></tr>${rows}</table></div>
+       <div class="notice info" style="margin-top:10px">
+         <strong>覆盖率 / 过切 / 均匀性是模型预测</strong>；
+         没有导入实测高度图时<strong>不构成</strong>二维形貌验证。
+         时间是不含换向减速的<strong>理想值</strong>。
+       </div>
+       ${(r.notes || []).length ? `<details class="fold"><summary>技术说明（${r.notes.length} 条）</summary>
+         <ul>${r.notes.map((n) => `<li>${n}</li>`).join("")}</ul></details>` : ""}`;
+  } catch (err) {
+    box.innerHTML = `<div class="notice warn">规划失败：${err.message || err}</div>`;
+  }
+}
+
+/* ---------------- 事件绑定 ---------------- */
+
+function v2Bind() {
+  const on = (id, ev, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(ev, fn);
+  };
+  on("p-f-khz", "input", syncPulseEnergyReadout);
+  on("exp-table", "change", (e) => {
+    V2.picked.table = e.target.value;
+    v2RenderExperimentInfo();
+  });
+  on("exp-load", "click", async () => {
+    await v2LoadExperimentTables();
+    const sel = document.getElementById("exp-table");
+    if (sel && sel.value) { V2.picked.table = sel.value; v2RenderExperimentInfo(); }
+  });
+  on("up-case", "change", (e) => {
+    V2.picked.case = e.target.value;
+    v2RenderUpstreamInfo();
+  });
+  on("cal-baseline", "change", () => {
+    const bl = v2CurrentBaseline();
+    const tau = document.getElementById("cal-tau");
+    if (bl && tau) tau.value = bl.pulseDurationFs;
+  });
+  on("cmp-run", "click", v2RunCompare);
+  on("cal-run", "click", v2RunCalibration);
+  on("pl-run", "click", v2RunPlan);
+}
+
+async function v2Init() {
+  v2Bind();
+  await v2LoadBackground();
+  await v2LoadExperimentTables();
+  await v2LoadUpstream();
+  await v2LoadBaselines();
+  syncPulseEnergyReadout();
+}
+
+document.addEventListener("DOMContentLoaded", v2Init);

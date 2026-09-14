@@ -259,6 +259,33 @@ async function switchTab(name) {
     return null;
   } catch { const m = `「${name}」页未激活`; actionErrors.push(m); return m; }
 }
+/* V2：主流程收敛成三个工作区，旧面板移进「开发工具」的折叠块里。
+ * `<details>` 收起时内部控件**不可见也点不到** —— 进开发工具后必须显式展开，
+ * 否则会得到一批"元素找不到"的假失败（不是功能坏了）。 */
+async function openDevBlock(summaryKeyword) {
+  const err = await switchTab("dev");
+  if (err) return err;
+  try {
+    const opened = await page.evaluate((kw) => {
+      const ds = Array.from(document.querySelectorAll("#tab-dev details.fold"));
+      const hit = ds.find((d) => (d.querySelector("summary")?.textContent || "").includes(kw));
+      if (!hit) return false;
+      hit.open = true;
+      return true;
+    }, summaryKeyword);
+    if (!opened) {
+      const m = `开发工具里没有「${summaryKeyword}」折叠块`;
+      actionErrors.push(m);
+      return m;
+    }
+    return null;
+  } catch (e) {
+    const m = `展开「${summaryKeyword}」失败: ${e.message.split("\n")[0]}`;
+    actionErrors.push(m);
+    return m;
+  }
+}
+
 /* 设置 number/range 输入并派发事件，触发前端重渲染 */
 async function setInput(sel, value, evt = "input") {
   return page.$eval(sel, (e, v, t) => {
@@ -314,7 +341,7 @@ async function submitAndWait(maxMs = 90000) {
 /* 走一次「切参数面板 → 设定入射角与快照策略 → 提交」。
  * 快照设为 events 是为了让 U03-8（回放）有快照可拖。 */
 async function doSolve({ snap = "events", inc = "0" } = {}) {
-  await switchTab("params");
+  await switchTab("data");
   if (await page.$("#p-inc")) await setInput("#p-inc", inc, "change");
   if (snap && await page.$("#p-snap")) await selectOption("#p-snap", snap);
   await settle(400);
@@ -350,15 +377,15 @@ try {
   console.log(`        标题：${boot.title}`);
 
   /* 面板可切换（隐藏面板里的控件点不到，是最常见的假通过来源） */
-  const TABS = ["result", "ref", "table", "caps", "history", "params"];
+  const TABS = ["data", "calib", "plan", "dev"];   /* V2：三工作区 + 开发工具 */
   let tabOk = 0;
   for (const t of TABS) { if (!(await switchTab(t))) tabOk++; }
-  ok(tabOk === TABS.length, null, `${tabOk}/${TABS.length} 个面板可切换并激活`,
+  ok(tabOk === TABS.length, null, `${tabOk}/${TABS.length} 个工作区可切换并激活`,
     actionErrors.slice(-2).join(" | "));
 
   /* ================= U03-2 选真实数据 ================= */
   console.log("\n[U03-2] 选真实数据");
-  await switchTab("params");
+  await switchTab("data");
   const mats = await page.$$eval("#material-select option", (o) => o.map((x) => x.value));
   /* 真实材料 = 排除合成演示卡 */
   const realMat = mats.find((m) => /zirconia_ysz_machining/.test(m)) ||
@@ -434,7 +461,7 @@ try {
         "确实发生了 POST /api/solve", JSON.stringify(apiCalls.slice(0, 6)));
       if (solved) {
         /* 结果面板必须真的画出东西（不是只有空白 canvas） */
-        await switchTab("result");
+        await switchTab("plan");
         await settle(900);
         const m = await canvasState("morph-canvas");
         if (!m || !m.visible || m.w === 0) {
@@ -450,7 +477,7 @@ try {
   console.log("\n[U03-4] 错误提示");
   if (!(await page.$("#p-inc"))) skip("U03-4 错误提示", "页面上没有入射角输入 #p-inc");
   else {
-    await switchTab("params");
+    await switchTab("data");
     /* 越界入射角：后端返回 HTTP 200 + status=failed + 结构化 errors（无 watermark）。
        期望界面显示**结构化**错误（含错误码/要求/建议），而不是原始 JS 异常。 */
     await setInput("#p-inc", "75", "change");
@@ -478,7 +505,7 @@ try {
   console.log("\n[U03-5] 曲线单位（F04 观测口）");
   if (!(await page.$("#t-identity"))) skip("U03-5 曲线单位", "页面上没有 #t-identity");
   else {
-    await switchTab("table");
+    await openDevBlock("曲线查表");
     const curves = await page.$$eval("#t-curve option", (o) => o.map((x) => x.value)).catch(() => []);
     if (!curves.length) skip("U03-5 曲线单位", "曲线清单为空");
     else {
@@ -513,7 +540,7 @@ try {
       skip("U03-6 换参数后旧结果标记",
         r.skipped || `前置提交未成功（${r.before} → ${r.after}）：${(r.msg || "").slice(0, 120)}`);
     } else {
-      await switchTab("params");
+      await switchTab("data");
       const before = await chip("chip-solve");
       await setInput("#p-E", "999", "input");
       await settle(1000);
@@ -531,7 +558,7 @@ try {
   console.log("\n[U03-7] 读历史");
   if (!(await page.$("#h-load"))) skip("U03-7 读历史", "页面上没有 #h-load");
   else {
-    await switchTab("history");
+    await openDevBlock("历史运行");
     await settle(500);
     const enabled = await page.$eval("#h-load", (e) => !e.disabled);
     if (await historyEmpty()) {
@@ -560,7 +587,7 @@ try {
 
   /* ================= U03-8 回放不重算 ================= */
   console.log("\n[U03-8] 回放不重算");
-  await switchTab("result");
+  await switchTab("plan");
   await settle(900);
   const subs = await page.$$eval("#result-body .subtabs button", (bs) => bs.map((x) => x.dataset.sub))
     .catch(() => []);
@@ -653,7 +680,7 @@ try {
   /* ================= 附加：查表不重算（非 U03 主干，同属界面不变量）================= */
   console.log("\n[X] 附加：查表不递增求解次数");
   if (await page.$("#t-lookup")) {
-    await switchTab("table");
+    await openDevBlock("曲线查表");
     const b4 = await chip("chip-solve");
     actionErrors.length = 0; apiCalls.length = 0;
     const e = await click("#t-lookup", "点击查值");
@@ -670,7 +697,7 @@ try {
    * 预测必须走独立通道，**不得**递增求解次数。 */
   console.log("\n[X] 附加：过程响应面板（U06）");
   if (await page.$("#pe-run")) {
-    await switchTab("process");
+    await openDevBlock("金刚石过程响应");
     const b5 = await chip("chip-solve");
     actionErrors.length = 0; apiCalls.length = 0;
 
@@ -699,7 +726,7 @@ try {
    * 等效脉冲数不被写成脉冲数；页面不声称有三维形貌。 */
   console.log("\n[X] 附加：真实实验案例回放（U08）");
   if (await page.$("#cases-table")) {
-    await switchTab("cases");
+    await openDevBlock("真实实验案例");
     const b6 = await chip("chip-solve");
     const txt = await page.$eval("#cases-table", (el) => el.textContent || "");
     const note = await page.$eval("#cases-note", (el) => el.textContent || "");
