@@ -1106,6 +1106,11 @@ def plan_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[s
         auto_coarsen=bool(body.get("autoCoarsen", True)),
         gain=float(body.get("gain") or 1.0),
         response_override=dict(body.get("responseOverride") or {}) or None,
+        # 窗口半径策略（性能开关，默认关闭；ADR-0017）。启用后枚举**快一个量级**，
+        # 去除量逐位不变，但剂量观测量口径随结果一并上报（见 plan 结果的
+        # windowRadiusPolicy / 各候选的 windowCellsSkippedFraction）。
+        window_radius_policy=str(body.get("windowRadiusPolicy") or "tail_epsilon"),
+        window_threshold_margin=float(body.get("windowThresholdMargin") or 1.25),
     )
     d = res.to_dict()
     d["ok"] = True

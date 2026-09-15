@@ -219,6 +219,19 @@
             <input type="number" id="pl-dx" step="0.5" value="1" min="0.1"></div>
           <div class="field"><label>&nbsp;</label><button class="btn primary" id="pl-run">枚举 h / N</button></div>
         </div>
+        <div class="form-grid cols-3">
+          <div class="field"><label>窗口半径策略</label>
+            <select id="pl-window-policy">
+              <option value="tail_epsilon">既有：ε 尾部截断（剂量口径与旧版一致）</option>
+              <option value="above_threshold">超阈值开窗：只算能烧到的区域（快很多）</option>
+            </select></div>
+          <div class="field" style="grid-column: span 2"><label>&nbsp;</label>
+            <div class="hint" style="margin:0">
+              超阈值开窗下<strong>深度逐位不变</strong>（阈值半径之外能流低于阈值、增量为 0），
+              但 <code>cumulative_fluence</code> / <code>illumination_count</code> 等
+              <strong>剂量观测量</strong>只统计到阈值半径 —— 口径会变，结果里会如实报出被裁掉的比例。
+            </div></div>
+        </div>
         <div class="hint" id="pl-cost"></div>
         <div id="pl-result"></div>
 

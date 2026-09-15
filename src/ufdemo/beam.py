@@ -51,28 +51,42 @@ def cut_radius(w: float, epsilon: float = DEFAULT_TAIL_EPSILON) -> float:
     return w * math.sqrt(math.log(1.0 / epsilon) / 2.0)
 
 
-def radius_above_threshold(
-    pulse_energy_J: float, w: float, threshold: float, margin: float = 1.0
+def max_ablation_radius(
+    pulse_energy_J: float, w0: float, threshold: float, margin: float = 1.0
 ) -> float:
-    """能流**可能达到阈值**的最大半径（超阈值开窗用）。
+    """**任意**表面起伏下，能流仍可能超过阈值的最大横向半径（严格上界）。
 
-    平面高斯 ``F(r) = F_peak*exp(-2r^2/w^2)``、``F_peak = 2E/(pi w^2)``；
-    令 ``F(r) = threshold`` 解得 ``r = w*sqrt(ln(F_peak/threshold)/2)``。
+    记 ``A = F_peak(s=0)/F_th = 2E/(pi w0^2 F_th)``（未离焦的峰值/阈值比）。
+    某一格自身的离焦为 ``u = (w_cell/w0)^2 >= 1``，该格处
 
-    * ``F_peak <= threshold`` ⇒ 返回 ``0``：该事件在**整个平面**上的增量恒为 0。
-    * ``margin`` 是安全余量（倍）。默认 1.0 = 恰好取到 ``F = 阈值`` 的半径。
+        ``F(r)/F_th = (A/u) * exp(-2 r^2 / (u w0^2))``
 
-    ⚠️ 这不是「把尾部砍掉」那种数值截断：半径之外每个格子的能流都 < 阈值，
-    阈值型响应律在那里给出的增量**恰好是 0**。所以按它开窗**不改变任何去除量**，
-    只改变**剂量观测量**（``cumulative_fluence`` / ``illumination_count`` /
-    估计截获能量）的统计范围 —— 调用方必须如实上报被裁掉的比例。
+    它 > 1 ⟺ ``r^2 < w0^2 * f(u)/2``，其中 ``f(u) = u*ln(A/u)``。
+    ``f`` 在 ``u* = A/e`` 处取**唯一极大值** ``f_max = A/e``（该处对应
+    ``|s| = zR*sqrt(A/e - 1)`` 的离焦），因此
+
+        ``r < w0 * sqrt(A/(2e))``   对**任意** u 成立。
+
+    ⇒ 这是**与当前深度无关**的严格上界。为什么不能用「取窗口内最深点的
+    ``F = F_th`` 半径」：那个半径对 u 是**非单调**的，在深孔末期（u 远大于 u*）
+    它会小于 ``w0*sqrt(A/(2e))``，于是切掉中等深度处（离焦约 100 µm、
+    ablating 半径峰值约 20 µm）的**仍然可烧蚀的环带** —— 实测会让
+    N>=2 候选的平均深度偏差 ~1e-3（相对）。
+
+    * ``A <= 1`` ⇒ 返回 ``0``：任何格子都不可能超阈值，整个平面增量为 0。
+    * ``margin`` 是安全余量（倍）；1.0 已由上面的严格不等式保证。
+      默认给一点余量，用来吸收网格离散与斜入射下的横向平移。
+
+    ⚠️ 半径之外每个格子的能流都 < 阈值，阈值型响应律在那里给出的增量**恰好是 0**，
+    所以按它开窗**不改变任何去除量**；只改变**剂量观测量**
+    （``cumulative_fluence`` / ``illumination_count`` / 估计截获能量）的统计范围。
     """
-    if not (threshold > 0.0) or w <= 0.0 or pulse_energy_J <= 0.0:
+    if not (threshold > 0.0) or w0 <= 0.0 or pulse_energy_J <= 0.0:
         return 0.0
-    ratio = peak_fluence(pulse_energy_J, w) / threshold
+    ratio = peak_fluence(pulse_energy_J, w0) / threshold
     if ratio <= 1.0:
         return 0.0
-    return float(margin) * w * math.sqrt(math.log(ratio) / 2.0)
+    return float(margin) * w0 * math.sqrt(ratio / (2.0 * math.e))
 
 
 def peak_fluence(pulse_energy_J: float, w: float) -> float:
@@ -135,7 +149,7 @@ class FluencePatch:
     # --- 窗口半径策略的诊断（性能开关，见 beam.WINDOW_POLICY_*）------------
     #: 实际使用的**横向**窗口半径（斜入射时最终开窗还含平移项）
     window_radius_m: float = 0.0
-    #: 超阈值半径；仅 ``above_threshold`` 策略下非 None
+    #: 超阈值开窗用的**严格上界**半径（与深度无关）；仅 above_threshold 时非 None
     threshold_radius_m: float | None = None
     #: 窗口半径策略（原样回传，便于诊断与断言）
     window_radius_policy: str = WINDOW_POLICY_TAIL
@@ -379,43 +393,36 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
 
     emitted = float(event.energy_J)
     threshold_radius: float | None = None   # 仅 above_threshold 策略下非 None
-    tail_radius_m = 0.0                     # 同一事件按 ε 口径的半径（如实上报被裁比例用）
 
-    def _radius(m_s: float) -> float:
-        """按当前策略给出**横向**半径（不含斜入射的窗口平移项）。"""
-        nonlocal threshold_radius, tail_radius_m
-        w_here = w_of_s(w0, m_s, zR)
-        tail_radius_m = cut_radius(w_here, _eps)
-        if _above_threshold:
-            threshold_radius = radius_above_threshold(emitted, w_here, float(_thr), _margin)
-            return threshold_radius
-        return tail_radius_m
+    # --- 窗口半径 ----------------------------------------------------------
+    # 离焦会扩大光斑；窗口必须覆盖**整个当前表面**可能出现的最大光斑。
+    fx, fy, fz = event.focus_xyz_m
+    # **真实轴向跨度**（只有 Z 的贡献）：用于估算离焦横向平移 |s|·tanθ，并定 ε 裁剪半径。
+    #
+    # ⚠️ 这里必须取**全网格**的 min/max，而不是「窗口内」的跨度。实测踩过：
+    # 光束脚下可能恰好是未加工的平地、而 20 µm 外是 ~95 µm 深的坑。此时若用局部跨度，
+    # 它会趋近 0 ⇒ 窗口缩到几微米 ⇒ 把离焦 u* = A/e 处（ablating 半径**峰值**约 20 µm，
+    # 见 :func:`max_ablation_radius`）那一段**仍然能烧蚀**的环带切掉。
+    # 事件 40 实测：局部窗口 8×9 只算出 20 个非零格，而真实是 87 个 ——
+    # 那 67 个格子被静默漏掉，且下游误差会累积（N>=2 候选偏 0.7%）。
+    axial_span_true = max(abs(float(np.min(h_ref)) - fz), abs(float(np.max(h_ref)) - fz))
+    _max_s = axial_span_true
+    if not axial:
+        # 斜入射时 s = X·k_x + Y·k_y + Z·k_z 还含**横向**项，会额外增大离焦；
+        # 这里只用它来保守估计 w（光斑放大），**不**参与窗口的平移项。
+        _r_probe = cut_radius(w_of_s(w0, _max_s, zR), _eps)
+        _max_s += 2.5 * _r_probe * math.hypot(kvec[0], kvec[1])
+    # 既有 ε 口径的半径：既是默认策略实际用的窗口半径，也是 above_threshold 的对照口径。
+    tail_radius_m = cut_radius(w_of_s(w0, _max_s, zR), _eps)
 
-    axial_span_true = 0.0
-    # `r_cut` 是**横向**裁剪半径（不含斜入射的窗口平移项），后面算尾部截断比例要用它；
-    # `window_r` 才是最终开窗半径（斜入射时含平移）。
-    r_cut = _radius(0.0)
-    window_r = r_cut if not _oblique else oblique_window_radius(r_cut, kvec, 0.0)
-    if options.section is None:
-        for _ in range(8):
-            iy0, iy1 = _window_bounds(surface.y, fy, window_r)
-            ix0, ix1 = _window_bounds(surface.x, fx, window_r)
-            if iy1 <= iy0 or ix1 <= ix0:
-                break
-            _HH = h_ref[iy0:iy1, ix0:ix1]
-            # **只看窗口内**的轴向跨度（这正是与旧实现的关键差别）
-            s_local = max(abs(float(_HH.min()) - fz), abs(float(_HH.max()) - fz))
-            axial_span_true = s_local
-            m_s = s_local
-            if not axial:
-                _r_probe = _radius(m_s)
-                m_s += 2.5 * _r_probe * math.hypot(kvec[0], kvec[1])
-            r_new = _radius(m_s)
-            r_cut = r_new
-            w_new = oblique_window_radius(r_new, kvec, s_local) if _oblique else r_new
-            if w_new <= window_r * (1.0 + 1e-12):
-                break                      # 收敛：窗口已能容纳最大光斑
-            window_r = w_new
+    if _above_threshold:
+        # 超阈值开窗：取**与深度无关的严格上界**，保证覆盖全部可能超阈值的格子，
+        # 同时把 ε 尾部那一圈（对去除无贡献）彻底省掉。
+        threshold_radius = max_ablation_radius(emitted, w0, float(_thr), _margin)
+        r_cut = threshold_radius
+    else:
+        r_cut = tail_radius_m
+    window_r = r_cut if not _oblique else oblique_window_radius(r_cut, kvec, axial_span_true)
 
     window_cells = 0
     tail_window_cells: int | None = None

@@ -384,6 +384,20 @@ CAND_OVERCUT = "overcut"
 CAND_SOLVE_FAILED = "solve_failed"
 
 
+def _policy_notes(policy: Any, skipped: Any) -> list[str]:
+    """窗口半径策略的**口径说明**（只在启用时给出，默认关闭不产生任何噪音）。"""
+    out: list[str] = []
+    if str(policy or "") == "above_threshold":
+        frac = f"{float(skipped):.1%}" if isinstance(skipped, (int, float)) else "未知"
+        out.append(
+            "窗口半径策略 above_threshold（超阈值开窗）：只计算能流可能超过响应阈值的区域，"
+            f"被裁掉的窗口格比例 {frac}。这些格子对去除量的贡献**恰好为 0**（不影响深度），"
+            "但 cumulative_fluence / illumination_count 等**剂量观测量**只在该半径内统计 —— "
+            "口径与既有不一致，见 fluence_ledger.threshold_window。"
+        )
+    return out
+
+
 @dataclass
 class CandidateResult:
     """一个 (h, N) 候选的评估结果。
@@ -412,6 +426,13 @@ class CandidateResult:
     #: 加工区**外围**的最大去除深度 —— 应接近 0，用来确认"路径没跑出加工区"。
     margin_max_depth_um: float | None = None
     notes: tuple[str, ...] = ()
+    #: 本次求解**实际生效**的窗口半径策略（性能开关，见 ADR-0017）。
+    #: ``tail_epsilon`` = 既有 ε 尾部截断；``above_threshold`` = 超阈值开窗。
+    window_radius_policy: str | None = None
+    #: 被超阈值半径裁掉的**窗口格比例**（仅 above_threshold 时非 None）。
+    #: 注意：启用后 ``cumulative_fluence`` / ``illumination_count`` 等**剂量观测量**
+    #: 的统计范围随之缩小 —— 去除量不变，但口径变了，必须随结果一起上报。
+    window_cells_skipped_fraction: float | None = None
 
     @property
     def layer_count(self) -> int:
@@ -442,6 +463,8 @@ class CandidateResult:
             "machiningRegionUm": self.machining_region_um,
             "marginMaxDepthUm": self.margin_max_depth_um,
             "notes": list(self.notes),
+            "windowRadiusPolicy": self.window_radius_policy,
+            "windowCellsSkippedFraction": self.window_cells_skipped_fraction,
         }
 
 
@@ -465,6 +488,8 @@ def evaluate_candidate(
     want_surface: bool = False,
     max_surface_cells: int = 96,
     bg: Any | None = None,
+    window_radius_policy: str = "tail_epsilon",
+    window_threshold_margin: float = 1.25,
 ) -> CandidateResult:
     """评估一个 (h, N)：生成路径 → **同一套求解器** → 统计 → 判可行。
 
@@ -499,6 +524,12 @@ def evaluate_candidate(
     from .solver import solve
 
     cfg = build_row_config(row, spec=spec, gain=gain, bg=bg)
+    # --- 窗口半径策略（性能开关，默认关闭；ADR-0017）------------------------
+    # ``above_threshold`` 只计算「能流可能超过响应阈值」的区域。阈值型核在
+    # ``F <= F_th`` 处返回**恰好 0**，所以**去除量逐位不变**（有测试守着）；
+    # 但剂量观测量的统计范围会缩小 —— 实际策略与裁掉比例都随结果上报，不许静默。
+    cfg.solver.window_radius_policy = str(window_radius_policy)
+    cfg.solver.window_threshold_margin = float(window_threshold_margin)
     card_path = Path(cfg.material_card_file)
     if response_override:
         import json as _json
@@ -510,11 +541,17 @@ def evaluate_candidate(
         material = load_material_card(card_path)
 
     res = solve(cfg, material)
+    _ledger = (res.diagnostics or {}).get("fluence_ledger") or {}
+    _tw = _ledger.get("threshold_window") or {}
+    applied_policy = _ledger.get("window_radius_policy") or str(window_radius_policy)
+    skipped_fraction = _tw.get("cells_skipped_fraction")
     if res.status != "completed" or res.surface is None:
         return CandidateResult(
             spacing_um=float(spacing_um), pass_count=int(pass_count), plan=plan,
             status=CAND_SOLVE_FAILED,
             notes=tuple(f"求解未完成：{res.status}"),
+            window_radius_policy=applied_policy,
+            window_cells_skipped_fraction=skipped_fraction,
         )
 
     import numpy as np
@@ -614,7 +651,9 @@ def evaluate_candidate(
         domain_um=float(dom[0]),
         machining_region_um=float(region_um[0]),
         margin_max_depth_um=margin_max_um,
-        notes=tuple(reasons),
+        notes=tuple(reasons + _policy_notes(applied_policy, skipped_fraction)),
+        window_radius_policy=applied_policy,
+        window_cells_skipped_fraction=skipped_fraction,
     )
 
 
@@ -639,6 +678,9 @@ class TargetPlanResult:
     best_effort_violation: float | None = None
     #: 几何依据：声明的实测单线宽度、等效光斑半径、名义束腰。
     geometry_basis: Mapping[str, Any] = field(default_factory=dict)
+    #: 本次枚举**实际生效**的窗口半径策略与余量（性能开关，见 ADR-0017）。
+    window_radius_policy: str = "tail_epsilon"
+    window_threshold_margin: float = 1.25
     notes: tuple[str, ...] = ()
 
     @property
@@ -664,6 +706,8 @@ class TargetPlanResult:
             "screeningDxUm": self.screening_dx_um,
             "finalDxUm": self.final_dx_um,
             "geometryBasis": dict(self.geometry_basis),
+            "windowRadiusPolicy": self.window_radius_policy,
+            "windowThresholdMargin": self.window_threshold_margin,
             "recommended": self.recommended.to_dict() if self.recommended else None,
             "infeasibleReason": self.infeasible_reason,
             "bestEffort": self.best_effort.to_dict() if self.best_effort else None,
@@ -696,6 +740,8 @@ def plan_for_target(
     max_overcut_fraction: float = 0.05,
     auto_coarsen: bool = True,
     bg: Any | None = None,
+    window_radius_policy: str = "tail_epsilon",
+    window_threshold_margin: float = 1.25,
 ) -> TargetPlanResult:
     """枚举 h/N，筛出可行方案，按**时间**与**均匀性**排序给推荐。
 
@@ -731,6 +777,8 @@ def plan_for_target(
                 gain=gain, response_override=response_override,
                 min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
                 bg=bg,
+                window_radius_policy=window_radius_policy,
+                window_threshold_margin=window_threshold_margin,
             ))
 
     feasible = [c for c in cands if c.feasible]
@@ -753,6 +801,8 @@ def plan_for_target(
             gain=gain, response_override=response_override,
             min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
             want_surface=True, bg=bg,
+            window_radius_policy=window_radius_policy,
+            window_threshold_margin=window_threshold_margin,
         )
         if rec_with_surface.surface is not None:
             # **替换回列表**，而不是留一个游离的对象 ——
@@ -803,6 +853,8 @@ def plan_for_target(
                 gain=gain, response_override=response_override,
                 min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
                 want_surface=True, bg=bg,
+                window_radius_policy=window_radius_policy,
+                window_threshold_margin=window_threshold_margin,
             )
             if cand_s.surface is not None:
                 for _i, _c in enumerate(cands):
@@ -877,5 +929,7 @@ def plan_for_target(
         best_effort=best,
         best_effort_violation=best_v,
         geometry_basis=geom,
+        window_radius_policy=str(window_radius_policy),
+        window_threshold_margin=float(window_threshold_margin),
         notes=tuple(notes),
     )

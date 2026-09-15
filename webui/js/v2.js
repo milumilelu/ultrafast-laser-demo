@@ -367,26 +367,55 @@ async function v2RunCalibration() {
 /** 估算枚举耗时。**必须给** —— 域 400 + dx 0.5 时单个候选就要 20 s，
  *  25 个候选 20+ 分钟，不给预估用户会以为界面卡死。
  *
- *  依据实测：同样 1,040 个事件，域 100/200/400 μm 分别 1.6 / 14.2 / 22.2 s
- *  —— 每事件成本**随网格格数超线性增长**（有 per-event 全局开销），
- *  所以这里的系数按格数分档取保守值。 */
+ *  ⚠️ 早期把「域 100/200/400 μm → 1.6 / 14.2 / 22.2 s」解读成
+ *  「每事件成本随网格**超线性**增长、存在 per-event 全局开销」—— **那是错的**。
+ *  把离焦关掉（fixed_geometry）后，域 100/200/400 μm 的单事件成本是
+ *  131 / 132 / 138 µs：**网格涨 16 倍，成本只涨 5%**，不存在 O(网格) 代码路径。
+ *
+ *  真实关系是 `成本 ≈ 0.06 µs × 窗口格数`，而窗口之所以大，是**深孔离焦**撑出来的：
+ *  深度 ≫ zR ⇒ 光斑 1.33→39 µm ⇒ ε(1e-8) 窗口直径 237 µm（吃满整个域）。
+ *  实测数据与推导见 docs/reports/window_radius_policy.md。
+ *
+ *  `above_threshold`（超阈值开窗）按**与深度无关的严格上界**开窗
+ *  （半径 = w0·sqrt(A/(2e))·margin，A = 未离焦峰值/阈值），窗口与域大小**无关**，
+ *  实测 **0.79 ms/事件**（域 400 / 加工区 200 / dx 0.5，4,080 事件；
+ *  对照既有口径 19.0 ms/事件 ⇒ 24.2×），且**高度场逐位一致**。 */
 function v2EstimateCost() {
   const num = (id, d) => parseFloat((document.getElementById(id) || {}).value || String(d));
   const dom = num("pl-domain", 400), reg = num("pl-region", 200), dx = num("pl-dx", 1);
   const fK = num("p-f-khz", 20), v = num("p-v", 50);
-  const n = Math.round(dom / dx);
+  const n = dx > 0 ? Math.round(dom / dx) : 0;
   const cells = n * n;
-  const pitchUm = v / Math.max(fK, 1e-9);           // 沿扫描方向的脉冲间距
+  // 沿扫描方向的脉冲间距 = v / f。**两个输入都可能为 0**（页面刚打开、还没载入算例时
+  // 扫描速度就是 0）→ pitch = 0 → 事件数 = Infinity，界面会显示「∞ 分钟」。
+  // 这里显式判可用性，让界面如实说「参数未就绪」，而不是印一个假的大数/无穷。
+  const pitchUm = (v > 0 && fK > 0) ? v / fK : 0;
+  const ready = pitchUm > 0 && reg > 0 && n > 0;
   let events = 0;
-  for (const h of [2, 4, 6, 8, 10]) {
-    for (const N of [1, 2, 3, 4, 5]) {
-      events += (Math.floor(reg / h) + 1) * Math.ceil(reg / pitchUm) * N;
+  if (ready) {
+    for (const h of [2, 4, 6, 8, 10]) {
+      for (const N of [1, 2, 3, 4, 5]) {
+        events += (Math.floor(reg / h) + 1) * Math.ceil(reg / pitchUm) * N;
+      }
     }
   }
-  // 每事件耗时（ms）—— 按格数分档，取实测的保守值
-  const perEventMs = cells <= 60000 ? 2 : (cells <= 250000 ? 14 : 22);
-  const sec = (events * perEventMs) / 1000;
-  return { n, cells, events, sec, region: reg, domain: dom, dx };
+  // 每事件耗时（ms）—— 两种口径分开估，**不能混用一个常数**
+  const polEl = document.getElementById("pl-window-policy");
+  const policy = polEl ? polEl.value : "tail_epsilon";
+  let perEventMs, basis;
+  if (policy === "above_threshold") {
+    // 超阈值开窗：窗口半径是**固定的物理尺寸**（与深度、域大小都无关），
+    // 所以窗口内格数按 1/dx² 增长，每事件成本也按 1/dx² 换算。
+    // 实测 0.79 ms/事件 @ 域 400 / 加工区 200 / dx 0.5（4,080 事件；既有 19.0 ms）。
+    perEventMs = 0.79 * Math.pow(0.5 / Math.max(dx, 1e-6), 2);
+    basis = "超阈值开窗实测：0.79 ms/事件 @ dx 0.5（窗口与域大小、深度均无关）";
+  } else {
+    perEventMs = cells <= 60000 ? 2 : (cells <= 250000 ? 14 : 22);
+    basis = "既有 ε 尾部截断实测分档：2 / 14 / 22 ms（按格数）";
+  }
+  const sec = ready ? (events * perEventMs) / 1000 : null;
+  return { n, cells, events, sec, region: reg, domain: dom, dx, policy, perEventMs, basis,
+           ready, pulsePitchUm: pitchUm };
 }
 
 /** 刷新耗时提示（输入变化时调用） */
@@ -394,18 +423,31 @@ function v2RefreshCost() {
   const el = document.getElementById("pl-cost");
   if (!el) return;
   const e = v2EstimateCost();
+  if (!e.ready) {
+    // 参数没齐就别给数 —— 印「∞ 分钟」等于给了一个错数。
+    el.innerHTML =
+      `<div class="notice warn" style="margin:0">耗时预估暂不可用：` +
+      `需要 <strong>扫描速度 v > 0</strong> 与 <strong>频率 f > 0</strong>` +
+      `（当前 v = ${(document.getElementById("p-v") || {}).value || 0} mm/s，` +
+      `f = ${(document.getElementById("p-f-khz") || {}).value || 0} kHz）。` +
+      `请先在「数据与工况」载入算例或填好这两个参数。</div>`;
+    return;
+  }
   const mins = e.sec / 60;
   const t = mins < 1 ? `${e.sec.toFixed(0)} 秒` : `${mins.toFixed(1)} 分钟`;
   let cls = "info", warn = "";
-  if (mins > 10) { cls = "warn"; warn = " ⚠️ <strong>很久</strong>——建议把筛选网格 dx 调大。"; }
+  if (mins > 10) { cls = "warn"; warn = " ⚠️ <strong>很久</strong>——建议改用「超阈值开窗」，或把筛选网格 dx 调大。"; }
   else if (mins > 3) { cls = "warn"; warn = " 建议先把 dx 调大做粗筛。"; }
+  const on = e.policy === "above_threshold";
   el.innerHTML =
     `<div class="notice ${cls}" style="margin:0">` +
+    `窗口半径策略 <strong>${on ? "超阈值开窗" : "既有 ε 尾部截断"}</strong>；` +
     `仿真域 ${e.domain} µm ÷ dx ${e.dx} µm → <strong>${e.n}×${e.n} = ${e.cells.toLocaleString()} 格</strong>；` +
     `加工区 ${e.region} µm；25 个候选预计 <strong>${e.events.toLocaleString()} 个事件</strong>，` +
     `估算耗时<strong>约 ${t}</strong>。${warn}` +
-    `<br>（估算基于实测的单事件成本；实际以运行为准。扫描线间距 h 与脉冲间距 ${(e.region && 1) ? "" : ""}` +
-    `沿扫描方向 ${(parseFloat((document.getElementById("p-v")||{}).value||50) / Math.max(parseFloat((document.getElementById("p-f-khz")||{}).value||20), 1e-9)).toFixed(2)} µm 共同决定事件数。）</div>`;
+    `<br>（${e.basis}；实际以运行为准。扫描线间距 h 与脉冲间距（沿扫描方向 ${e.pulsePitchUm.toFixed(2)} µm）共同决定事件数。` +
+    (on ? " 超阈值开窗下<strong>深度逐位不变</strong>，但剂量观测量口径变小，结果会报出裁掉比例。" : "") +
+    `）</div>`;
 }
 
 async function v2RunPlan() {
@@ -435,6 +477,7 @@ async function v2RunPlan() {
       repetitionRateKHz: g("p-f-khz", 20),
       scanSpeedMmS: g("p-v", 50),
       dxUm: g("pl-dx", 1),
+      windowRadiusPolicy: (document.getElementById("pl-window-policy") || {}).value || "tail_epsilon",
       gain: V2.gain || 1.0,
       responseOverride: {
         kind: "log_fixed",
@@ -596,6 +639,7 @@ function v2Bind() {
   on("pl-run", "click", v2RunPlan);
   ["pl-domain", "pl-region", "pl-dx", "p-f-khz", "p-v"].forEach((id) =>
     on(id, "input", v2RefreshCost));
+  on("pl-window-policy", "change", v2RefreshCost);
 }
 
 async function v2Init() {
