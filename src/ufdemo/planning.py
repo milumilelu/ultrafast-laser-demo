@@ -98,6 +98,11 @@ class PathPlan:
     notes: tuple[str, ...] = ()
     device_policy: Mapping[str, Any] = field(default_factory=lambda: dict(DEVICE_PATH_POLICY))
 
+    @property
+    def layer_count(self) -> int:
+        """层数 N（= 旧的 pass_count）。每层是一次完整弓字形扫描。"""
+        return int(self.pass_count)
+
     # -- 时间 ----------------------------------------------------------------
     @property
     def ideal_scan_time_s(self) -> float:
@@ -120,7 +125,9 @@ class PathPlan:
             "spacingRequestedUm": self.spacing_requested_um,
             "spacingEffectiveUm": self.spacing_effective_um,
             "nScanLines": self.n_scan_lines,
-            "passCount": self.pass_count,
+            "layerCount": self.pass_count,     # N = 层数
+            "passCount": self.pass_count,      # 旧名，保留兼容
+            "machinedShape": "rectangular_pocket",
             "focusZM": self.focus_z_m,
             "focusStrategy": "fixed_original_surface",
             "scanSpeedMmS": self.scan_speed_mm_s,
@@ -185,7 +192,9 @@ def serpentine_plan(
     *,
     region_um: tuple[float, float],
     spacing_um: float,
-    pass_count: int,
+    layer_count: int | None = None,
+    pass_count: int | None = None,      # 旧名（= 层数），保留兼容
+
     scan_speed_mm_s: float,
     focus_z_m: float = 0.0,
     y_start_um: float | None = None,
@@ -204,10 +213,18 @@ def serpentine_plan(
             CONFIG_INVALID, "间距必须是正有限数",
             field_path="planning.spacing_um", actual=spacing_um, requirement="> 0",
         )
+    # N 是**层数**：每层是一次完整的弓字形扫描。旧名 pass_count 等价，保留兼容。
+    pass_count = layer_count if layer_count is not None else pass_count
+    if pass_count is None:
+        raise UFDemoError(
+            CONFIG_INVALID, "缺少层数 N",
+            field_path="planning.layer_count", actual=None, requirement="整数 ≥ 1",
+        )
     if pass_count < 1 or int(pass_count) != pass_count:
         raise UFDemoError(
-            CONFIG_INVALID, "遍数必须是 ≥1 的整数",
-            field_path="planning.pass_count", actual=pass_count, requirement="整数 ≥ 1",
+            CONFIG_INVALID, "层数 N 必须是 ≥1 的整数",
+            field_path="planning.layer_count",
+            actual=pass_count, requirement="整数 ≥ 1",
         )
     if scan_speed_mm_s <= 0 or not math.isfinite(scan_speed_mm_s):
         raise UFDemoError(
@@ -325,6 +342,27 @@ def enumerate_candidates(
 # * 质量信息分两类：**标量深度误差**（有实验证据）
 #   vs **二维覆盖/几何均匀性**（模型预测，未导入实测高度图不得声称已验证）。
 
+def _violation(c: "CandidateResult", *, target_um: float, tol_um: float) -> float:
+    """**违规程度**（0 = 完全满足）。用于"无可行方案时给一个最接近的"。
+
+    这不是"放宽判据"，而是在**没有可行解时**仍然给一个可诊断的参考 ——
+    报告里必须显示它**不满足约束**，不得被读成推荐。
+    """
+    if c.mean_depth_um is None:
+        return float("inf")
+    v = 0.0
+    lo, hi = target_um - tol_um, target_um + tol_um
+    if c.mean_depth_um < lo:
+        v += (lo - c.mean_depth_um) / max(tol_um, 1e-9)
+    elif c.mean_depth_um > hi:
+        v += (c.mean_depth_um - hi) / max(tol_um, 1e-9)
+    if c.coverage_fraction is not None and c.coverage_fraction < 0.98:
+        v += (0.98 - c.coverage_fraction) / 0.98
+    if c.over_depth_fraction is not None and c.over_depth_fraction > 0.05:
+        v += (c.over_depth_fraction - 0.05) / 0.95
+    return v
+
+
 def _rank_key(c: "CandidateResult") -> tuple[float, float]:
     """候选排序键：**先看理想时间，再看深度均匀性**。
 
@@ -365,7 +403,15 @@ class CandidateResult:
     under_depth_fraction: float | None = None   # 浅于 目标-容差 的比例（漏加工）
     over_depth_fraction: float | None = None    # 深于 目标+容差 的比例（过切）
     depth_std_um: float | None = None           # 几何均匀性（模型预测）
+    #: **矩形槽形貌**（下采样深度图 + 中心截面）。只在需要时填充（默认 None），
+    #: 否则 25 个候选各带一张图会让响应体爆炸。
+    surface: Mapping[str, Any] | None = None
     notes: tuple[str, ...] = ()
+
+    @property
+    def layer_count(self) -> int:
+        """层数 N（= 旧的 ``pass_count``）。"""
+        return int(self.pass_count)
 
     @property
     def feasible(self) -> bool:
@@ -374,7 +420,9 @@ class CandidateResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "spacingUm": self.spacing_um,
-            "passCount": self.pass_count,
+            "layerCount": self.pass_count,
+            "passCount": self.pass_count,     # 旧名，保留兼容
+            "machinedShape": "rectangular_pocket",
             "status": self.status,
             "feasible": self.feasible,
             "meanDepthUm": self.mean_depth_um,
@@ -384,6 +432,7 @@ class CandidateResult:
             "underDepthFraction": self.under_depth_fraction,
             "overDepthFraction": self.over_depth_fraction,
             "depthStdUm": self.depth_std_um,
+            "surface": dict(self.surface) if self.surface else None,
             "notes": list(self.notes),
         }
 
@@ -404,6 +453,8 @@ def evaluate_candidate(
     response_override: Mapping[str, Any] | None = None,
     min_coverage: float = 0.98,
     max_overcut_fraction: float = 0.05,
+    want_surface: bool = False,
+    max_surface_cells: int = 96,
     bg: Any | None = None,
 ) -> CandidateResult:
     """评估一个 (h, N)：生成路径 → **同一套求解器** → 统计 → 判可行。
@@ -457,6 +508,48 @@ def evaluate_candidate(
 
     drop = res.surface.initial_height - res.surface.height
     touched = drop > 0.0
+
+    # --- 矩形槽形貌（按需）--------------------------------------------------
+    # 弓字形填充整个矩形 → 结果是一个**矩形槽**，不是单个圆坑。
+    # 只有需要展示时才带图（25 个候选全带会让响应体爆掉）。
+    surf: dict[str, Any] | None = None
+    if want_surface:
+        ny, nx = drop.shape
+        stride = max(1, int(np.ceil(max(nx, ny) / max_surface_cells)))
+        sub = drop[::stride, ::stride] * 1e6          # → μm
+        g = res.surface.grid
+        # 取**深度最大的一行**作为"沿扫描线"截面 —— 不能固定取几何中心那一行：
+        # 扫描线按间距 h 分布，中心行很可能**正好落在两条线之间**，
+        # 那样截出来全是 0，看起来像"什么都没加工"（实测踩过）。
+        row_idx = int(np.argmax(drop.mean(axis=1)))
+        col_idx = nx // 2
+        surf = {
+            "kind": "rectangular_pocket",
+            "nx": int(sub.shape[1]),
+            "ny": int(sub.shape[0]),
+            "stride": stride,
+            "dxUm": float(g.dx_m) * 1e6 * stride,
+            "dyUm": float(g.dy_m) * 1e6 * stride,
+            "regionUm": [float(region_um[0]), float(region_um[1])],
+            "depthUm": [[round(float(v), 4) for v in row] for row in sub],
+            # 沿扫描方向（X）：某一扫描线上的纵向起伏
+            "sectionAlongXUm": [round(float(v), 4) for v in (drop[row_idx] * 1e6)],
+            "sectionXAxisUm": [round(float(v), 4) for v in
+                               ((np.arange(nx) - nx // 2) * g.dx_m * 1e6)],
+            # 垂直扫描方向（Y）：**这一条最能看出搭接起伏与漏加工**
+            "sectionAlongYUm": [round(float(v), 4) for v in (drop[:, col_idx] * 1e6)],
+            "sectionYAxisUm": [round(float(v), 4) for v in
+                               ((np.arange(ny) - ny // 2) * g.dy_m * 1e6)],
+            "stats": {
+                "meanUm": float(drop.mean()) * 1e6,
+                "maxUm": float(drop.max()) * 1e6,
+                "p5Um": float(np.percentile(drop, 5)) * 1e6,
+                "p95Um": float(np.percentile(drop, 95)) * 1e6,
+                "ripplePvUm": float(np.percentile(drop, 95) - np.percentile(drop, 5)) * 1e6,
+            },
+            "note": ("沿 Y 的截面最能看出**搭接起伏**：h 越小重叠越多、底部越平，"
+                     "但深度也越大。高斯光束**做不到理想平底**。"),
+        }
     mean_d = float(np.mean(drop)) * 1e6
     max_d = float(np.max(drop)) * 1e6
     cov = float(np.mean(touched))
@@ -489,6 +582,7 @@ def evaluate_candidate(
         ideal_time_s=plan.ideal_scan_time_s,
         coverage_fraction=cov, under_depth_fraction=under, over_depth_fraction=over,
         depth_std_um=std,
+        surface=surf,
         notes=tuple(reasons),
     )
 
@@ -503,6 +597,13 @@ class TargetPlanResult:
     candidates: tuple[CandidateResult, ...] = ()
     recommended: CandidateResult | None = None
     infeasible_reason: str | None = None
+    #: 加工形貌类型 —— 矩形区域走弓字形填充，结果是**矩形槽**。
+    machined_shape: str = "rectangular_pocket"
+    #: **无可行方案时**的最接近候选（**明确不满足约束**，仅供诊断，不是推荐）。
+    best_effort: CandidateResult | None = None
+    best_effort_violation: float | None = None
+    #: 几何依据：声明的实测单线宽度、等效光斑半径、名义束腰。
+    geometry_basis: Mapping[str, Any] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
 
     @property
@@ -523,8 +624,16 @@ class TargetPlanResult:
             "regionUm": list(self.region_um),
             "nCandidates": len(self.candidates),
             "nFeasible": len(self.feasible_candidates),
+            "machinedShape": self.machined_shape,
+            "geometryBasis": dict(self.geometry_basis),
             "recommended": self.recommended.to_dict() if self.recommended else None,
             "infeasibleReason": self.infeasible_reason,
+            "bestEffort": self.best_effort.to_dict() if self.best_effort else None,
+            "bestEffortViolation": self.best_effort_violation,
+            "bestEffortNote": (
+                "**最接近的候选，不满足约束** —— 仅用于诊断，不得当作推荐方案。"
+                if self.best_effort else None
+            ),
             "notes": list(self.notes),
             "candidates": [c.to_dict() for c in self.candidates],
         }
@@ -579,6 +688,31 @@ def plan_for_target(
     if feasible:
         feasible.sort(key=_rank_key)
         rec = feasible[0]
+        # 给推荐候选补一张**矩形槽形貌**（其余候选不带，避免响应体过大）。
+        # 注意这是**再跑一次同一个候选**，不是把上面的数值搬过来 ——
+        # 保证展示的图与推荐参数是同一套输入算出来的。
+        rec_with_surface = evaluate_candidate(
+            rec.spacing_um, rec.pass_count,
+            material_card_file=material_card_file,
+            region_um=region_um, dx_um=dx_um,
+            pulse_duration_fs=pulse_duration_fs,
+            repetition_rate_kHz=repetition_rate_kHz,
+            scan_speed_mm_s=scan_speed_mm_s,
+            target_depth_um=target_depth_um, tolerance_um=tolerance_um,
+            gain=gain, response_override=response_override,
+            min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
+            want_surface=True, bg=bg,
+        )
+        if rec_with_surface.surface is not None:
+            # **替换回列表**，而不是留一个游离的对象 ——
+            # 否则 `recommended` 与 `feasible_candidates[0]` 是"同参数不同实例"，
+            # 「界面推荐 = 表格第一行」这个不变量就断了（测试抓到过）。
+            for _i, _c in enumerate(cands):
+                if (_c.spacing_um == rec.spacing_um
+                        and _c.pass_count == rec.pass_count):
+                    cands[_i] = rec_with_surface
+                    break
+            rec = rec_with_surface
     else:
         # 无可行组合 → 说清是"都太浅"还是"都太深"，而不是丢一句"无解"。
         d = [c.mean_depth_um for c in cands if c.mean_depth_um is not None]
@@ -595,7 +729,70 @@ def plan_for_target(
             reason = (f"当前范围内无可行方案：候选因以下原因被否 {sorted(bad)}"
                       "（覆盖/过切等横向约束不满足）。")
 
+    # 无可行方案时，挑一个**违规最小**的候选并附上矩形槽形貌 ——
+    # 目的是让人能看见"实际会做成什么样"，报告里会明确标注它不满足约束。
+    best: CandidateResult | None = None
+    best_v: float | None = None
+    if rec is None and cands:
+        scored = [(c, _violation(c, target_um=target_depth_um, tol_um=tolerance_um))
+                  for c in cands]
+        scored = [(c, v) for c, v in scored if c.mean_depth_um is not None]
+        if scored:
+            scored.sort(key=lambda kv: kv[1])
+            cand0, v0 = scored[0]
+            best_v = v0
+            cand_s = evaluate_candidate(
+                cand0.spacing_um, cand0.pass_count,
+                material_card_file=material_card_file,
+                region_um=region_um, dx_um=dx_um,
+                pulse_duration_fs=pulse_duration_fs,
+                repetition_rate_kHz=repetition_rate_kHz,
+                scan_speed_mm_s=scan_speed_mm_s,
+                target_depth_um=target_depth_um, tolerance_um=tolerance_um,
+                gain=gain, response_override=response_override,
+                min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
+                want_surface=True, bg=bg,
+            )
+            if cand_s.surface is not None:
+                for _i, _c in enumerate(cands):
+                    if (_c.spacing_um == cand0.spacing_um
+                            and _c.pass_count == cand0.pass_count):
+                        cands[_i] = cand_s
+                        break
+                best = cand_s
+            else:
+                best = cand0
+
+    # 几何依据：把「名义光学值」与「实测单线宽度 / 等效光斑」分开写清楚。
+    from .config import load_shared_background as _lsb
+
+    _bg = bg or _lsb()
+    _thr = (response_override or {}).get("threshold_J_m2")
+    geom: dict[str, Any] = {"machinedShape": "rectangular_pocket"}
+    if _thr:
+        _energy = _bg.pulse_energy_J(float(repetition_rate_kHz) * 1e3)
+        _w, _basis = _bg.equivalent_spot_radius_m(
+            pulse_energy_J=_energy, threshold_J_m2=float(_thr))
+        _half = _bg.ablated_half_width_m(spot_radius_m=_w, pulse_energy_J=_energy,
+                                         threshold_J_m2=float(_thr))
+        geom.update({
+            "thresholdJm2": float(_thr),
+            "pulseEnergyUJ": _energy * 1e6,
+            "spotRadiusUm": _w * 1e6,
+            "lineWidthModelUm": 2.0 * _half * 1e6,
+            "spotRadiusBasis": _basis,
+        })
+        if _basis.get("declared_width_um") is not None:
+            geom["declaredLineWidthUm"] = _basis["declared_width_um"]
+            geom["nominalWaistUm"] = _basis.get("nominal_waist_um")
+            geom["nominalOpticsWidthUm"] = _basis.get("nominal_width_um")
+    else:
+        geom["nominalWaistUm"] = _bg.derived_waist_m() * 1e6
+        geom["note"] = "未给阈值 → 无法按实测单线宽度反推等效光斑"
+
     notes = [
+        "**加工形貌是矩形槽**（矩形区域按弓字形填充），不是单个圆坑。",
+        "N 是**层数**：每层一次完整弓字形扫描；**不做逐层 Z 调整**（焦点恒在原始上表面）。",
         "**标量深度误差**（若有实验对照）属实验证据；"
         "**覆盖率 / 漏加工 / 过切 / 深度标准差**是**模型预测**，"
         "未导入实测高度图时**不构成**二维形貌验证。",
@@ -613,5 +810,9 @@ def plan_for_target(
         candidates=tuple(cands),
         recommended=rec,
         infeasible_reason=reason,
+        machined_shape="rectangular_pocket",
+        best_effort=best,
+        best_effort_violation=best_v,
+        geometry_basis=geom,
         notes=tuple(notes),
     )

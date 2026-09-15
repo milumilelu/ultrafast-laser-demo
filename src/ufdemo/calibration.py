@@ -392,7 +392,14 @@ def build_row_config(
     from . import resource_root
 
     bg = bg or load_shared_background()
-    patch = shared_background_patch(bg, repetition_rate_Hz=row.repetition_rate_kHz * 1e3)
+    # 有阈值时按**声明的实测单线宽度**反推等效光斑半径 ——
+    # 否则拿名义 w0（0.874 μm）去算，烧蚀宽度只有 3.96 μm，与实测 5 μm 不符，
+    # 覆盖/搭接判断会整体偏窄（这正是之前 h/N「覆盖 5–24%」的成因之一）。
+    _thr = (spec.response_override or {}).get("threshold_J_m2")
+    patch = shared_background_patch(
+        bg, repetition_rate_Hz=row.repetition_rate_kHz * 1e3,
+        threshold_J_m2=float(_thr) if _thr else None,
+    )
 
     win = float(spec.window_um)
     nx = max(8, int(round(win / spec.dx_um)))
@@ -445,6 +452,7 @@ def build_row_config(
         "output": {},
     }
     raw["_path_plan_n_lines"] = plan.n_scan_lines
+    raw["_spot_radius_basis"] = dict(patch["laser"].get("_spot_radius_basis") or {})
     raw["_path_plan_notes"] = list(plan.notes)
 
     from . import project_root as _pr

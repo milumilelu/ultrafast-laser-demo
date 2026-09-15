@@ -12,7 +12,7 @@
 <header class="topbar">
   <div class="brand">
     <h1>超快激光加工工艺仿真</h1>
-    <span class="sub">上游轮廓对照 · 实验 CSV 标定 · 填充间距与遍数规划</span>
+    <span class="sub">上游轮廓对照 · 实验 CSV 标定 · 填充间距与层数规划</span>
   </div>
   <div class="spacer"></div>
   <span class="badge" id="mode-badge"><span class="dot"></span>真实求解器</span>
@@ -198,9 +198,13 @@
       <div class="card">
         <h2>目标与规划</h2>
         <p class="hint">
-          给出目标深度与容差，枚举<strong>填充间距 h</strong> 与<strong>加工遍数 N</strong>。
+          给出目标深度与容差，枚举<strong>填充间距 h</strong> 与<strong>层数 N</strong>。
           每个候选都真的跑一遍已标定求解器；<strong>没有可行方案时如实说明</strong>，不硬给一个"最优"。
         </p>
+        <div class="notice info">
+          矩形区域按<strong>弓字形填充</strong>，加工结果是<strong>矩形槽</strong>（不是单个圆坑）。
+          焦点始终固定在原始上表面，<strong>不做逐层 Z 调整</strong>。
+        </div>
         <div class="form-grid cols-3">
           <div class="field"><label>区域 X (µm)</label><input type="number" id="pl-rx" step="10" value="40"></div>
           <div class="field"><label>区域 Y (µm)</label><input type="number" id="pl-ry" step="10" value="40"></div>
@@ -211,6 +215,18 @@
           <div class="field"><label>&nbsp;</label><button class="btn primary" id="pl-run">枚举 h / N</button></div>
         </div>
         <div id="pl-result"></div>
+
+        <div class="section-title" id="pl-shape-title" style="display:none">矩形槽形貌（模型预测）</div>
+        <div id="pl-geom" class="hint"></div>
+        <div class="chart-wrap" id="pl-heat-wrap" style="display:none">
+          <p class="chart-title" id="pl-heat-title"></p>
+          <canvas id="pl-surface"></canvas>
+        </div>
+        <div class="chart-wrap" id="pl-sec-wrap" style="display:none">
+          <p class="chart-title">垂直扫描方向的截面 —— 看搭接起伏与漏加工</p>
+          <canvas id="pl-section-y"></canvas>
+        </div>
+        <div class="watermark" id="pl-shape-note"></div>
       </div>
 
       <section class="card" id="result-section">
@@ -363,7 +379,7 @@
             <input type="number" id="pe-power" step="0.1" value="14.7"></div>
           <div class="field"><label for="pe-speed">扫描速度 v（mm/s）</label>
             <input type="number" id="pe-speed" step="1" value="2770"></div>
-          <div class="field"><label for="pe-passes">遍数 N</label>
+          <div class="field"><label for="pe-passes">层数 N</label>
             <input type="number" id="pe-passes" step="1" value="117"></div>
           <button id="pe-run">预测（不触发求解）</button>
         </div>

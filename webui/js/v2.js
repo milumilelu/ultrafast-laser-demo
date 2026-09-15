@@ -164,7 +164,7 @@ function v2RenderExperimentInfo() {
       ["脉宽档", (item.pulseDurationsFs || []).map((v) => v + " fs").join("、")],
       ["频率档", (item.frequenciesKHz || []).map((v) => v + " kHz").join("、")],
       ["间距档", (item.spacingsUm || []).map((v) => v + " µm").join("、")],
-      ["遍数档", (item.passCounts || []).join("、")],
+      ["层数档（原表「重复加工次数」）", (item.passCounts || []).join("、")],
     ]) + warns.join("")
   );
 }
@@ -219,7 +219,7 @@ function v2RenderUpstreamInfo() {
       ["横轴", `${d.xAxis}（${d.xAxis === "r" ? "径向 —— 不是扫描方向" : "扫描方向"}）`],
       ["中心深度", `${v2Num(d.nCenter ?? d.centerDepth, 3)} µm`],
       ["点数", d.nPoints],
-      ["脉冲数 / 遍数", `${d.nPulses ?? "—"} / ${d.nPasses ?? "—"}`],
+      ["脉冲数 / 层数", `${d.nPulses ?? "—"} / ${d.nPasses ?? "—"}`],
       ["上游版本", d.upstreamVersion || "—"],
     ]) +
     (c.radiusNote ? `<div class="notice info">${c.radiusNote}</div>` : "");
@@ -374,60 +374,140 @@ async function v2RunPlan() {
   }
   const g = (id, dflt) => parseFloat((document.getElementById(id) || {}).value || String(dflt));
   box.innerHTML = `<div class="notice info">正在枚举 25 个候选，每个都跑一遍求解器…</div>`;
+  let r;
   try {
-    const r = await API.plan({
+    r = await API.plan({
       materialCardFile: "tests/fixtures/analytic_fixture.json",
       targetDepthUm: g("pl-target", 20),
       toleranceUm: g("pl-tol", 3),
       regionUm: [g("pl-rx", 40), g("pl-ry", 40)],
       pulseDurationFs: bl.pulseDurationFs,
-      repetitionRateKHz: g("p-f-khz", 10),
+      repetitionRateKHz: g("p-f-khz", 20),
       scanSpeedMmS: g("p-v", 50),
       dxUm: 0.5,
       gain: V2.gain || 1.0,
       responseOverride: {
         kind: "log_fixed",
         output_semantics: "event_depth_increment",
-        fluency_basis: "incident_peak_fluence",
         fluence_basis: "incident_peak_fluence",
         depth_direction: "surface_normal",
         threshold_J_m2: bl.thresholdJm2,
         delta_m: bl.deltaM,
       },
     });
-    if (!r.ok) { box.innerHTML = `<div class="notice warn">规划失败</div>`; return; }
-    const rec = r.recommended;
-    const head = rec
-      ? `<div class="notice ok"><strong>推荐：h = ${rec.spacingUm} µm，N = ${rec.passCount}</strong>
-           → 平均 ${v2Num(rec.meanDepthUm, 2)} µm，理想时间 ${v2Num(rec.idealTimeS, 4)} s</div>`
-      : `<div class="notice warn"><strong>当前范围内无可行方案</strong><br>${r.infeasibleReason || ""}</div>`;
-    const rows = (r.candidates || [])
-      .map(
-        (c) => `<tr>
-        <td>${c.spacingUm}</td><td>${c.passCount}</td>
-        <td>${v2Num(c.meanDepthUm, 2)}</td>
-        <td>${v2Num(c.idealTimeS, 4)}</td>
-        <td>${v2Pct(c.coverageFraction)}</td>
-        <td>${v2Pct(c.overDepthFraction)}</td>
-        <td>${c.feasible ? '<span class="tag yes">可行</span>' : `<span class="tag no">${c.status}</span>`}</td>
-      </tr>`
-      )
-      .join("");
-    box.innerHTML =
-      head +
-      `<div class="section-title">全部候选（${r.nFeasible}/${r.nCandidates} 可行）</div>
-       <div style="max-height:300px;overflow-y:auto">
-       <table class="kv"><tr><th>h (µm)</th><th>N</th><th>均值 (µm)</th><th>时间 (s)</th>
-         <th>覆盖</th><th>过切</th><th>状态</th></tr>${rows}</table></div>
-       <div class="notice info" style="margin-top:10px">
-         <strong>覆盖率 / 过切 / 均匀性是模型预测</strong>；
-         没有导入实测高度图时<strong>不构成</strong>二维形貌验证。
-         时间是不含换向减速的<strong>理想值</strong>。
-       </div>
-       ${(r.notes || []).length ? `<details class="fold"><summary>技术说明（${r.notes.length} 条）</summary>
-         <ul>${r.notes.map((n) => `<li>${n}</li>`).join("")}</ul></details>` : ""}`;
   } catch (err) {
     box.innerHTML = `<div class="notice warn">规划失败：${err.message || err}</div>`;
+    return;
+  }
+  if (!r.ok) { box.innerHTML = `<div class="notice warn">规划失败</div>`; return; }
+
+  const rec = r.recommended;
+  const best = r.bestEffort;
+  const head = rec
+    ? `<div class="notice ok"><strong>推荐：h = ${rec.spacingUm} µm，N = ${rec.layerCount} 层</strong>
+         → 平均 ${v2Num(rec.meanDepthUm, 2)} µm，理想时间 ${v2Num(rec.idealTimeS, 4)} s</div>`
+    : `<div class="notice warn"><strong>当前范围内无可行方案</strong><br>${r.infeasibleReason || ""}
+       ${best ? `<br>下面展示的是<strong>最接近的候选（不满足约束，仅供诊断）</strong>：
+       h=${best.spacingUm} µm / N=${best.layerCount} 层 → ${v2Num(best.meanDepthUm, 2)} µm` : ""}</div>`;
+
+  const rows = (r.candidates || [])
+    .map((c) => `<tr>
+      <td>${c.spacingUm}</td><td>${c.layerCount}</td>
+      <td>${v2Num(c.meanDepthUm, 2)}</td>
+      <td>${v2Num(c.idealTimeS, 4)}</td>
+      <td>${v2Pct(c.coverageFraction)}</td>
+      <td>${v2Pct(c.overDepthFraction)}</td>
+      <td>${c.feasible ? '<span class="tag yes">可行</span>' : `<span class="tag no">${c.status}</span>`}</td>
+    </tr>`)
+    .join("");
+
+  box.innerHTML = head +
+    `<div class="section-title">全部候选（${r.nFeasible}/${r.nCandidates} 可行）</div>
+     <div style="max-height:280px;overflow-y:auto">
+     <table class="kv"><tr><th>间距 h (µm)</th><th>层数 N</th><th>均值 (µm)</th><th>时间 (s)</th>
+       <th>覆盖</th><th>过切</th><th>状态</th></tr>${rows}</table></div>
+     <div class="notice info" style="margin-top:10px">
+       <strong>覆盖率 / 过切 / 均匀性是模型预测</strong>；
+       没有导入实测高度图时<strong>不构成</strong>二维形貌验证。
+       时间是不含换向减速的<strong>理想值</strong>。
+     </div>` +
+    ((r.notes || []).length
+      ? `<details class="fold"><summary>技术说明（${r.notes.length} 条）</summary>
+         <ul>${r.notes.map((n) => `<li>${n}</li>`).join("")}</ul></details>` : "");
+
+  v2RenderGeometry(r.geometryBasis);
+  v2DrawPocket(rec || best, rec ? "推荐方案" : "最接近候选（不满足约束）");
+}
+
+/** 几何依据：把「名义光学值」与「实测单线宽度 / 等效光斑」分开写。 */
+function v2RenderGeometry(g) {
+  const box = document.getElementById("pl-geom");
+  if (!box) return;
+  if (!g || !g.spotRadiusUm) { box.innerHTML = ""; return; }
+  const parts = [];
+  if (g.declaredLineWidthUm) {
+    parts.push(`实测单线宽度 <strong>${v2Num(g.declaredLineWidthUm, 3)} µm</strong>`);
+    parts.push(`→ 等效光斑半径 <strong>${v2Num(g.spotRadiusUm, 4)} µm</strong>`);
+    parts.push(`（模型给出的烧蚀宽度 <strong>${v2Num(g.lineWidthModelUm, 3)} µm</strong>）`);
+    if (g.nominalWaistUm) {
+      parts.push(`｜名义 w0 ${v2Num(g.nominalWaistUm, 4)} µm 只作光学记录` +
+        `（它给的宽度只有 ${v2Num(g.nominalOpticsWidthUm, 3)} µm）`);
+    }
+  } else {
+    parts.push(`未声明实测单线宽度 → 用名义光学 w0 ${v2Num(g.nominalWaistUm, 4)} µm`);
+  }
+  if (g.pulseEnergyUJ) parts.push(`｜脉冲能量 ${v2Num(g.pulseEnergyUJ, 1)} µJ`);
+  box.innerHTML = parts.join(" ");
+}
+
+/** 画矩形槽：深度热图 + 垂直扫描方向的截面（最能看出搭接/漏加工）。 */
+function v2DrawPocket(cand, label) {
+  const titleEl = document.getElementById("pl-shape-title");
+  const heatWrap = document.getElementById("pl-heat-wrap");
+  const secWrap = document.getElementById("pl-sec-wrap");
+  const noteEl = document.getElementById("pl-shape-note");
+  const s = cand && cand.surface;
+  if (!s) {
+    if (titleEl) titleEl.style.display = "none";
+    if (heatWrap) heatWrap.style.display = "none";
+    if (secWrap) secWrap.style.display = "none";
+    if (noteEl) noteEl.textContent = "";
+    return;
+  }
+  if (titleEl) titleEl.style.display = "";
+  const heat = document.getElementById("pl-surface");
+  const sec = document.getElementById("pl-section-y");
+
+  // 热图：摊平成 row-major 一维数组（与 drawHeatmap 的约定一致）
+  const flat = [];
+  for (const row of s.depthUm) for (const v of row) flat.push(v);
+  if (heatWrap) heatWrap.style.display = "";
+  const t1 = document.getElementById("pl-heat-title");
+  if (t1) {
+    t1.textContent = `${label}：矩形槽深度分布（${s.nx}×${s.ny} 格，${v2Num(s.dxUm, 3)} µm/格）`;
+  }
+  try {
+    drawHeatmap(heat, null, flat, s.nx, s.ny, { unit: "µm" });
+  } catch (err) {
+    if (heat) heat.dataset.unavailable = String(err.message || err);
+  }
+
+  if (secWrap) secWrap.style.display = "";
+  try {
+    drawLineChart(sec, s.sectionYAxisUm, [{ y: s.sectionAlongYUm, label: "深度 (µm)" }],
+      { height: 240 });
+  } catch (err) {
+    if (sec) sec.dataset.unavailable = String(err.message || err);
+  }
+
+  const st = s.stats || {};
+  if (noteEl) {
+    noteEl.innerHTML =
+      `统计：均值 ${v2Num(st.meanUm, 2)} µm，最大 ${v2Num(st.maxUm, 2)} µm，` +
+      `起伏 P95−P5 = <strong>${v2Num(st.ripplePvUm, 2)} µm</strong>。` +
+      `${s.note || ""}` +
+      `　⚠️ 这是<strong>模型预测</strong>；高斯光束<strong>做不到理想平底</strong>，` +
+      `起伏是真实的物理结果。`;
   }
 }
 

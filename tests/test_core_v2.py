@@ -937,3 +937,150 @@ def test_plan_payload_reports_infeasible_honestly():
     assert d["ok"] is True
     assert d["recommended"] is None
     assert d["infeasibleReason"]
+
+
+# ---------------------------------------------------------------------------
+# 用户修正（2026-09-15）：单线宽度 5 μm / 层数口径 / 矩形槽形貌
+# ---------------------------------------------------------------------------
+
+
+def test_declared_line_width_is_a_process_fact_not_optics():
+    """**实际单线宽度**必须与名义光学束腰分开记录。
+
+    回归背景：用户明确"实际单线宽度 = 5 μm"，而名义 2w0 只有 1.749 μm。
+    把两者混为一谈（拿 nominal 顶替实测）会让覆盖/搭接判断整体偏窄 ——
+    这正是之前 h/N 规划"覆盖只有 5–24%"的成因之一。
+    """
+    bg = load_shared_background()
+    assert bg.effective_line_width_m == pytest.approx(5.0e-6), "应记录 5 μm"
+    nominal_width = 2 * bg.derived_waist_m()
+    assert nominal_width < bg.effective_line_width_m, "实测线宽应**宽于**名义光学值"
+    proc = bg.raw["process"]
+    assert proc["evidence_status"] == "user_declared_process_fact"
+    assert "不是一回事" in proc["note"] or "不是一回事" in proc["not_optical_measurement"]
+
+
+def test_equivalent_radius_makes_model_width_match_declared():
+    """等效光斑半径必须让**模型给出的烧蚀宽度**等于声明的单线宽度。"""
+    bg = load_shared_background()
+    f_hz = 20e3
+    energy = bg.pulse_energy_J(f_hz)
+    thr = 7.85e4
+    w, info = bg.equivalent_spot_radius_m(pulse_energy_J=energy, threshold_J_m2=thr)
+    assert info["declared"] is True
+    assert info["source"] == "derived_from_declared_line_width"
+    got = 2 * bg.ablated_half_width_m(spot_radius_m=w, pulse_energy_J=energy,
+                                     threshold_J_m2=thr)
+    assert got == pytest.approx(5.0e-6, rel=1e-6), f"模型宽度应为 5 μm，实际 {got*1e6:.4f}"
+    # 名义光学值只作记录，且明确说明它给不出 5 μm
+    assert info["nominal_waist_um"] == pytest.approx(bg.derived_waist_m() * 1e6, rel=1e-9)
+    assert info["nominal_width_um"] < 5.0
+
+
+def test_build_row_config_uses_equivalent_radius_when_threshold_given():
+    """给了阈值时，配置里的光斑半径必须是**等效值**，不是名义 w0。"""
+    from ufdemo.calibration import build_row_config
+
+    bg = load_shared_background()
+    row = ExperimentRow(sample_id="g", pulse_duration_fs=223.0, repetition_rate_kHz=20.0,
+                        scan_speed_mm_s=50.0, hatch_spacing_um=4.0, pass_count=1,
+                        mean_depth_um=1.0)
+    spec = PredictionSpec(material_card_file=FIXTURE, window_um=20.0, dx_um=0.5,
+                          response_override={"threshold_J_m2": 7.85e4,
+                                             "delta_m": 3.6525e-6,
+                                             "kind": "log_fixed",
+                                             "output_semantics": "event_depth_increment",
+                                             "fluence_basis": "incident_peak_fluence",
+                                             "depth_direction": "surface_normal"})
+    cfg = build_row_config(row, spec=spec, bg=bg)
+    assert cfg.laser.spot_radius_m > bg.derived_waist_m(), "应大于名义 w0"
+    basis = cfg.raw["_spot_radius_basis"]
+    assert basis["source"] == "derived_from_declared_line_width"
+    # 不给阈值时应退回名义，并标注 declared=False
+    cfg2 = build_row_config(row, spec=PredictionSpec(
+        material_card_file=FIXTURE, window_um=20.0, dx_um=0.5), bg=bg)
+    assert cfg2.laser.spot_radius_m == pytest.approx(bg.derived_waist_m(), rel=1e-12)
+    assert cfg2.raw["_spot_radius_basis"]["declared"] is False
+
+
+def test_layer_count_terminology():
+    """N 是**层数**：``layer_count`` 与旧的 ``pass_count`` 等价且都可用。"""
+    p1 = serpentine_plan(region_um=(40, 40), spacing_um=4.0, layer_count=3,
+                         scan_speed_mm_s=200.0)
+    p2 = serpentine_plan(region_um=(40, 40), spacing_um=4.0, pass_count=3,
+                         scan_speed_mm_s=200.0)
+    assert p1.layer_count == p2.layer_count == 3
+    d = p1.to_dict()
+    assert d["layerCount"] == 3
+    assert d["passCount"] == 3, "旧字段保留兼容"
+    assert d["machinedShape"] == "rectangular_pocket"
+
+
+def test_plan_reports_rectangular_pocket_and_surface():
+    """规划的**加工形貌必须是矩形槽**，并带形貌数据（不是单个圆坑）。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_plan_kw(spacings_um=(4.0,), pass_counts=(1,)),
+    )
+    assert res.machined_shape == "rectangular_pocket"
+    assert res.to_dict()["machinedShape"] == "rectangular_pocket"
+    rec = res.recommended
+    assert rec is not None and rec.surface is not None, "推荐候选应带槽形貌"
+    s = rec.surface
+    assert s["kind"] == "rectangular_pocket"
+    assert len(s["depthUm"]) == s["ny"] and len(s["depthUm"][0]) == s["nx"]
+    assert len(s["sectionAlongYUm"]) > 0, "应有垂直扫描方向的截面（看搭接）"
+    assert "ripplePvUm" in s["stats"]
+
+
+def test_surface_sections_are_not_flat_zero():
+    """截面必须是**真实剖面**，不能是"全 0"（那看起来像什么都没加工）。
+
+    回归背景：最初取几何中心那一行作截面，而扫描线按 h 分布，
+    中心行**正好落在两条线之间** → 截出来全是 0。
+    """
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_plan_kw(spacings_um=(4.0,), pass_counts=(2,)),
+    )
+    s = res.recommended.surface
+    assert max(s["sectionAlongXUm"]) > 0, "沿扫描线截面不应全 0"
+    assert max(s["sectionAlongYUm"]) > 0, "垂直扫描截面不应全 0"
+    assert s["stats"]["maxUm"] > s["stats"]["p50Um"] if "p50Um" in s["stats"] else True
+
+
+def test_infeasible_plan_offers_labelled_best_effort():
+    """**无可行方案时**给一个最接近的候选，但必须**明确标注不满足约束**。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(target_depth_um=1e5, tolerance_um=1.0, **_plan_kw())
+    assert res.recommended is None
+    assert res.best_effort is not None, "应给出可诊断的最接近候选"
+    assert res.best_effort_violation is not None and res.best_effort_violation > 0
+    assert res.best_effort.surface is not None, "最接近候选也应带槽形貌"
+    d = res.to_dict()
+    assert "不满足约束" in (d["bestEffortNote"] or "")
+    assert "不得当作推荐" in (d["bestEffortNote"] or "")
+
+
+def test_geometry_basis_separates_nominal_and_declared():
+    """规划结果要能说清：名义 w0 多少、声明线宽多少、等效 w 多少。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_plan_kw(spacings_um=(4.0,), pass_counts=(1,),
+                   response_override={**_PLAN_OVERRIDE, "threshold_J_m2": 7.85e4}),
+    )
+    g = res.geometry_basis
+    assert g.get("declaredLineWidthUm") == pytest.approx(5.0)
+    assert g.get("lineWidthModelUm") == pytest.approx(5.0, rel=1e-3)
+    assert g.get("spotRadiusUm", 0) > g.get("nominalWaistUm", 0)
+    assert g.get("nominalOpticsWidthUm", 99) < 5.0

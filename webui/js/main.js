@@ -1320,7 +1320,7 @@ function renderProcessPanel() {
      <table class="data"><thead><tr><th>输入</th><th>下限</th><th>上限</th></tr></thead><tbody>
        <tr><td>功率 P（W）</td><td>${f((b.power_W||[])[0])}</td><td>${f((b.power_W||[])[1])}</td></tr>
        <tr><td>扫描速度 v（mm/s）</td><td>${f((b.scan_speed_m_s||[])[0] * 1000)}</td><td>${f((b.scan_speed_m_s||[])[1] * 1000)}</td></tr>
-       <tr><td>遍数 N</td><td>${f((b.passes||[])[0])}</td><td>${f((b.passes||[])[1])}</td></tr>
+       <tr><td>层数 N</td><td>${f((b.passes||[])[0])}</td><td>${f((b.passes||[])[1])}</td></tr>
      </tbody></table>
      <div class="notice warn">「在采样范围内」是<strong>必要条件</strong>，不是支撑保证：
        范围内仍可能存在未采样区域。结论只适用于同一研究的工艺窗口。</div>

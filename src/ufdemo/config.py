@@ -2128,6 +2128,99 @@ class SharedExperimentBackground:
     def geometry_feedback(self) -> str:
         return str(self.raw["focus"]["geometry_feedback"])
 
+    # -- 工艺事实：实际单线宽度（≠ 光学束腰） --------------------------------
+    @property
+    def effective_line_width_m(self) -> float | None:
+        """**实际烧蚀单线宽度**（用户声明的工艺事实）。
+
+        ⚠️ 与 nominal ``2w0`` **不是一回事**：它包含阈值以上区域的展宽与热影响。
+        返回 ``None`` 表示未声明 —— 此时不得拿 nominal 顶上（那会把"实测宽度"
+        悄悄替换成"光学计算值"，正是任务书反复禁止的那类混淆）。
+        """
+        proc = self.raw.get("process") or {}
+        v = proc.get("effective_single_line_width_um")
+        return None if v is None else float(v) * 1e-6
+
+    @property
+    def machined_shape(self) -> str:
+        """加工出来的形貌类型。矩形区域走弓字形填充 → ``rectangular_pocket``。"""
+        return str((self.raw.get("morphology") or {}).get("machined_shape") or "unknown")
+
+    @staticmethod
+    def ablated_half_width_m(
+        *, spot_radius_m: float, pulse_energy_J: float, threshold_J_m2: float,
+    ) -> float:
+        """给定光斑与阈值，**烧蚀**半宽（不是光斑半宽）。
+
+        ``F(r) = F0·exp(-2r²/w²)``；去除发生在 ``F > Fth`` 处：:
+
+            r_abl = w · sqrt(ln(F0/Fth)/2),   F0 = 2E/(πw²)
+
+        这个量随 ``w`` **先增后减**（w 太大时 F0 掉到阈值以下，反而不烧蚀），
+        所以反推等效半径时要取物理上合理的那一侧。
+        """
+        if not (spot_radius_m > 0 and pulse_energy_J > 0 and threshold_J_m2 > 0):
+            return 0.0
+        f0 = 2.0 * pulse_energy_J / (math.pi * spot_radius_m * spot_radius_m)
+        if f0 <= threshold_J_m2:
+            return 0.0
+        return spot_radius_m * math.sqrt(math.log(f0 / threshold_J_m2) / 2.0)
+
+    def equivalent_spot_radius_m(
+        self, *, pulse_energy_J: float, threshold_J_m2: float,
+    ) -> tuple[float, dict[str, Any]]:
+        """反推**等效光斑半径**，使模型给出的烧蚀宽度等于声明的单线宽度。
+
+        为什么要这一层：名义光学束腰（0.874 μm）与**实测单线宽度**（5 μm）
+        差 26%（宽 26% ⇒ 面积差 59%），直接用名义值会让覆盖/搭接判断失真 ——
+        那正是之前 h/N 规划"覆盖只有 5–24%"的根源之一。
+
+        返回 ``(半径, 诊断)``；未声明单线宽度时返回名义 w0 并标注 ``declared=False``。
+        """
+        w_nominal = self.derived_waist_m()
+        width = self.effective_line_width_m
+        if width is None:
+            return w_nominal, {
+                "declared": False,
+                "source": "nominal_optics",
+                "note": "未声明实际单线宽度 → 用名义 w0（**这不是实测宽度**）",
+                "spot_radius_um": w_nominal * 1e6,
+            }
+        target = width / 2.0
+        # 烧蚀半宽随 w 先增后减：先找极大点，再在 [w0, w_max] 上二分（物理上合理的一侧）
+        c = math.log(2.0 * pulse_energy_J / (math.pi * threshold_J_m2))
+        w_max = math.sqrt(math.exp(c - 1.0))
+        half_at = lambda w: self.ablated_half_width_m(  # noqa: E731
+            spot_radius_m=w, pulse_energy_J=pulse_energy_J, threshold_J_m2=threshold_J_m2)
+        if w_max <= w_nominal or half_at(w_max) < target:
+            return w_nominal, {
+                "declared": True,
+                "source": "unreachable",
+                "note": (f"声明宽度 {width*1e6:.3f} μm 在该能量/阈值下**不可能达到**"
+                         f"（最大只有 {half_at(w_max)*2e6:.3f} μm）→ 退回名义 w0"),
+                "spot_radius_um": w_nominal * 1e6,
+                "max_achievable_width_um": half_at(w_max) * 2e6,
+            }
+        lo, hi = w_nominal, w_max * 0.999999
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if half_at(mid) < target:
+                lo = mid
+            else:
+                hi = mid
+        w_eq = 0.5 * (lo + hi)
+        return w_eq, {
+            "declared": True,
+            "source": "derived_from_declared_line_width",
+            "declared_width_um": width * 1e6,
+            "nominal_waist_um": w_nominal * 1e6,
+            "spot_radius_um": w_eq * 1e6,
+            "nominal_width_um": half_at(w_nominal) * 2e6,
+            "note": (f"由「实测单线宽度 {width*1e6:.3f} μm」+ 阈值 {threshold_J_m2/1e4:.3f} J/cm² "
+                     f"反推等效 w = {w_eq*1e6:.4f} μm；名义 w0={w_nominal*1e6:.4f} μm "
+                     f"只作光学记录（它给出的宽度是 {half_at(w_nominal)*2e6:.3f} μm）"),
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return dict(self.raw)
 
@@ -2199,6 +2292,7 @@ def load_shared_background(path: str | Path | None = None) -> SharedExperimentBa
 
 def shared_background_patch(
     bg: SharedExperimentBackground, *, repetition_rate_Hz: float,
+    threshold_J_m2: float | None = None,
 ) -> dict[str, Any]:
     """把共享背景映射成可合并进 ``RunConfig`` raw 的 patch。
 
@@ -2214,13 +2308,25 @@ def shared_background_patch(
         solver.geometry_feedback   ← focus.geometry_feedback（axial_defocus）
         solver.dynamic_angle       ← focus.dynamic_angle（false）
     """
+    energy = bg.pulse_energy_J(repetition_rate_Hz)
+    if threshold_J_m2 is not None and threshold_J_m2 > 0:
+        # 有阈值时用**等效光斑半径**，让模型的烧蚀宽度与声明的实测单线宽度一致
+        w, wdiag = bg.equivalent_spot_radius_m(
+            pulse_energy_J=energy, threshold_J_m2=threshold_J_m2)
+    else:
+        w, wdiag = bg.derived_waist_m(), {
+            "declared": False, "source": "nominal_optics",
+            "note": "未给阈值 → 用名义 w0；单线宽度可能与实测不一致",
+            "spot_radius_um": bg.derived_waist_m() * 1e6,
+        }
     return {
         "laser": {
             "wavelength_m": bg.wavelength_m,
-            "spot_radius_m": bg.derived_waist_m(),
+            "spot_radius_m": w,
             "m2": bg.m2,
-            "pulse_energy_J": bg.pulse_energy_J(repetition_rate_Hz),
+            "pulse_energy_J": energy,
             "repetition_rate_Hz": float(repetition_rate_Hz),
+            "_spot_radius_basis": wdiag,
         },
         "solver": {
             # ⚠️ 这两个**必须同时**出现：固定焦点（不主动调焦）与保留被动轴向离焦
