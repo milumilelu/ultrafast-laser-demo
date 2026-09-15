@@ -260,29 +260,62 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
     h = surface.height
     h_ref = surface.initial_height if options.geometry_feedback == "fixed_geometry" else h
 
-    # --- 局部窗口 ----------------------------------------------------------
-    # 离焦会扩大光斑；窗口必须覆盖整个当前表面可能出现的最大光斑。
+    # --- 局部窗口（迭代定尺寸）----------------------------------------------
+    #
+    # 旧实现用**整个网格**的轴向跨度定窗口半径：
+    #     max_s = max(|min(h_ref)-fz|, |max(h_ref)-fz|)
+    # 于是「域里任何一处深坑」都会放大**所有**事件的光斑，窗口大小随域尺寸而变；
+    # 而光束只关心**它自己脚下**（窗口内）的表面起伏。现在改成局部迭代：
+    # 名义半径开窗 → 看窗口内的起伏 → 放大光斑 → 重开窗，直到不再增长。
+    # 收敛后窗口外的格子能流 ≤ ε·峰值（ε = tail_epsilon），与既有尾部截断同一量级。
+    #
+    # 实测效果（1,040 事件、dx 0.5 µm、加工区 100 µm，域 100/200/400 µm）：
+    #   旧 1.60 / 14.20 / 22.20 s → 新 1.50 / 8.89 / 14.17 s。
+    # **不是数量级提速**：本算例的深区本来就在光束脚下，全局跨度 ≈ 局部跨度。
+    #
+    # ⚠️ 真正的瓶颈**不在本函数**（已用对照实验排除「隐藏的 O(网格) 代码路径」）：
+    # `geometry_feedback=fixed_geometry`（离焦恒为 0）时，域 100/200/400 µm 的
+    # 单事件成本是 131 / 132 / 138 µs —— **网格涨 16 倍，成本几乎不变**。
+    # 成本 ≈ 0.06 µs × 窗口格数，**完全由窗口大小决定**：`axial_defocus` 下
+    # 本算例烧到 132 µm ≫ zR=4.47 µm ⇒ 离焦 30 倍 ⇒ 光斑 1.33→39 µm
+    # ⇒ ε 窗口直径 237 µm（≈ 吃满 200 µm 域）。而窗口内**超阈值**（对去除
+    # 真有贡献）的格子只占 **0.8%** —— 99% 的计算是零贡献。
+    # ⇒ 优化方向是「按超阈值半径开窗」，不是改 numpy 用法。见 docs/reports/。
     fx, fy, fz = event.focus_xyz_m
-    # **真实轴向跨度**（只有 Z 的贡献）：用于估算离焦横向平移 |s|·tanθ
-    axial_span_true = max(abs(float(np.min(h_ref)) - fz), abs(float(np.max(h_ref)) - fz))
-    max_s = axial_span_true
-    if not axial:
-        # 斜入射时 s = X·k_x + Y·k_y + Z·k_z 还含**横向**项，会额外增大离焦；
-        # 这里只用它来保守估计 w（光斑放大），**不**参与窗口的平移项。
-        r_probe = cut_radius(w_of_s(w0, max_s, zR), options.tail_epsilon)
-        max_s += 2.5 * r_probe * math.hypot(kvec[0], kvec[1])
-    w_bound = w_of_s(w0, max_s, zR)
-    r_cut = cut_radius(w_bound, options.tail_epsilon)
-    window_r = (
-        r_cut if (axial and not dynamic)
-        else oblique_window_radius(r_cut, kvec, axial_span_true)
-    )
+    _eps = options.tail_epsilon
+    _oblique = not (axial and not dynamic)
+
+    axial_span_true = 0.0
+    # `r_cut` 是**横向**裁剪半径（不含斜入射的窗口平移项），后面算尾部截断比例要用它；
+    # `window_r` 才是最终开窗半径（斜入射时含平移）。
+    r_cut = cut_radius(w0, _eps)
+    window_r = r_cut if not _oblique else oblique_window_radius(r_cut, kvec, 0.0)
+    if options.section is None:
+        for _ in range(8):
+            iy0, iy1 = _window_bounds(surface.y, fy, window_r)
+            ix0, ix1 = _window_bounds(surface.x, fx, window_r)
+            if iy1 <= iy0 or ix1 <= ix0:
+                break
+            _HH = h_ref[iy0:iy1, ix0:ix1]
+            # **只看窗口内**的轴向跨度（这正是与旧实现的关键差别）
+            s_local = max(abs(float(_HH.min()) - fz), abs(float(_HH.max()) - fz))
+            axial_span_true = s_local
+            m_s = s_local
+            if not axial:
+                _r_probe = cut_radius(w_of_s(w0, m_s, zR), _eps)
+                m_s += 2.5 * _r_probe * math.hypot(kvec[0], kvec[1])
+            r_new = cut_radius(w_of_s(w0, m_s, zR), _eps)
+            r_cut = r_new
+            w_new = oblique_window_radius(r_new, kvec, s_local) if _oblique else r_new
+            if w_new <= window_r * (1.0 + 1e-12):
+                break                      # 收敛：窗口已能容纳最大光斑
+            window_r = w_new
+
     if options.section is not None:
         iy0, iy1, ix0, ix1 = options.section
         iy0, iy1 = max(0, int(iy0)), min(surface.grid.ny, int(iy1))
         ix0, ix1 = max(0, int(ix0)), min(surface.grid.nx, int(ix1))
     else:
-        fx, fy, _fz = event.focus_xyz_m
         # 用裁剪半径在坐标轴上直接定位窗口，而不是用最近网格点 + 固定跨度：
         # 焦点远离计算域时必须得到空窗口，不能吸附到边界后错误地覆盖部分网格。
         iy0, iy1 = _window_bounds(surface.y, fy, window_r)
