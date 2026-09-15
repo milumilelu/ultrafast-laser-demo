@@ -39,10 +39,15 @@ DEFAULT_PASS_COUNTS: tuple[int, ...] = (1, 2, 3, 4, 5)
 DEVICE_PATH_POLICY: Mapping[str, Any] = {
     "corner_deceleration": "not_modeled_in_ideal_time",
     "extra_border": "not_known_do_not_invent",
-    "shutter_off_capability": "not_assumed",
+    #: 换向段与遍间段的**出光状态**。当前实现把它们标成 ``emitting=False``
+    #: （等价「理想关光」）。⚠️ **这是模型假设，不是已确认的设备能力**：
+    #: 真实加工若无法关光空走，那些段同样会打材料，剂量与形貌都会变。
+    "shutter_off_during_turns": True,
+    "shutter_state_basis": "assumed_ideal_shutter_not_confirmed_against_device",
     "note": (
-        "换向减速与额外边框**未确知**：时间只给理想扫描时间，并标注边界未校准；"
-        "导出不依赖设备不存在的关光能力。"
+        "换向减速与额外边框**未确知**：时间只给理想扫描时间，并标注边界未校准。"
+        "换向/遍间段按**理想关光**处理（emitting=False）—— 这是**模型假设**，"
+        "设备是否支持关光空走**尚未确认**；若不能关光，需把这些段改成出光并重算。"
     ),
 }
 
@@ -282,14 +287,16 @@ def serpentine_plan(
             segs.append(PathSegment(
                 kind=SEG_TURN,
                 start_xyz_m=(segs[-1].end_xyz_m[0], y_last, focus_z_m),
-                end_xyz_m=(x0 if n_lines % 2 == 1 else x1,
-                           y_base, focus_z_m),
+                # ⚠️ 每一遍都从 **x0** 重新开始（left_to_right 按 li 奇偶、每遍重置），
+                # 所以回程**必须**回到 x0。曾按「继续蛇形」写成偶数条线时回到 x1：
+                # 200×200、h=8、N=2（26 条线）实测段间跳 **200 µm**，
+                # 缺的那段位移还会改变下一遍的激光时钟相位。
+                end_xyz_m=(x0, y_base, focus_z_m),
                 speed_m_s=speed_m_s,
                 pass_index=pi,
                 emitting=False,
                 duration_s=math.hypot(
-                    (x0 if n_lines % 2 == 1 else x1) - segs[-1].end_xyz_m[0],
-                    y_last - y_base,
+                    x0 - segs[-1].end_xyz_m[0], y_last - y_base
                 ) / speed_m_s,
             ))
 
@@ -304,6 +311,24 @@ def serpentine_plan(
             f"区域 Y 向 {wy_um:g} μm 不能被间距 {spacing_um:g} μm 整除："
             f"最后一条之后余 {leftover_um:.3f} μm。这是**如实报告**，不是错误。"
         )
+
+    # **必要检查**：段与段必须首尾相接（上一段终点 == 下一段起点）。
+    # 这是路径生成的**不变式**：一旦破坏，缺的那段位移会同时改变激光时钟相位，
+    # 而结果看起来仍然"算完了" —— 所以宁可在这里直接失败。
+    for _i, (_a, _b) in enumerate(zip(segs, segs[1:])):
+        if _a.end_xyz_m != _b.start_xyz_m:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "路径在段间不连续（规划器内部不变式被破坏）",
+                field_path=f"planning.segments[{_i}]",
+                actual={"prev_end_m": list(_a.end_xyz_m),
+                        "next_start_m": list(_b.start_xyz_m)},
+                requirement="上一段终点 == 下一段起点（含换向与遍间段）",
+                suggestion=(
+                    "这是路径生成的不变式，不是输入问题；请报告此缺陷。"
+                    "缺的位移会改变下一段的激光时钟相位。"
+                ),
+            )
 
     return PathPlan(
         segments=segs,
@@ -422,7 +447,10 @@ class CandidateResult:
     surface: Mapping[str, Any] | None = None
     #: 仿真域与加工区（μm）。两者不同才有外围余量。
     domain_um: float | None = None
+    #: 加工区**第一维**（μm）—— 为兼容既有字段保留；正方形时即边长。
     machining_region_um: float | None = None
+    #: 加工区**实际尺寸** ``(wx, wy)``（μm）。非正方形时与上一个字段不同，以本字段为准。
+    machining_region_size_um: tuple[float, float] | None = None
     #: 加工区**外围**的最大去除深度 —— 应接近 0，用来确认"路径没跑出加工区"。
     margin_max_depth_um: float | None = None
     notes: tuple[str, ...] = ()
@@ -461,6 +489,8 @@ class CandidateResult:
             "surface": dict(self.surface) if self.surface else None,
             "domainUm": self.domain_um,
             "machiningRegionUm": self.machining_region_um,
+            "machiningRegionSizeUm": (list(self.machining_region_size_um)
+                                      if self.machining_region_size_um else None),
             "marginMaxDepthUm": self.margin_max_depth_um,
             "notes": list(self.notes),
             "windowRadiusPolicy": self.window_radius_policy,
@@ -517,7 +547,8 @@ def evaluate_candidate(
     spec = PredictionSpec(
         material_card_file=material_card_file,
         window_um=float(dom[0]), dx_um=float(dx_um),
-        machining_region_um=float(region_um[0]),
+        # 加工区**两个方向都传**（非正方形时不得只取第一维）
+        machining_region_um=(float(region_um[0]), float(region_um[1])),
         response_override=response_override,
     )
     from .materials import MaterialSpec, load_material_card
@@ -559,15 +590,19 @@ def evaluate_candidate(
     drop_full = res.surface.initial_height - res.surface.height
     # 取**加工区**子块做统计（域更大时外围是未加工余量，不该进指标）
     g0 = res.surface.grid
-    n_reg = int(round(float(region_um[0]) * 1e-6 / g0.dx_m))
-    n_reg = max(1, min(n_reg, drop_full.shape[0], drop_full.shape[1]))
-    yy0 = (drop_full.shape[0] - n_reg) // 2
-    xx0 = (drop_full.shape[1] - n_reg) // 2
-    drop = drop_full[yy0:yy0 + n_reg, xx0:xx0 + n_reg]
+    # ⚠️ 加工区可以是**非正方形**：两个方向都要用上。曾经只取第一维按正方形裁，
+    # 于是 (120,60) 的统计实际算在 120×120 上 —— 指标口径与路径不一致。
+    n_x = int(round(float(region_um[0]) * 1e-6 / g0.dx_m))
+    n_y = int(round(float(region_um[1]) * 1e-6 / g0.dx_m))
+    n_x = max(1, min(n_x, drop_full.shape[1]))
+    n_y = max(1, min(n_y, drop_full.shape[0]))
+    yy0 = (drop_full.shape[0] - n_y) // 2
+    xx0 = (drop_full.shape[1] - n_x) // 2
+    drop = drop_full[yy0:yy0 + n_y, xx0:xx0 + n_x]
     margin_max_um = 0.0
-    if n_reg < drop_full.shape[0]:
+    if (n_x < drop_full.shape[1]) or (n_y < drop_full.shape[0]):
         _mask = np.ones(drop_full.shape, dtype=bool)
-        _mask[yy0:yy0 + n_reg, xx0:xx0 + n_reg] = False
+        _mask[yy0:yy0 + n_y, xx0:xx0 + n_x] = False
         margin_max_um = float(drop_full[_mask].max()) * 1e6 if np.any(_mask) else 0.0
     touched = drop > 0.0
 
@@ -650,6 +685,7 @@ def evaluate_candidate(
         surface=surf,
         domain_um=float(dom[0]),
         machining_region_um=float(region_um[0]),
+        machining_region_size_um=(float(region_um[0]), float(region_um[1])),
         margin_max_depth_um=margin_max_um,
         notes=tuple(reasons + _policy_notes(applied_policy, skipped_fraction)),
         window_radius_policy=applied_policy,
@@ -673,6 +709,8 @@ class TargetPlanResult:
     #: 筛选用的网格步长（μm）与细核步长（μm）。两者不同即为**两级**。
     screening_dx_um: float | None = None
     final_dx_um: float | None = None
+    #: 用**最终精度**复核过的候选个数（复核后重新判可行/重排，见 ADR-0019）。
+    n_fine_rechecked: int = 0
     #: **无可行方案时**的最接近候选（**明确不满足约束**，仅供诊断，不是推荐）。
     best_effort: CandidateResult | None = None
     best_effort_violation: float | None = None
@@ -705,6 +743,7 @@ class TargetPlanResult:
             "machinedShape": self.machined_shape,
             "screeningDxUm": self.screening_dx_um,
             "finalDxUm": self.final_dx_um,
+            "nFineRechecked": self.n_fine_rechecked,
             "geometryBasis": dict(self.geometry_basis),
             "windowRadiusPolicy": self.window_radius_policy,
             "windowThresholdMargin": self.window_threshold_margin,
@@ -742,6 +781,9 @@ def plan_for_target(
     bg: Any | None = None,
     window_radius_policy: str = "tail_epsilon",
     window_threshold_margin: float = 1.25,
+    #: 两级网格下**用最终精度复核**的候选个数上限（按粗筛排序取前几个）。
+    #: 复核后**重新判可行**；第一个可行者即为推荐。见 ADR-0019。
+    fine_top_k: int = 3,
 ) -> TargetPlanResult:
     """枚举 h/N，筛出可行方案，按**时间**与**均匀性**排序给推荐。
 
@@ -781,17 +823,15 @@ def plan_for_target(
                 window_threshold_margin=window_threshold_margin,
             ))
 
-    feasible = [c for c in cands if c.feasible]
-    rec: CandidateResult | None = None
-    reason: str | None = None
-    if feasible:
-        feasible.sort(key=_rank_key)
-        rec = feasible[0]
-        # 给推荐候选补一张**矩形槽形貌**（其余候选不带，避免响应体过大）。
-        # 注意这是**再跑一次同一个候选**，不是把上面的数值搬过来 ——
-        # 保证展示的图与推荐参数是同一套输入算出来的。
-        rec_with_surface = evaluate_candidate(
-            rec.spacing_um, rec.pass_count,
+    def _fine_recheck(c: CandidateResult, *, want_surface: bool) -> CandidateResult:
+        """用**最终精度**（``dx_um``）复算一个候选，并把它**替换回列表**。
+
+        替换而不是留一个游离对象：``recommended`` 必须与
+        ``feasible_candidates[0]`` 是**同一个实例**，否则「界面推荐 = 表格第一行」
+        这个不变量就断了（测试抓到过）。
+        """
+        fine = evaluate_candidate(
+            c.spacing_um, c.pass_count,
             material_card_file=material_card_file,
             region_um=region_um, dx_um=float(dx_um), domain_um=domain_um,
             pulse_duration_fs=pulse_duration_fs,
@@ -800,21 +840,53 @@ def plan_for_target(
             target_depth_um=target_depth_um, tolerance_um=tolerance_um,
             gain=gain, response_override=response_override,
             min_coverage=min_coverage, max_overcut_fraction=max_overcut_fraction,
-            want_surface=True, bg=bg,
+            want_surface=want_surface, bg=bg,
             window_radius_policy=window_radius_policy,
             window_threshold_margin=window_threshold_margin,
         )
-        if rec_with_surface.surface is not None:
-            # **替换回列表**，而不是留一个游离的对象 ——
-            # 否则 `recommended` 与 `feasible_candidates[0]` 是"同参数不同实例"，
-            # 「界面推荐 = 表格第一行」这个不变量就断了（测试抓到过）。
-            for _i, _c in enumerate(cands):
-                if (_c.spacing_um == rec.spacing_um
-                        and _c.pass_count == rec.pass_count):
-                    cands[_i] = rec_with_surface
-                    break
-            rec = rec_with_surface
-    else:
+        for _i, _c in enumerate(cands):
+            if _c.spacing_um == c.spacing_um and _c.pass_count == c.pass_count:
+                cands[_i] = fine
+                break
+        return fine
+
+    rec: CandidateResult | None = None
+    reason: str | None = None
+    n_fine = 0
+    # --- 细核之后**重新判可行、重新排序** -----------------------------------
+    # ⚠️ 曾经只检查"细核有没有生成形貌"，**不重新判可行** ⇒ 会出现
+    # 「粗网格可行 → 细网格不可行 → 仍然把它当推荐」。推荐必须依据**最终精度**的结果。
+    # 反向同理：粗筛全否、细核通过时，也不能继续沿用「无可行方案」。
+    if screening:
+        ranked = sorted((c for c in cands if c.feasible), key=_rank_key)
+        if not ranked:
+            # 粗筛全否：把"违规最小"的几个也用最终精度复核（有可能由否转可）
+            ranked = [c for c, _v in sorted(
+                ((c, _violation(c, target_um=target_depth_um, tol_um=tolerance_um))
+                 for c in cands if c.mean_depth_um is not None),
+                key=lambda kv: kv[1],
+            )]
+        for _cand in ranked[:max(1, int(fine_top_k))]:
+            _fine = _fine_recheck(_cand, want_surface=(rec is None))
+            n_fine += 1
+            if _fine.feasible:
+                rec = _fine
+                break
+        if rec is None:
+            reason = (
+                f"两级网格：粗筛筛出的候选在**细网格（dx={float(dx_um):g} µm）复核后不满足约束**"
+                f"（已复核 {n_fine} 个）。粗筛的可行性**不作为最终结论**。"
+            )
+    elif cands:
+        ranked = sorted((c for c in cands if c.feasible), key=_rank_key)
+        if ranked:
+            # 未启用两级（screen_dx == dx）：仍然复核一遍以拿到形貌与最终口径
+            _fine = _fine_recheck(ranked[0], want_surface=True)
+            n_fine += 1
+            if _fine.feasible:
+                rec = _fine
+
+    if rec is None and not reason:
         # 无可行组合 → 说清是"都太浅"还是"都太深"，而不是丢一句"无解"。
         d = [c.mean_depth_um for c in cands if c.mean_depth_um is not None]
         if d and max(d) < target_depth_um - tolerance_um:
@@ -907,12 +979,13 @@ def plan_for_target(
     ]
     if screening:
         notes.append(
-            f"**两级网格**：25 个候选用 {screen_dx:g} μm 粗筛（快），"
-            f"推荐/最接近的那一个用 {float(dx_um):g} μm 细核（准）；"
-            "表里的数值来自**粗筛**，展示的形貌与标注来自**细核** —— "
-            "两者不一致时以细核为准。"
+            f"**两级网格**：候选先用 {screen_dx:g} μm 粗筛（快），"
+            f"再按粗筛排序取前 {max(1, int(fine_top_k))} 个用 {float(dx_um):g} μm "
+            "**细核复核**；推荐依据**细核结果**（复核后重新判可行、重新排序），"
+            "而不是粗筛留下的状态。表里未复核的候选标注为粗筛口径。"
+            f"本次实际复核 {n_fine} 个。"
         )
-    if not feasible:
+    if rec is None:
         notes.append("**本次未给出推荐方案** —— 这是如实的结果，不是失败。")
 
     return TargetPlanResult(
@@ -926,6 +999,7 @@ def plan_for_target(
         machined_shape="rectangular_pocket",
         screening_dx_um=screen_dx,
         final_dx_um=float(dx_um),
+        n_fine_rechecked=int(n_fine),
         best_effort=best,
         best_effort_violation=best_v,
         geometry_basis=geom,

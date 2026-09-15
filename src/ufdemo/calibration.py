@@ -365,7 +365,10 @@ class PredictionSpec:
     #: 单独设成比域小，是为了在加工区外围留出**未被加工的余量**，
     #: 这样边界效应不主导统计，也能看出"路径有没有跑出加工区"。
     #: 两者**同心**（网格以 ``center_x_m=0`` 为中心）。
-    machining_region_um: float | None = None
+    #: **加工区**尺寸（μm）：标量 = 正方形；也接受 ``(wx, wy)`` 的**非正方形**矩形。
+    #: 网格按 ``window_um``（正方形域）建；**路径与统计都按这个矩形来** ——
+    #: 非正方形时两个方向都要用上，不得只取第一维（曾把 (120,60) 当成 (120,120)）。
+    machining_region_um: float | tuple[float, float] | None = None
     #: **加工前的原始上表面高度**（m）。焦点策略是 ``fixed_original_surface``：
     #: 焦平面恒为这个值，**不随槽底下降调整**。这里显式传给网格与路径，
     #: 使「焦平面 = 原始表面」**按构造成立**，而不是依赖它是 0。
@@ -375,6 +378,27 @@ class PredictionSpec:
     #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
     #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
     response_override: Mapping[str, Any] | None = None
+
+    def region_size_um(self) -> tuple[float, float]:
+        """加工区尺寸 ``(wx, wy)``（μm）；标量按正方形处理。"""
+        r = self.machining_region_um
+        if r is None:
+            return (float(self.window_um), float(self.window_um))
+        if isinstance(r, (int, float)):
+            return (float(r), float(r))
+        try:
+            if len(r) != 2:                     # 长度必须**恰好** 2，否则 (1,2,3) 会被静默截断
+                raise ValueError(f"长度 {len(r)}")
+            wx, wy = float(r[0]), float(r[1])
+        except Exception as exc:  # noqa: BLE001 - 形状不对如实报
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "machining_region_um 必须是标量或 (wx, wy)",
+                field_path="calibration.machining_region_um",
+                actual=r,
+                requirement="标量（正方形）或长度 2 的序列（矩形）",
+            ) from exc
+        return (wx, wy)
 
     def describe_approximation(self) -> str:
         return (
@@ -411,15 +435,16 @@ def build_row_config(
         threshold_J_m2=float(_thr) if _thr else None,
     )
 
-    domain = float(spec.window_um)                       # 仿真域 → 网格范围
-    region = float(spec.machining_region_um or domain)   # 加工区 → 蛇形路径范围
-    if region > domain + 1e-9:
+    domain = float(spec.window_um)                       # 仿真域 → 网格范围（正方形）
+    # 加工区 → 蛇形路径范围：**两个方向都取**，非正方形也要如实带上
+    region_w, region_h = spec.region_size_um()
+    if region_w > domain + 1e-9 or region_h > domain + 1e-9:
         raise UFDemoError(
             CONFIG_INVALID,
             "加工区不能大于仿真域",
             field_path="calibration.machining_region_um",
-            actual=f"region={region} domain={domain}",
-            requirement="machining_region_um ≤ window_um",
+            actual=f"region=({region_w}, {region_h}) domain={domain}",
+            requirement="两个方向都 ≤ window_um",
             suggestion="把仿真域放大，或缩小加工区；外围需要留余量。",
         )
     nx = max(8, int(round(domain / spec.dx_um)))
@@ -443,7 +468,7 @@ def build_row_config(
         )
 
     plan = serpentine_plan(
-        region_um=(region, region),      # 只在**加工区**内走刀，外围留白
+        region_um=(region_w, region_h),  # 只在**加工区**内走刀，外围留白（可非正方形）
         spacing_um=row.hatch_spacing_um,
         pass_count=row.pass_count,
         scan_speed_mm_s=row.scan_speed_mm_s,
@@ -480,7 +505,7 @@ def build_row_config(
         "output": {},
     }
     raw["_path_plan_n_lines"] = plan.n_scan_lines
-    raw["_machining_region_um"] = region
+    raw["_machining_region_um"] = (region_w, region_h)
     raw["_domain_um"] = domain
     raw["_spot_radius_basis"] = dict(patch["laser"].get("_spot_radius_basis") or {})
     raw["_path_plan_notes"] = list(plan.notes)
