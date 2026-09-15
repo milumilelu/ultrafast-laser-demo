@@ -961,7 +961,12 @@ def test_declared_line_width_is_a_process_fact_not_optics():
 
 
 def test_equivalent_radius_makes_model_width_match_declared():
-    """等效光斑半径必须让**模型给出的烧蚀宽度**等于声明的单线宽度。"""
+    """等效光斑半径（**仅诊断工具，不再用于装配**）能让模型宽度等于声明宽度。
+
+    ADR-0020 之后它**不再**参与 ``shared_background_patch`` 的光学装配；
+    保留它是因为「要多少 w0 才能对齐实测线宽」本身是个有用的**诊断量**：
+    它回答的是"模型与实测差多远"，而不是"光学应该改成多少"。
+    """
     bg = load_shared_background()
     f_hz = 20e3
     energy = bg.pulse_energy_J(f_hz)
@@ -977,30 +982,40 @@ def test_equivalent_radius_makes_model_width_match_declared():
     assert info["nominal_width_um"] < 5.0
 
 
-def test_build_row_config_uses_equivalent_radius_when_threshold_given():
-    """给了阈值时，配置里的光斑半径必须是**等效值**，不是名义 w0。"""
+def test_build_row_config_freezes_optics_regardless_of_threshold():
+    """⚠️ **回归（ADR-0020）**：光学必须按**名义值冻结**，与阈值/频率无关。
+
+    曾经的做法：给了阈值就按「声明的实测单线宽度」**反推等效光斑**并替换 w0、
+    连带改 zR ⇒ 光学随**频率与假定的 F_th** 漂移（实测 AlSiC 阈值下
+    2/20/40/200 kHz → w0 1.1334/1.3254/1.4085/1.7026 µm，名义 0.8743）。
+    用户 2026-09-15 明确"这个一定要改"。
+    """
     from ufdemo.calibration import build_row_config
 
     bg = load_shared_background()
     row = ExperimentRow(sample_id="g", pulse_duration_fs=223.0, repetition_rate_kHz=20.0,
                         scan_speed_mm_s=50.0, hatch_spacing_um=4.0, pass_count=1,
                         mean_depth_um=1.0)
+    ov = {"threshold_J_m2": 7.85e4, "delta_m": 3.6525e-6, "kind": "log_fixed",
+          "output_semantics": "event_depth_increment",
+          "fluence_basis": "incident_peak_fluence",
+          "depth_direction": "surface_normal"}
     spec = PredictionSpec(material_card_file=FIXTURE, window_um=20.0, dx_um=0.5,
-                          response_override={"threshold_J_m2": 7.85e4,
-                                             "delta_m": 3.6525e-6,
-                                             "kind": "log_fixed",
-                                             "output_semantics": "event_depth_increment",
-                                             "fluence_basis": "incident_peak_fluence",
-                                             "depth_direction": "surface_normal"})
+                          response_override=ov)
     cfg = build_row_config(row, spec=spec, bg=bg)
-    assert cfg.laser.spot_radius_m > bg.derived_waist_m(), "应大于名义 w0"
+    # 有阈值 ⇒ 光学**仍然是名义值**
+    assert cfg.laser.spot_radius_m == pytest.approx(bg.derived_waist_m(), rel=1e-12)
+    assert cfg.laser.rayleigh_range_m == pytest.approx(bg.derived_rayleigh_m(), rel=1e-12)
     basis = cfg.raw["_spot_radius_basis"]
-    assert basis["source"] == "derived_from_declared_line_width"
-    # 不给阈值时应退回名义，并标注 declared=False
+    assert basis["source"] == "frozen_nominal_optics"
+    # 对照量必须如实给出：模型首击宽度 vs 声明宽度（名义光学给不出 5 μm）
+    assert basis["model_first_shot_width_um"] < 5.0
+    assert basis["declared_over_model_width"] > 1.0
+    # 不给阈值 → 同样是名义光学，且仍记录声明的单线宽度
     cfg2 = build_row_config(row, spec=PredictionSpec(
         material_card_file=FIXTURE, window_um=20.0, dx_um=0.5), bg=bg)
     assert cfg2.laser.spot_radius_m == pytest.approx(bg.derived_waist_m(), rel=1e-12)
-    assert cfg2.raw["_spot_radius_basis"]["declared"] is False
+    assert cfg2.raw["_spot_radius_basis"]["declared_line_width_um"] == pytest.approx(5.0)
 
 
 def test_layer_count_terminology():
@@ -1070,7 +1085,11 @@ def test_infeasible_plan_offers_labelled_best_effort():
 
 
 def test_geometry_basis_separates_nominal_and_declared():
-    """规划结果要能说清：名义 w0 多少、声明线宽多少、等效 w 多少。"""
+    """规划结果要能说清：**名义光学（冻结）**多少、声明线宽多少、模型给多少。
+
+    ADR-0020 之后不再有"等效 w"：光斑就是名义值，
+    声明的 5 μm 与模型首击宽度之间的**差值**作为对照量如实报告。
+    """
     from ufdemo.planning import plan_for_target
 
     res = plan_for_target(
@@ -1080,10 +1099,16 @@ def test_geometry_basis_separates_nominal_and_declared():
                    response_override={**_PLAN_OVERRIDE, "threshold_J_m2": 7.85e4}),
     )
     g = res.geometry_basis
+    bg = load_shared_background()
+    # 光学 = 名义值（冻结），与声明宽度**解耦**
+    assert g.get("spotRadiusUm") == pytest.approx(bg.derived_waist_m() * 1e6, rel=1e-9)
+    assert g.get("nominalWaistUm") == pytest.approx(bg.derived_waist_m() * 1e6, rel=1e-9)
+    assert g.get("rayleighRangeUm") == pytest.approx(bg.derived_rayleigh_m() * 1e6, rel=1e-9)
+    # 声明线宽是加工结果；模型首击宽度**小于**它 ⇒ 差值必须如实报出（>1）
     assert g.get("declaredLineWidthUm") == pytest.approx(5.0)
-    assert g.get("lineWidthModelUm") == pytest.approx(5.0, rel=1e-3)
-    assert g.get("spotRadiusUm", 0) > g.get("nominalWaistUm", 0)
-    assert g.get("nominalOpticsWidthUm", 99) < 5.0
+    assert g.get("lineWidthModelUm") < 5.0
+    assert g.get("declaredOverModelWidth") > 1.0
+    assert "冻结" in (g.get("note") or "")
 
 
 # ---------------------------------------------------------------------------

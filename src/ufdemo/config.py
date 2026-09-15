@@ -2406,23 +2406,56 @@ def shared_background_patch(
     映射（与既有字段一一对应，不新增底层字段）::
 
         laser.wavelength_m         ← optics.wavelength_nm
-        laser.spot_radius_m        ← 公式推导 w0（不是硬编码的 nominal 数字）
+        laser.spot_radius_m        ← 公式推导 w0（**按名义光学冻结**，不随工况/拟合变化；
+                                      曾在此按「声明的单线宽度」反推等效光斑 —— 已废，
+                                      那会使光学随频率与假定 F_th 漂移，见 ADR-0020）
+        laser.rayleigh_range_m     ← 公式推导 zR（同样冻结）
         laser.m2                   ← optics.m2
         laser.pulse_energy_J       ← P_物镜后 / f
         solver.geometry_feedback   ← focus.geometry_feedback（axial_defocus）
         solver.dynamic_angle       ← focus.dynamic_angle（false）
     """
     energy = bg.pulse_energy_J(repetition_rate_Hz)
+    #
+    # ⚠️ **光斑按名义光学冻结**（ADR-0020，用户 2026-09-15 明确"这个一定要改"）。
+    #
+    # 曾经的做法：给了阈值就按「声明的实测单线宽度」**反推等效光斑**并替换 w0、
+    # 连带改 zR。实测它使光学随**频率与假定的 F_th** 漂移
+    # （F_th=78496 时 2/20/40/200 kHz → w0 1.1334/1.3254/1.4085/**1.7026** µm，
+    #  zR 3.2649→**7.3678** µm；名义 0.8743/1.9429）：
+    #   * w0 = M²λ/(πNA) 只由 λ/NA/M² 决定，与频率、能量、阈值**无关**；
+    #   * 反推方程里带着 E_p = P/f ⇒ 每换一个频率就把光学系统"重新标定"一次；
+    #   * 5 μm 是**加工出来的线宽**（多脉冲扫描的结果），不是单脉冲高斯足迹的直径，
+    #     把它反解成 w0 等于把频率依赖计入两次，还把 δ/F_th 的误差吸收进光学自由度。
+    # ⇒ 光学冻结；声明的单线宽度降级为**对照量**（见下方 basis），不再是装配输入。
+    w = bg.derived_waist_m()
+    zr = bg.derived_rayleigh_m()
+    basis: dict[str, Any] = {
+        "source": "frozen_nominal_optics",
+        "spot_radius_um": w * 1e6,
+        "nominal_waist_um": w * 1e6,
+        "nominal_rayleigh_um": zr * 1e6,
+        "declared_line_width_um": (bg.effective_line_width_m * 1e6
+                                   if bg.effective_line_width_m is not None else None),
+        "note": (
+            "光斑/瑞利长度按**名义光学冻结**（w0=M²λ/(πNA)、zR=πw0²/(M²λ)），"
+            "与频率、能量、假定的 F_th **无关**。声明的单线宽度是**加工结果**，"
+            "只作对照量，不再反推光斑（ADR-0020）。"
+        ),
+    }
     if threshold_J_m2 is not None and threshold_J_m2 > 0:
-        # 有阈值时用**等效光斑半径**，让模型的烧蚀宽度与声明的实测单线宽度一致
-        w, wdiag = bg.equivalent_spot_radius_m(
-            pulse_energy_J=energy, threshold_J_m2=threshold_J_m2)
-    else:
-        w, wdiag = bg.derived_waist_m(), {
-            "declared": False, "source": "nominal_optics",
-            "note": "未给阈值 → 用名义 w0；单线宽度可能与实测不一致",
-            "spot_radius_um": bg.derived_waist_m() * 1e6,
-        }
+        # **对照量**：名义光学下模型的首击烧蚀宽度 vs 声明的实测单线宽度。
+        # 差得多 → 该去查 F_th/δ 或搭接模型，**不是**去改光斑。
+        _half = bg.ablated_half_width_m(spot_radius_m=w, pulse_energy_J=energy,
+                                        threshold_J_m2=float(threshold_J_m2))
+        _model_w = 2.0 * _half
+        basis.update({
+            "threshold_j_m2": float(threshold_J_m2),
+            "model_first_shot_width_um": _model_w * 1e6,
+        })
+        if bg.effective_line_width_m is not None and _model_w > 0:
+            basis["declared_over_model_width"] = (
+                bg.effective_line_width_m / _model_w)
     return {
         "laser": {
             "wavelength_m": bg.wavelength_m,
@@ -2430,7 +2463,8 @@ def shared_background_patch(
             "m2": bg.m2,
             "pulse_energy_J": energy,
             "repetition_rate_Hz": float(repetition_rate_Hz),
-            "_spot_radius_basis": wdiag,
+            "rayleigh_range_m": zr,
+            "_spot_radius_basis": basis,
         },
         "solver": {
             # ⚠️ 这两个**必须同时**出现：固定焦点（不主动调焦）与保留被动轴向离焦

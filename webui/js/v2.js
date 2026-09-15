@@ -536,22 +536,23 @@ async function v2RunPlan() {
   v2DrawPocket(rec || best, rec ? "推荐方案" : "最接近候选（不满足约束）");
 }
 
-/** 几何依据：把「名义光学值」与「实测单线宽度 / 等效光斑」分开写。 */
+/** 几何依据：光学按**名义值冻结**；声明的单线宽度只作对照量（ADR-0020）。 */
 function v2RenderGeometry(g) {
   const box = document.getElementById("pl-geom");
   if (!box) return;
   if (!g || !g.spotRadiusUm) { box.innerHTML = ""; return; }
   const parts = [];
+  parts.push(`光斑半径 <strong>${v2Num(g.spotRadiusUm, 4)} µm</strong>` +
+    `（名义光学 <strong>冻结</strong>，zR ${v2Num(g.rayleighRangeUm || 0, 4)} µm` +
+    ` —— 与频率/能量/阈值无关）`);
   if (g.declaredLineWidthUm) {
-    parts.push(`实测单线宽度 <strong>${v2Num(g.declaredLineWidthUm, 3)} µm</strong>`);
-    parts.push(`→ 等效光斑半径 <strong>${v2Num(g.spotRadiusUm, 4)} µm</strong>`);
-    parts.push(`（模型给出的烧蚀宽度 <strong>${v2Num(g.lineWidthModelUm, 3)} µm</strong>）`);
-    if (g.nominalWaistUm) {
-      parts.push(`｜名义 w0 ${v2Num(g.nominalWaistUm, 4)} µm 只作光学记录` +
-        `（它给的宽度只有 ${v2Num(g.nominalOpticsWidthUm, 3)} µm）`);
+    parts.push(`｜实测单线宽度 <strong>${v2Num(g.declaredLineWidthUm, 3)} µm</strong>` +
+      `（加工结果，只作对照）`);
+    if (g.lineWidthModelUm) {
+      parts.push(`｜模型首击烧蚀宽度 <strong>${v2Num(g.lineWidthModelUm, 3)} µm</strong>` +
+        `，声明/模型 = <strong>${v2Num(g.declaredOverModelWidth, 2)}×</strong>` +
+        ` —— 差得多应查 F<sub>th</sub>/δ 或搭接模型，不是改光斑`);
     }
-  } else {
-    parts.push(`未声明实测单线宽度 → 用名义光学 w0 ${v2Num(g.nominalWaistUm, 4)} µm`);
   }
   if (g.pulseEnergyUJ) parts.push(`｜脉冲能量 ${v2Num(g.pulseEnergyUJ, 1)} µJ`);
   box.innerHTML = parts.join(" ");

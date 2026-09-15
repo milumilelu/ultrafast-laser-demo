@@ -228,7 +228,10 @@ def test_policy_leaves_removal_bitwise_identical_on_deep_hole_case():
     h_thr = np.asarray(res_thr.surface.height)
     # **不设容差**：阈值半径之外的格子增量为 0，必须逐位一致
     assert np.array_equal(h_tail, h_thr)
-    assert float((res_thr.surface.initial_height - h_thr).max()) > 1e-4   # 确实是深孔算例
+    # 确实是深孔算例。⚠️ 内部单位是**米**：1e-4 m = 100 µm。
+    # 光学冻结（ADR-0020，w0 1.3254→0.8743 µm）后本算例最深 ≈ 92.5 µm（原 132 µm，
+    # 下降 30% —— 这是光学变准后的**真实**量级变化，不是回归），阈值取 10 µm。
+    assert float((res_thr.surface.initial_height - h_thr).max()) * 1e6 > 10.0
 
     tw = res_thr.diagnostics["fluence_ledger"]["threshold_window"]
     assert tw["enabled"] is True

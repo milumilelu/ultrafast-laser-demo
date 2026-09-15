@@ -938,32 +938,32 @@ def plan_for_target(
             else:
                 best = cand0
 
-    # 几何依据：把「名义光学值」与「实测单线宽度 / 等效光斑」分开写清楚。
+    # 几何依据：**光学按名义值冻结**（ADR-0020）；声明的单线宽度只作**对照量**。
     from .config import load_shared_background as _lsb
+    from .config import shared_background_patch as _sbp
 
     _bg = bg or _lsb()
     _thr = (response_override or {}).get("threshold_J_m2")
-    geom: dict[str, Any] = {"machinedShape": "rectangular_pocket"}
-    if _thr:
-        _energy = _bg.pulse_energy_J(float(repetition_rate_kHz) * 1e3)
-        _w, _basis = _bg.equivalent_spot_radius_m(
-            pulse_energy_J=_energy, threshold_J_m2=float(_thr))
-        _half = _bg.ablated_half_width_m(spot_radius_m=_w, pulse_energy_J=_energy,
-                                         threshold_J_m2=float(_thr))
-        geom.update({
-            "thresholdJm2": float(_thr),
-            "pulseEnergyUJ": _energy * 1e6,
-            "spotRadiusUm": _w * 1e6,
-            "lineWidthModelUm": 2.0 * _half * 1e6,
-            "spotRadiusBasis": _basis,
-        })
-        if _basis.get("declared_width_um") is not None:
-            geom["declaredLineWidthUm"] = _basis["declared_width_um"]
-            geom["nominalWaistUm"] = _basis.get("nominal_waist_um")
-            geom["nominalOpticsWidthUm"] = _basis.get("nominal_width_um")
-    else:
-        geom["nominalWaistUm"] = _bg.derived_waist_m() * 1e6
-        geom["note"] = "未给阈值 → 无法按实测单线宽度反推等效光斑"
+    _patch = _sbp(_bg, repetition_rate_Hz=float(repetition_rate_kHz) * 1e3,
+                  threshold_J_m2=(float(_thr) if _thr else None))
+    _laser = _patch["laser"]
+    _basis = _laser["_spot_radius_basis"]
+    geom: dict[str, Any] = {
+        "machinedShape": "rectangular_pocket",
+        # 光斑 = **名义光学**（冻结）；不再是"按声明宽度反推的等效值"
+        "spotRadiusUm": _laser["spot_radius_m"] * 1e6,
+        "rayleighRangeUm": _laser["rayleigh_range_m"] * 1e6,
+        "nominalWaistUm": _basis["nominal_waist_um"],
+        "spotRadiusBasis": _basis,
+    }
+    if _basis.get("threshold_j_m2") is not None:
+        geom["thresholdJm2"] = _basis["threshold_j_m2"]
+        geom["pulseEnergyUJ"] = _laser["pulse_energy_J"] * 1e6
+        geom["lineWidthModelUm"] = _basis["model_first_shot_width_um"]
+    if _basis.get("declared_line_width_um") is not None:
+        geom["declaredLineWidthUm"] = _basis["declared_line_width_um"]
+        geom["declaredOverModelWidth"] = _basis.get("declared_over_model_width")
+    geom["note"] = _basis["note"]
 
     notes = [
         "**加工形貌是矩形槽**（矩形区域按弓字形填充），不是单个圆坑。",
