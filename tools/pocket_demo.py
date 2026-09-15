@@ -29,6 +29,7 @@ OUT_HTML = ROOT / "docs" / "reports" / "pocket_200um.html"
 
 
 def build_and_run(*, region_um: float, dx_um: float, spacing_um: float,
+                  domain_um: float | None = None,
                   layers: int, f_khz: float, v_mm_s: float, tau_fs: float,
                   gain: float, baseline: Path) -> dict:
     from ufdemo.calibration import ExperimentRow, PredictionSpec, build_row_config
@@ -45,8 +46,11 @@ def build_and_run(*, region_um: float, dx_um: float, spacing_um: float,
                         repetition_rate_kHz=f_khz, scan_speed_mm_s=v_mm_s,
                         hatch_spacing_um=spacing_um, pass_count=layers,
                         mean_depth_um=1.0)
-    spec = PredictionSpec(material_card_file=BASE_CARD, window_um=region_um,
-                          dx_um=dx_um, response_override=ov)
+    spec = PredictionSpec(material_card_file=BASE_CARD,
+                          window_um=float(domain_um or region_um),   # 仿真域（材料）
+                          dx_um=dx_um,
+                          machining_region_um=region_um,             # 加工区（矩形槽）
+                          response_override=ov)
     cfg = build_row_config(row, spec=spec, gain=gain)
 
     raw = json.loads((ROOT / BASE_CARD).read_text(encoding="utf-8"))
@@ -61,18 +65,31 @@ def build_and_run(*, region_um: float, dx_um: float, spacing_um: float,
 
     import numpy as np
 
-    drop = (res.surface.initial_height - res.surface.height) * 1e6   # μm
+    drop_full = (res.surface.initial_height - res.surface.height) * 1e6   # μm
     g = res.surface.grid
+    # **统计只算加工区**：域更大时外围是未加工余量，混进来会把覆盖率算歪
+    # （实测踩过：域 400 / 加工区 200 时全算会把覆盖率从 100% 压到 25.7%）。
+    n_reg = int(round(region_um * 1e-6 / g.dx_m))
+    n_reg = max(1, min(n_reg, drop_full.shape[0], drop_full.shape[1]))
+    y0 = (drop_full.shape[0] - n_reg) // 2
+    x0 = (drop_full.shape[1] - n_reg) // 2
+    drop = drop_full[y0:y0 + n_reg, x0:x0 + n_reg]
+    margin_max = 0.0
+    if n_reg < drop_full.shape[0]:
+        m = np.ones(drop_full.shape, dtype=bool)
+        m[y0:y0 + n_reg, x0:x0 + n_reg] = False
+        margin_max = float(drop_full[m].max()) if np.any(m) else 0.0
     ny, nx = drop.shape
     row_idx = int(np.argmax(drop.mean(axis=1)))
     return {
         "ok": True,
-        "regionUm": region_um, "dxUm": dx_um * 1e6 if dx_um < 1e-3 else dx_um,
+        "regionUm": region_um, "domainUm": float(domain_um or region_um),
+        "dxUm": dx_um * 1e6 if dx_um < 1e-3 else dx_um,
         "gridNx": nx, "gridNy": ny,
         "spacingUm": spacing_um, "layers": layers,
         "fKHz": f_khz, "vMmS": v_mm_s, "tauFs": tau_fs, "gain": gain,
         "events": int(res.events_processed), "solveSeconds": dt,
-        "depthUm": drop,
+        "depthUm": drop, "marginMaxDepthUm": margin_max,
         "sectionAlongXUm": drop[row_idx],
         "sectionAlongYUm": drop[:, nx // 2],
         "xAxisUm": (np.arange(nx) - nx // 2) * g.dx_m * 1e6,
@@ -114,7 +131,8 @@ def write_html(r: dict, out: Path) -> Path:
     payload = {
         "gridNx": int(sub.shape[1]), "gridNy": int(sub.shape[0]),
         "dxUm": r["dxUm"] * sx, "dyUm": r["dxUm"] * sy,
-        "regionUm": r["regionUm"],
+        "regionUm": r["regionUm"], "domainUm": r["domainUm"],
+        "marginMaxDepthUm": r.get("marginMaxDepthUm", 0.0),
         "depthUm": [[round(float(v), 3) for v in row] for row in sub],
         "sectionAlongXUm": [round(float(v), 3) for v in r["sectionAlongXUm"]],
         "sectionAlongYUm": [round(float(v), 3) for v in r["sectionAlongYUm"]],
@@ -230,7 +248,8 @@ const S = D.stats, M = D.meta;
 const fmt = (v,n=2)=> (v===null||v===undefined||Number.isNaN(v))?"—":Number(v).toFixed(n);
 
 document.getElementById("sub").textContent =
-  `${D.regionUm}×${D.regionUm} μm ｜ 间距 h=${M.spacingUm} μm ｜ 层数 N=${M.layers} ｜ ` +
+  `仿真域 ${D.domainUm}×${D.domainUm} μm ｜ 加工区 ${D.regionUm}×${D.regionUm} μm ｜ ` +
+  `h=${M.spacingUm} μm ｜ 层数 N=${M.layers} ｜ ` +
   `f=${M.fKHz} kHz ｜ v=${M.vMmS} mm/s ｜ τ=${M.tauFs} fs ｜ 增益 a=${fmt(M.gain,4)}`;
 
 const mets = [
@@ -250,6 +269,7 @@ document.getElementById("geom").innerHTML = `<table class="kv">
 <tr><th>网格</th><td>${M.fullNx}×${M.fullNy}（显示下采样到 ${D.gridNx}×${D.gridNy}）</td></tr>
 <tr><th>脉冲能量</th><td>${fmt(M.pulseEnergyUJ,1)} µJ（= P<sub>物镜后</sub>/f）</td></tr>
 <tr><th>求解用光斑半径</th><td>${fmt(M.spotRadiusUm,4)} µm</td></tr>
+<tr><th>外围最大去除</th><td>${fmt(D.marginMaxDepthUm,3)} µm（应 ≈ 0，说明走刀没出加工区）</td></tr>
 <tr><th>单层扫描线数</th><td>${Math.floor(D.regionUm/M.spacingUm)+1} 条（按请求间距 ${M.spacingUm} µm 布点，不拉伸）</td></tr>
 </table>`;
 
@@ -335,7 +355,8 @@ line("secX", D.xAxisUm, D.sectionAlongXUm, "#b45309");
 })();
 
 document.getElementById("params").innerHTML = `<table class="kv">
-<tr><th>目标区域</th><td>${D.regionUm}×${D.regionUm} μm（[U1] §12 的 nominal 编程区域）</td></tr>
+<tr><th>仿真域（材料）</th><td>${D.domainUm}×${D.domainUm} μm</td></tr>
+<tr><th>加工区（矩形槽）</th><td>${D.regionUm}×${D.regionUm} μm（[U1] §12 的 nominal 编程区域）</td></tr>
 <tr><th>填充间距 h</th><td>${M.spacingUm} μm</td></tr>
 <tr><th>层数 N</th><td>${M.layers}（每层一次完整弓字形扫描）</td></tr>
 <tr><th>重复频率 / 扫描速度</th><td>${M.fKHz} kHz / ${M.vMmS} mm/s</td></tr>
@@ -358,7 +379,9 @@ document.getElementById("basis").innerHTML =
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--region", type=float, default=200.0)
+    ap.add_argument("--region", type=float, default=200.0, help="加工区（μm）")
+    ap.add_argument("--domain", type=float, default=None,
+                    help="仿真域 / 材料区域（μm）；默认等于加工区")
     ap.add_argument("--dx", type=float, default=0.5)
     ap.add_argument("--spacing", type=float, default=4.0)
     ap.add_argument("--layers", type=int, default=1)
@@ -370,9 +393,13 @@ def main() -> int:
     ap.add_argument("--out", default=str(OUT_HTML))
     a = ap.parse_args()
 
-    print(f"  区域 {a.region}×{a.region} μm  dx={a.dx} μm  h={a.spacing}  N={a.layers}")
-    print("  正在求解（200×200 在 0.5 μm 网格上约 16 万格，需要一点时间）…")
+    _dom = a.domain or a.region
+    print(f"  仿真域 {_dom}×{_dom} μm  加工区 {a.region}×{a.region} μm  "
+          f"dx={a.dx} μm  h={a.spacing}  N={a.layers}")
+    _n = int(round(_dom / a.dx))
+    print(f"  正在求解（域 {_n}×{_n} = {_n*_n:,} 格，需要一点时间）…")
     r = build_and_run(region_um=a.region, dx_um=a.dx, spacing_um=a.spacing,
+                      domain_um=a.domain,
                       layers=a.layers, f_khz=a.freq, v_mm_s=a.speed,
                       tau_fs=a.tau, gain=a.gain, baseline=Path(a.baseline))
     import numpy as np

@@ -364,6 +364,50 @@ async function v2RunCalibration() {
 
 /* ---------------- ③ 规划 ---------------- */
 
+/** 估算枚举耗时。**必须给** —— 域 400 + dx 0.5 时单个候选就要 20 s，
+ *  25 个候选 20+ 分钟，不给预估用户会以为界面卡死。
+ *
+ *  依据实测：同样 1,040 个事件，域 100/200/400 μm 分别 1.6 / 14.2 / 22.2 s
+ *  —— 每事件成本**随网格格数超线性增长**（有 per-event 全局开销），
+ *  所以这里的系数按格数分档取保守值。 */
+function v2EstimateCost() {
+  const num = (id, d) => parseFloat((document.getElementById(id) || {}).value || String(d));
+  const dom = num("pl-domain", 400), reg = num("pl-region", 200), dx = num("pl-dx", 1);
+  const fK = num("p-f-khz", 20), v = num("p-v", 50);
+  const n = Math.round(dom / dx);
+  const cells = n * n;
+  const pitchUm = v / Math.max(fK, 1e-9);           // 沿扫描方向的脉冲间距
+  let events = 0;
+  for (const h of [2, 4, 6, 8, 10]) {
+    for (const N of [1, 2, 3, 4, 5]) {
+      events += (Math.floor(reg / h) + 1) * Math.ceil(reg / pitchUm) * N;
+    }
+  }
+  // 每事件耗时（ms）—— 按格数分档，取实测的保守值
+  const perEventMs = cells <= 60000 ? 2 : (cells <= 250000 ? 14 : 22);
+  const sec = (events * perEventMs) / 1000;
+  return { n, cells, events, sec, region: reg, domain: dom, dx };
+}
+
+/** 刷新耗时提示（输入变化时调用） */
+function v2RefreshCost() {
+  const el = document.getElementById("pl-cost");
+  if (!el) return;
+  const e = v2EstimateCost();
+  const mins = e.sec / 60;
+  const t = mins < 1 ? `${e.sec.toFixed(0)} 秒` : `${mins.toFixed(1)} 分钟`;
+  let cls = "info", warn = "";
+  if (mins > 10) { cls = "warn"; warn = " ⚠️ <strong>很久</strong>——建议把筛选网格 dx 调大。"; }
+  else if (mins > 3) { cls = "warn"; warn = " 建议先把 dx 调大做粗筛。"; }
+  el.innerHTML =
+    `<div class="notice ${cls}" style="margin:0">` +
+    `仿真域 ${e.domain} µm ÷ dx ${e.dx} µm → <strong>${e.n}×${e.n} = ${e.cells.toLocaleString()} 格</strong>；` +
+    `加工区 ${e.region} µm；25 个候选预计 <strong>${e.events.toLocaleString()} 个事件</strong>，` +
+    `估算耗时<strong>约 ${t}</strong>。${warn}` +
+    `<br>（估算基于实测的单事件成本；实际以运行为准。扫描线间距 h 与脉冲间距 ${(e.region && 1) ? "" : ""}` +
+    `沿扫描方向 ${(parseFloat((document.getElementById("p-v")||{}).value||50) / Math.max(parseFloat((document.getElementById("p-f-khz")||{}).value||20), 1e-9)).toFixed(2)} µm 共同决定事件数。）</div>`;
+}
+
 async function v2RunPlan() {
   const box = document.getElementById("pl-result");
   if (!box) return;
@@ -373,18 +417,24 @@ async function v2RunPlan() {
     return;
   }
   const g = (id, dflt) => parseFloat((document.getElementById(id) || {}).value || String(dflt));
-  box.innerHTML = `<div class="notice info">正在枚举 25 个候选，每个都跑一遍求解器…</div>`;
+  const est = v2EstimateCost();
+  box.innerHTML = `<div class="notice info">正在枚举 25 个候选，每个都跑一遍求解器…` +
+    `仿真域 ${est.domain} µm / 加工区 ${est.region} µm / dx ${est.dx} µm ` +
+    `（${est.n}×${est.n} 格，约 ${est.events.toLocaleString()} 事件，估算 ${(est.sec/60).toFixed(1)} 分钟）</div>`;
+  await new Promise((r) => setTimeout(r, 50));   // 让上面这句先画出来
   let r;
   try {
     r = await API.plan({
       materialCardFile: "tests/fixtures/analytic_fixture.json",
-      targetDepthUm: g("pl-target", 20),
-      toleranceUm: g("pl-tol", 3),
-      regionUm: [g("pl-rx", 40), g("pl-ry", 40)],
+      targetDepthUm: g("pl-target", 60),
+      toleranceUm: g("pl-tol", 12),
+      // 域（材料区域）与加工区（矩形槽）**分开**
+      domainUm: [g("pl-domain", 400), g("pl-domain", 400)],
+      regionUm: [g("pl-region", 200), g("pl-region", 200)],
       pulseDurationFs: bl.pulseDurationFs,
       repetitionRateKHz: g("p-f-khz", 20),
       scanSpeedMmS: g("p-v", 50),
-      dxUm: 0.5,
+      dxUm: g("pl-dx", 1),
       gain: V2.gain || 1.0,
       responseOverride: {
         kind: "log_fixed",
@@ -421,7 +471,11 @@ async function v2RunPlan() {
     </tr>`)
     .join("");
 
-  box.innerHTML = head +
+  const twoStage = r.screeningDxUm && r.finalDxUm && r.screeningDxUm !== r.finalDxUm
+    ? `<div class="notice info">**两级网格**：25 个候选用 ${r.screeningDxUm} µm 粗筛，`
+      + `推荐/最接近的那个用 ${r.finalDxUm} µm 细核（表里数值来自粗筛，形貌来自细核）。</div>`
+    : "";
+  box.innerHTML = head + twoStage +
     `<div class="section-title">全部候选（${r.nFeasible}/${r.nCandidates} 可行）</div>
      <div style="max-height:280px;overflow-y:auto">
      <table class="kv"><tr><th>间距 h (µm)</th><th>层数 N</th><th>均值 (µm)</th><th>时间 (s)</th>
@@ -540,6 +594,8 @@ function v2Bind() {
   on("cmp-run", "click", v2RunCompare);
   on("cal-run", "click", v2RunCalibration);
   on("pl-run", "click", v2RunPlan);
+  ["pl-domain", "pl-region", "pl-dx", "p-f-khz", "p-v"].forEach((id) =>
+    on(id, "input", v2RefreshCost));
 }
 
 async function v2Init() {
@@ -549,6 +605,7 @@ async function v2Init() {
   await v2LoadUpstream();
   await v2LoadBaselines();
   syncPulseEnergyReadout();
+  v2RefreshCost();
 }
 
 document.addEventListener("DOMContentLoaded", v2Init);

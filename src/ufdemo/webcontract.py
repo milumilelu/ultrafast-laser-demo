@@ -1091,7 +1091,8 @@ def plan_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[s
         raise UFDemoError(CONFIG_INVALID, "缺少基座材料卡",
                           field_path="planning.materialCardFile", actual=None,
                           requirement="卡路径")
-    region = body.get("regionUm") or [40.0, 40.0]
+    region = body.get("regionUm") or [200.0, 200.0]
+    domain = body.get("domainUm") or region
     res = plan_for_target(
         material_card_file=card,
         target_depth_um=float(body.get("targetDepthUm") or 0.0),
@@ -1100,7 +1101,9 @@ def plan_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[s
         repetition_rate_kHz=float(body.get("repetitionRateKHz") or 10.0),
         scan_speed_mm_s=float(body.get("scanSpeedMmS") or 50.0),
         region_um=(float(region[0]), float(region[1])),
+        domain_um=(float(domain[0]), float(domain[1])),
         dx_um=float(body.get("dxUm") or 0.5),
+        auto_coarsen=bool(body.get("autoCoarsen", True)),
         gain=float(body.get("gain") or 1.0),
         response_override=dict(body.get("responseOverride") or {}) or None,
     )

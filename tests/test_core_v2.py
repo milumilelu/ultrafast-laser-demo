@@ -1084,3 +1084,129 @@ def test_geometry_basis_separates_nominal_and_declared():
     assert g.get("lineWidthModelUm") == pytest.approx(5.0, rel=1e-3)
     assert g.get("spotRadiusUm", 0) > g.get("nominalWaistUm", 0)
     assert g.get("nominalOpticsWidthUm", 99) < 5.0
+
+
+# ---------------------------------------------------------------------------
+# 域（材料区域）与加工区分离（用户修正 2026-09-15 第二条）
+# ---------------------------------------------------------------------------
+
+
+def _domain_kw(region_um, domain_um, **over):
+    """给「域/加工区」类测试用的 kwargs（**不含** region_um，避免重复传参）。"""
+    kw = dict(
+        material_card_file=FIXTURE, region_um=region_um, domain_um=domain_um, dx_um=1.0,
+        pulse_duration_fs=223.0, repetition_rate_kHz=20.0, scan_speed_mm_s=50.0,
+        response_override=_PLAN_OVERRIDE,
+    )
+    kw.update(over)
+    return kw
+
+
+def test_domain_and_machining_region_are_separable():
+    """仿真域可以**大于**加工区 —— 外围留未加工余量。
+
+    用户要求：材料 400×400 μm、实际加工区 200×200 μm，且两者前端可调。
+    """
+    from ufdemo.calibration import build_row_config
+
+    row = ExperimentRow(sample_id="d", pulse_duration_fs=223.0, repetition_rate_kHz=20.0,
+                        scan_speed_mm_s=50.0, hatch_spacing_um=4.0, pass_count=1,
+                        mean_depth_um=1.0)
+    spec = PredictionSpec(material_card_file=FIXTURE, window_um=80.0, dx_um=1.0,
+                          machining_region_um=40.0, response_override=_PLAN_OVERRIDE)
+    cfg = build_row_config(row, spec=spec)
+    # 网格按**域**：80/1 = 80
+    assert cfg.grid.nx == 80 and cfg.grid.ny == 80
+    # 路径按**加工区**：只在 ±20 μm 内
+    xs = [s.start_xyz_m[0] for s in cfg.path.segments] +          [s.end_xyz_m[0] for s in cfg.path.segments]
+    ys = [s.start_xyz_m[1] for s in cfg.path.segments] +          [s.end_xyz_m[1] for s in cfg.path.segments]
+    assert max(abs(v) for v in xs) == pytest.approx(20e-6, rel=1e-9)
+    assert max(abs(v) for v in ys) <= 20e-6 * (1 + 1e-9)
+    # 路径**没有**跑到域边界（域半宽 = 40 μm）
+    assert max(abs(v) for v in xs) * 1e6 < 40.0
+
+
+def test_machining_region_larger_than_domain_is_rejected():
+    """加工区大于仿真域必须**报错**（外围需要余量，不能反过来）。"""
+    from ufdemo.calibration import build_row_config
+
+    row = ExperimentRow(sample_id="d", pulse_duration_fs=223.0, repetition_rate_kHz=20.0,
+                        scan_speed_mm_s=50.0, hatch_spacing_um=4.0, pass_count=1,
+                        mean_depth_um=1.0)
+    spec = PredictionSpec(material_card_file=FIXTURE, window_um=40.0, dx_um=1.0,
+                          machining_region_um=80.0)
+    with pytest.raises(UFDemoError):
+        build_row_config(row, spec=spec)
+
+
+def test_statistics_exclude_the_margin():
+    """**统计只算加工区** —— 外围余量的 0 深度不得混进覆盖率/过切。
+
+    回归背景：若把整个域都算进去，外围的 0 深度会被当成"漏加工"，
+    覆盖率被严重拉低、指标失真。
+    """
+    from ufdemo.planning import evaluate_candidate
+
+    c = evaluate_candidate(
+        4.0, 1, material_card_file=FIXTURE,
+        region_um=(20.0, 20.0), domain_um=(40.0, 40.0), dx_um=1.0,
+        pulse_duration_fs=223.0, repetition_rate_kHz=20.0, scan_speed_mm_s=50.0,
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        response_override=_PLAN_OVERRIDE,
+    )
+    assert c.domain_um == 40.0 and c.machining_region_um == 20.0
+    # 外围应基本未被加工（路径只在加工区内）
+    assert c.margin_max_depth_um is not None
+    assert c.coverage_fraction > 0.5, "加工区内应有覆盖；若把外围算进来会显著偏低"
+
+
+def test_plan_result_reports_domain_and_region():
+    """规划结果要能看出域与加工区各是多少。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=50.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_domain_kw((20.0, 20.0), (40.0, 40.0), spacings_um=(4.0,), pass_counts=(1,)),
+    )
+    d = res.to_dict()
+    assert d["domainUm"] == [40.0, 40.0]
+    assert d["regionUm"] == [20.0, 20.0]
+    assert res.domain_um == (40.0, 40.0)
+    assert any("仿真域" in n and "加工区" in n for n in res.notes)
+
+
+def test_plan_auto_coarsens_screening_grid_for_large_region():
+    """大加工区自动**两级网格**：粗筛 + 细核，且如实报出两级步长。
+
+    为什么要两级：域 400 μm ÷ dx 0.5 是 80 万格，25 个候选要 20+ 分钟。
+    h/N 的排序在粗网格上已稳定，所以粗筛一次、只细核推荐的那一个。
+    """
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=200.0,
+        min_coverage=0.0, max_overcut_fraction=1.0,
+        **_domain_kw((120.0, 120.0), (140.0, 140.0), dx_um=0.5,
+                     spacings_um=(6.0,), pass_counts=(1,)),
+    )
+    assert res.final_dx_um == 0.5
+    assert res.screening_dx_um == 1.0, "≥100 μm 的加工区应自动粗筛"
+    assert any("两级网格" in n for n in res.notes)
+    d = res.to_dict()
+    assert d["screeningDxUm"] == 1.0 and d["finalDxUm"] == 0.5
+
+
+def test_plan_can_disable_auto_coarsen():
+    """可以关掉自动粗筛（需要精确筛选时）。"""
+    from ufdemo.planning import plan_for_target
+
+    res = plan_for_target(
+        target_depth_um=5.0, tolerance_um=200.0,
+        min_coverage=0.0, max_overcut_fraction=1.0, auto_coarsen=False,
+        **_domain_kw((120.0, 120.0), (140.0, 140.0), dx_um=0.5,
+                     spacings_um=(6.0,), pass_counts=(1,)),
+    )
+    assert res.screening_dx_um == res.final_dx_um == 0.5
+    assert not any("两级网格" in n for n in res.notes)

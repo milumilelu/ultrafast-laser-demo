@@ -206,14 +206,20 @@
           焦点始终固定在原始上表面，<strong>不做逐层 Z 调整</strong>。
         </div>
         <div class="form-grid cols-3">
-          <div class="field"><label>区域 X (µm)</label><input type="number" id="pl-rx" step="10" value="40"></div>
-          <div class="field"><label>区域 Y (µm)</label><input type="number" id="pl-ry" step="10" value="40"></div>
-          <div class="field"><label>目标深度 (µm)</label><input type="number" id="pl-target" step="1" value="20"></div>
+          <div class="field"><label>材料区域 (µm) — 仿真域</label>
+            <input type="number" id="pl-domain" step="50" value="400" min="20"></div>
+          <div class="field"><label>加工区域 (µm) — 矩形槽</label>
+            <input type="number" id="pl-region" step="50" value="200" min="10"></div>
+          <div class="field"><label>目标深度 (µm)</label>
+            <input type="number" id="pl-target" step="1" value="60"></div>
         </div>
-        <div class="form-grid cols-2">
-          <div class="field"><label>容差 (±µm)</label><input type="number" id="pl-tol" step="0.5" value="3"></div>
+        <div class="form-grid cols-3">
+          <div class="field"><label>容差 (±µm)</label><input type="number" id="pl-tol" step="0.5" value="12"></div>
+          <div class="field"><label>筛选网格 dx (µm)</label>
+            <input type="number" id="pl-dx" step="0.5" value="1" min="0.1"></div>
           <div class="field"><label>&nbsp;</label><button class="btn primary" id="pl-run">枚举 h / N</button></div>
         </div>
+        <div class="hint" id="pl-cost"></div>
         <div id="pl-result"></div>
 
         <div class="section-title" id="pl-shape-title" style="display:none">矩形槽形貌（模型预测）</div>

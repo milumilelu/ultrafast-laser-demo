@@ -406,6 +406,11 @@ class CandidateResult:
     #: **矩形槽形貌**（下采样深度图 + 中心截面）。只在需要时填充（默认 None），
     #: 否则 25 个候选各带一张图会让响应体爆炸。
     surface: Mapping[str, Any] | None = None
+    #: 仿真域与加工区（μm）。两者不同才有外围余量。
+    domain_um: float | None = None
+    machining_region_um: float | None = None
+    #: 加工区**外围**的最大去除深度 —— 应接近 0，用来确认"路径没跑出加工区"。
+    margin_max_depth_um: float | None = None
     notes: tuple[str, ...] = ()
 
     @property
@@ -433,6 +438,9 @@ class CandidateResult:
             "overDepthFraction": self.over_depth_fraction,
             "depthStdUm": self.depth_std_um,
             "surface": dict(self.surface) if self.surface else None,
+            "domainUm": self.domain_um,
+            "machiningRegionUm": self.machining_region_um,
+            "marginMaxDepthUm": self.margin_max_depth_um,
             "notes": list(self.notes),
         }
 
@@ -444,6 +452,7 @@ def evaluate_candidate(
     material_card_file: str,
     region_um: tuple[float, float],
     dx_um: float,
+    domain_um: tuple[float, float] | None = None,
     pulse_duration_fs: float,
     repetition_rate_kHz: float,
     scan_speed_mm_s: float,
@@ -468,6 +477,9 @@ def evaluate_candidate(
         region_um=region_um, spacing_um=float(spacing_um),
         pass_count=int(pass_count), scan_speed_mm_s=float(scan_speed_mm_s),
     )
+    # **仿真域**可以与**加工区**不同：域更大时外围留出未加工余量。
+    # 统计必须只算加工区 —— 否则外围的 0 深度会被当成"漏加工"，把指标算歪。
+    dom = domain_um or region_um
     row = ExperimentRow(
         sample_id=f"h{spacing_um:g}-N{pass_count}",
         pulse_duration_fs=float(pulse_duration_fs),
@@ -479,7 +491,8 @@ def evaluate_candidate(
     )
     spec = PredictionSpec(
         material_card_file=material_card_file,
-        window_um=float(region_um[0]), dx_um=float(dx_um),
+        window_um=float(dom[0]), dx_um=float(dx_um),
+        machining_region_um=float(region_um[0]),
         response_override=response_override,
     )
     from .materials import MaterialSpec, load_material_card
@@ -506,7 +519,19 @@ def evaluate_candidate(
 
     import numpy as np
 
-    drop = res.surface.initial_height - res.surface.height
+    drop_full = res.surface.initial_height - res.surface.height
+    # 取**加工区**子块做统计（域更大时外围是未加工余量，不该进指标）
+    g0 = res.surface.grid
+    n_reg = int(round(float(region_um[0]) * 1e-6 / g0.dx_m))
+    n_reg = max(1, min(n_reg, drop_full.shape[0], drop_full.shape[1]))
+    yy0 = (drop_full.shape[0] - n_reg) // 2
+    xx0 = (drop_full.shape[1] - n_reg) // 2
+    drop = drop_full[yy0:yy0 + n_reg, xx0:xx0 + n_reg]
+    margin_max_um = 0.0
+    if n_reg < drop_full.shape[0]:
+        _mask = np.ones(drop_full.shape, dtype=bool)
+        _mask[yy0:yy0 + n_reg, xx0:xx0 + n_reg] = False
+        margin_max_um = float(drop_full[_mask].max()) * 1e6 if np.any(_mask) else 0.0
     touched = drop > 0.0
 
     # --- 矩形槽形貌（按需）--------------------------------------------------
@@ -525,6 +550,9 @@ def evaluate_candidate(
         col_idx = nx // 2
         surf = {
             "kind": "rectangular_pocket",
+            "domainUm": float(dom[0]),
+            "machiningRegionUm": float(region_um[0]),
+            "marginMaxDepthUm": margin_max_um,
             "nx": int(sub.shape[1]),
             "ny": int(sub.shape[0]),
             "stride": stride,
@@ -583,6 +611,9 @@ def evaluate_candidate(
         coverage_fraction=cov, under_depth_fraction=under, over_depth_fraction=over,
         depth_std_um=std,
         surface=surf,
+        domain_um=float(dom[0]),
+        machining_region_um=float(region_um[0]),
+        margin_max_depth_um=margin_max_um,
         notes=tuple(reasons),
     )
 
@@ -594,11 +625,15 @@ class TargetPlanResult:
     target_depth_um: float
     tolerance_um: float
     region_um: tuple[float, float]
+    domain_um: tuple[float, float] | None = None
     candidates: tuple[CandidateResult, ...] = ()
     recommended: CandidateResult | None = None
     infeasible_reason: str | None = None
     #: 加工形貌类型 —— 矩形区域走弓字形填充，结果是**矩形槽**。
     machined_shape: str = "rectangular_pocket"
+    #: 筛选用的网格步长（μm）与细核步长（μm）。两者不同即为**两级**。
+    screening_dx_um: float | None = None
+    final_dx_um: float | None = None
     #: **无可行方案时**的最接近候选（**明确不满足约束**，仅供诊断，不是推荐）。
     best_effort: CandidateResult | None = None
     best_effort_violation: float | None = None
@@ -619,12 +654,15 @@ class TargetPlanResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema": "ufdemo.target_plan/1",
+            "domainUm": list(self.domain_um) if self.domain_um else list(self.region_um),
             "targetDepthUm": self.target_depth_um,
             "toleranceUm": self.tolerance_um,
             "regionUm": list(self.region_um),
             "nCandidates": len(self.candidates),
             "nFeasible": len(self.feasible_candidates),
             "machinedShape": self.machined_shape,
+            "screeningDxUm": self.screening_dx_um,
+            "finalDxUm": self.final_dx_um,
             "geometryBasis": dict(self.geometry_basis),
             "recommended": self.recommended.to_dict() if self.recommended else None,
             "infeasibleReason": self.infeasible_reason,
@@ -647,7 +685,8 @@ def plan_for_target(
     pulse_duration_fs: float,
     repetition_rate_kHz: float,
     scan_speed_mm_s: float,
-    region_um: tuple[float, float] = (40.0, 40.0),
+    region_um: tuple[float, float] = (200.0, 200.0),
+    domain_um: tuple[float, float] | None = None,
     dx_um: float = 0.5,
     spacings_um: Iterable[float] = DEFAULT_SPACINGS_UM,
     pass_counts: Iterable[int] = DEFAULT_PASS_COUNTS,
@@ -655,6 +694,7 @@ def plan_for_target(
     response_override: Mapping[str, Any] | None = None,
     min_coverage: float = 0.98,
     max_overcut_fraction: float = 0.05,
+    auto_coarsen: bool = True,
     bg: Any | None = None,
 ) -> TargetPlanResult:
     """枚举 h/N，筛出可行方案，按**时间**与**均匀性**排序给推荐。
@@ -666,13 +706,24 @@ def plan_for_target(
     （深度标准差越小越好）。间距**不精确到任意小数** ——
     只有平均深度证据时，输出的是可行范围而非"精确最优 h"。
     """
+    # --- 两阶段：**粗网格筛选 → 细网格复核** ------------------------------
+    # 200×200 加工区在 0.5 μm 网格上单个候选就要 20–50 s，25 个候选要 20+ 分钟。
+    # 而 h/N 的排序（时间、覆盖）在粗网格上已经稳定，所以：
+    #   · 用粗网格把所有候选过一遍（快）
+    #   · 只把**推荐/最接近**的那一个用细网格复核（准）
+    # 任务书 §7.1 允许"内部自动选合理网格"，这里把两级都如实报出来。
+    screen_dx = float(dx_um)
+    if auto_coarsen and float(region_um[0]) >= 100.0:
+        screen_dx = max(screen_dx, 1.0)
+    screening = screen_dx != float(dx_um)
+
     cands: list[CandidateResult] = []
     for h in spacings_um:
         for n in pass_counts:
             cands.append(evaluate_candidate(
                 h, n,
                 material_card_file=material_card_file,
-                region_um=region_um, dx_um=dx_um,
+                region_um=region_um, dx_um=screen_dx, domain_um=domain_um,
                 pulse_duration_fs=pulse_duration_fs,
                 repetition_rate_kHz=repetition_rate_kHz,
                 scan_speed_mm_s=scan_speed_mm_s,
@@ -694,7 +745,7 @@ def plan_for_target(
         rec_with_surface = evaluate_candidate(
             rec.spacing_um, rec.pass_count,
             material_card_file=material_card_file,
-            region_um=region_um, dx_um=dx_um,
+            region_um=region_um, dx_um=float(dx_um), domain_um=domain_um,
             pulse_duration_fs=pulse_duration_fs,
             repetition_rate_kHz=repetition_rate_kHz,
             scan_speed_mm_s=scan_speed_mm_s,
@@ -744,7 +795,7 @@ def plan_for_target(
             cand_s = evaluate_candidate(
                 cand0.spacing_um, cand0.pass_count,
                 material_card_file=material_card_file,
-                region_um=region_um, dx_um=dx_um,
+                region_um=region_um, dx_um=float(dx_um), domain_um=domain_um,
                 pulse_duration_fs=pulse_duration_fs,
                 repetition_rate_kHz=repetition_rate_kHz,
                 scan_speed_mm_s=scan_speed_mm_s,
@@ -792,6 +843,8 @@ def plan_for_target(
 
     notes = [
         "**加工形貌是矩形槽**（矩形区域按弓字形填充），不是单个圆坑。",
+        (f"仿真域 {float((domain_um or region_um)[0]):g} μm，加工区 "
+         f"{float(region_um[0]):g} μm —— 统计只算**加工区**，外围余量单列。"),
         "N 是**层数**：每层一次完整弓字形扫描；**不做逐层 Z 调整**（焦点恒在原始上表面）。",
         "**标量深度误差**（若有实验对照）属实验证据；"
         "**覆盖率 / 漏加工 / 过切 / 深度标准差**是**模型预测**，"
@@ -800,6 +853,13 @@ def plan_for_target(
         "只有平均深度证据时，h 只给到搜索网格的粒度，**不精确到任意小数**。",
         "总时长为理想值（不含换向减速与额外边框，未确知）。",
     ]
+    if screening:
+        notes.append(
+            f"**两级网格**：25 个候选用 {screen_dx:g} μm 粗筛（快），"
+            f"推荐/最接近的那一个用 {float(dx_um):g} μm 细核（准）；"
+            "表里的数值来自**粗筛**，展示的形貌与标注来自**细核** —— "
+            "两者不一致时以细核为准。"
+        )
     if not feasible:
         notes.append("**本次未给出推荐方案** —— 这是如实的结果，不是失败。")
 
@@ -807,10 +867,13 @@ def plan_for_target(
         target_depth_um=float(target_depth_um),
         tolerance_um=float(tolerance_um),
         region_um=(float(region_um[0]), float(region_um[1])),
+        domain_um=(float((domain_um or region_um)[0]), float((domain_um or region_um)[1])),
         candidates=tuple(cands),
         recommended=rec,
         infeasible_reason=reason,
         machined_shape="rectangular_pocket",
+        screening_dx_um=screen_dx,
+        final_dx_um=float(dx_um),
         best_effort=best,
         best_effort_violation=best_v,
         geometry_basis=geom,

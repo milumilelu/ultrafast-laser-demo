@@ -359,8 +359,13 @@ class PredictionSpec:
     """怎么把一条 CSV 行变成一次求解。"""
 
     material_card_file: str
-    window_um: float = 40.0        # **代表窗口**边长（μm）
+    window_um: float = 40.0        # **仿真域**边长（μm）—— 网格范围
     dx_um: float = 0.2             # 网格步长
+    #: **实际加工区**边长（μm）。默认与 ``window_um`` 相同（旧行为）。
+    #: 单独设成比域小，是为了在加工区外围留出**未被加工的余量**，
+    #: 这样边界效应不主导统计，也能看出"路径有没有跑出加工区"。
+    #: 两者**同心**（网格以 ``center_x_m=0`` 为中心）。
+    machining_region_um: float | None = None
     observation: ObservationSpec = field(default_factory=ObservationSpec)
     #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
     #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
@@ -401,8 +406,18 @@ def build_row_config(
         threshold_J_m2=float(_thr) if _thr else None,
     )
 
-    win = float(spec.window_um)
-    nx = max(8, int(round(win / spec.dx_um)))
+    domain = float(spec.window_um)                       # 仿真域 → 网格范围
+    region = float(spec.machining_region_um or domain)   # 加工区 → 蛇形路径范围
+    if region > domain + 1e-9:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "加工区不能大于仿真域",
+            field_path="calibration.machining_region_um",
+            actual=f"region={region} domain={domain}",
+            requirement="machining_region_um ≤ window_um",
+            suggestion="把仿真域放大，或缩小加工区；外围需要留余量。",
+        )
+    nx = max(8, int(round(domain / spec.dx_um)))
     ny = nx
 
     # 材料卡要先解析出 material_id —— RunConfig 需要它做准入与元数据
@@ -423,7 +438,7 @@ def build_row_config(
         )
 
     plan = serpentine_plan(
-        region_um=(win, win),
+        region_um=(region, region),      # 只在**加工区**内走刀，外围留白
         spacing_um=row.hatch_spacing_um,
         pass_count=row.pass_count,
         scan_speed_mm_s=row.scan_speed_mm_s,
@@ -452,6 +467,8 @@ def build_row_config(
         "output": {},
     }
     raw["_path_plan_n_lines"] = plan.n_scan_lines
+    raw["_machining_region_um"] = region
+    raw["_domain_um"] = domain
     raw["_spot_radius_basis"] = dict(patch["laser"].get("_spot_radius_basis") or {})
     raw["_path_plan_notes"] = list(plan.notes)
 
