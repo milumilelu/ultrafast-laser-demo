@@ -3,7 +3,7 @@
 - 驱动方式：`puppeteer-core` + **本机已装**的 Chrome/Edge（**不下载 Chromium**）
 - 探针：`tools/browser_probe.mjs`；包装器：`tools/browser_check.py`
 - 汇总：通过 42｜失败 0｜未运行 0｜未实现 1
-- 产物目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\_browser_check`（隔离端口 + 隔离 `UFDEMO_RUNS_DIR`，不污染工作区 `runs/`）
+- 产物目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check`（隔离端口 + 隔离 `UFDEMO_RUNS_DIR`，不污染工作区 `runs/`）
 
 > 与 `webui/test/contract_test.mjs`（DOM 契约测试）的分工：后者是**无浏览器**替代品，
 > 只能静态检查元素与字段；本报告是**真引擎**里跑出来的，能看见静态检查看不见的三类问题：
@@ -28,7 +28,7 @@
 
 | 路径 | 检查项 | 实测 | 状态 | 说明 |
 |---|---|---|---|---|
-| U03-浏览器级 | 运行环境 | chrome 152.0.7977.84｜C:/Program Files/Google/Chrome/Application/chrome.exe | 通过 | 真实求解=True｜结果：C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\_browser_check\probe\result.json |
+| U03-浏览器级 | 运行环境 | chrome 152.0.7977.84｜C:/Program Files/Google/Chrome/Application/chrome.exe | 通过 | 真实求解=True｜结果：C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_browser_check\probe\result.json |
 | U03-1 启动 | 首页返回 200（实际 200） | 符合 | 通过 |  |
 | U03-1 启动 | 页面未显示 boot-error 面板 | 符合 | 通过 |  |
 | U03-1 启动 | 无未捕获 JS 异常 | 符合 | 通过 |  |

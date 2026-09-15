@@ -8,7 +8,18 @@
       "emitted_energy_internal": 58.03351089340846,
       "estimated_intercepted_energy_internal": 58.03351030220227,
       "max_domain_truncated_fraction": 1.0187324317456614e-08,
-      "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。"
+      "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。",
+      "threshold_window": {
+        "cells_skipped_fraction": null,
+        "collapsed_events": 0,
+        "enabled": false,
+        "events": 0,
+        "margin": 1.25,
+        "tail_window_cells_total": 0,
+        "threshold_internal": null,
+        "window_cells_total": 0
+      },
+      "window_radius_policy": "tail_epsilon"
     },
     "geometry": {
       "backfacing_cells_total": 0,
@@ -77,7 +88,7 @@
       "used_for_depth": false
     }
   },
-  "elapsed_s": 0.0034341999562457204,
+  "elapsed_s": 0.004959199985023588,
   "errors": [],
   "events_processed": 5,
   "events_total": 5,

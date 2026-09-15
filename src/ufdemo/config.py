@@ -807,6 +807,23 @@ class SolverConfig:
     geometry_feedback: str = "fixed_geometry"
     history_enabled: bool = False
     tail_epsilon: float = 1e-8
+    #: **窗口半径策略**（性能开关，默认关闭）。取值：
+    #:
+    #: * ``"tail_epsilon"``（默认）= 既有行为：窗口半径 = ``cut_radius(w, tail_epsilon)``，
+    #:   即把能流尾部按 ε=1e-8 截断（约 3.035w）。
+    #: * ``"above_threshold"`` = 只保留**能流可能超过响应阈值**的半径
+    #:   ``w*sqrt(ln(F_peak/F_th)/2) * window_threshold_margin``。
+    #:
+    #: ⚠️ 为什么可以不改变结果：阈值型响应律（如 `log_fixed`）在 ``F <= F_th`` 处
+    #: **返回恰好 0**，所以该半径之外的格子对去除量的贡献本来就是 0。
+    #: 但**剂量观测量**（``cumulative_fluence`` / ``illumination_count`` /
+    #: 估计截获能量）的统计范围会随之缩小 —— 求解诊断 ``fluence_ledger``
+    #: 里如实上报被裁掉的格子数与截断比例，不得当成「域截断」解释。
+    #: 深孔算例（深度 ≫ zR）下窗口内 99% 的格子属于此类，可省掉 90%+ 的计算。
+    window_radius_policy: str = "tail_epsilon"
+    #: ``above_threshold`` 策略的安全余量（倍）。``1.0`` = 恰好取到 ``F = F_th`` 的半径；
+    #: 默认略留余量，避免网格离散与斜面情形下切到边界格。
+    window_threshold_margin: float = 1.25
     memory_budget_bytes: int = 2 * 1024 ** 3
     budget_safety_factor: float = 1.5
     cancel_check_interval: int = 256
@@ -847,6 +864,23 @@ class SolverConfig:
                 field_path="solver.tail_epsilon",
                 actual=eps,
                 requirement="0 < epsilon < 1（默认 1e-8，是数值设置，不是物理损伤阈值）",
+            )
+        wpol = _require_str(
+            raw.get("window_radius_policy", "tail_epsilon"),
+            "solver.window_radius_policy",
+            ("tail_epsilon", "above_threshold"),
+        )
+        wmargin = _require_finite_positive(
+            raw.get("window_threshold_margin", 1.25), "solver.window_threshold_margin"
+        )
+        if wmargin < 1.0:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.window_threshold_margin 必须 >= 1",
+                field_path="solver.window_threshold_margin",
+                actual=wmargin,
+                requirement=">= 1.0（1.0 = 恰好取到 F = 阈值的半径）",
+                suggestion="该余量只影响窗口大小与剂量观测量口径，不影响去除量。",
             )
         budget = raw.get("memory_budget_bytes", 2 * 1024 ** 3)
         if not isinstance(budget, int) or budget <= 0:
@@ -890,6 +924,8 @@ class SolverConfig:
             geometry_feedback=gf,
             history_enabled=_require_bool(raw.get("history_enabled", False), "solver.history_enabled"),
             tail_epsilon=eps,
+            window_radius_policy=wpol,
+            window_threshold_margin=wmargin,
             memory_budget_bytes=budget,
             budget_safety_factor=budget_factor,
             cancel_check_interval=cancel_interval,
@@ -915,6 +951,8 @@ class SolverConfig:
             "geometry_feedback": self.geometry_feedback,
             "history_enabled": self.history_enabled,
             "tail_epsilon": self.tail_epsilon,
+            "window_radius_policy": self.window_radius_policy,
+            "window_threshold_margin": self.window_threshold_margin,
             "memory_budget_bytes": self.memory_budget_bytes,
             "budget_safety_factor": self.budget_safety_factor,
             "cancel_check_interval": self.cancel_check_interval,

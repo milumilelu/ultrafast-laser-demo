@@ -7,6 +7,7 @@
 | 曲线 | 材料 | 横轴（单位） | 纵轴（单位） | 语义 → 去向 | 有效区间 | 原始点 | 可派生量 |
 |---|---|---|---|---|---|---|---|
 | `analytic_fixture_depth_vs_fluence` | `analytic_fixture_not_a_material` | peak_fluence (J/cm^2) | removal_depth_per_pulse (m) | event_depth_increment → 逐事件核（需协议适用） | [1.0, 40.0] | 9 | removal_depth_per_pulse,local_depth |
+| `sic4h_measured_single_pulse_crater` | `sic_4h_cface_1035nm_multishot` | peak_fluence (J/cm^2) | removal_depth_per_pulse (m) | event_depth_increment → 逐事件核（需协议适用） | [6.92, 10.82] | 4 | removal_depth_per_pulse,local_depth |
 | `sic_threshold_vs_effective_n` | `sic_4h_cface_1035nm_multishot` | effective_count (1) | threshold_fluence (J/cm^2) | threshold_only → 评估器（不得生成局部形貌） | [1.0, 720.0] | 7 | threshold_fluence |
 | `synthetic_volume_per_energy` | `synthetic_demo_isotropic` | pulse_energy_over_E_ref (1) | removal_volume_over_L_ref3 (1) | volume_per_energy → 评估器（不得生成局部形貌） | [0.35, 8.0] | 6 | removal_volume,removal_volume_per_energy |
 

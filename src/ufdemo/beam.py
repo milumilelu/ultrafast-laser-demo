@@ -17,10 +17,26 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from .errors import GEOMETRY_UNSUPPORTED, NUMERIC_NONFINITE, UFDemoError
+from .errors import (
+    CONFIG_INVALID,
+    GEOMETRY_UNSUPPORTED,
+    NUMERIC_NONFINITE,
+    RESPONSE_SEMANTICS_INVALID,
+    UFDemoError,
+)
 
 # 细则 4.1：默认测试值
 DEFAULT_TAIL_EPSILON = 1e-8
+
+#: 窗口半径策略：**既有行为** —— 半径取 ε 尾部截断半径 ``cut_radius(w, ε)``。
+WINDOW_POLICY_TAIL = "tail_epsilon"
+#: 窗口半径策略：只保留**能流可能超过响应阈值**的半径。
+#: 该半径之外所有格子的增量**恰好为 0**（阈值型响应律在 ``F <= threshold`` 处返回 0），
+#: 所以按它开窗**不改变任何去除量**，只缩小剂量观测量的统计范围。
+WINDOW_POLICY_ABOVE_THRESHOLD = "above_threshold"
+WINDOW_POLICIES = (WINDOW_POLICY_TAIL, WINDOW_POLICY_ABOVE_THRESHOLD)
+#: ``above_threshold`` 策略的默认安全余量（倍）。1.0 = 恰好取到 ``F = 阈值`` 的半径。
+DEFAULT_WINDOW_THRESHOLD_MARGIN = 1.25
 
 
 def w_of_s(w0: float, s: float, zR: float | None) -> float:
@@ -33,6 +49,30 @@ def w_of_s(w0: float, s: float, zR: float | None) -> float:
 def cut_radius(w: float, epsilon: float = DEFAULT_TAIL_EPSILON) -> float:
     """相对能流截断 ``eps`` 对应的裁剪半径 ``w*sqrt(ln(1/eps)/2)``。"""
     return w * math.sqrt(math.log(1.0 / epsilon) / 2.0)
+
+
+def radius_above_threshold(
+    pulse_energy_J: float, w: float, threshold: float, margin: float = 1.0
+) -> float:
+    """能流**可能达到阈值**的最大半径（超阈值开窗用）。
+
+    平面高斯 ``F(r) = F_peak*exp(-2r^2/w^2)``、``F_peak = 2E/(pi w^2)``；
+    令 ``F(r) = threshold`` 解得 ``r = w*sqrt(ln(F_peak/threshold)/2)``。
+
+    * ``F_peak <= threshold`` ⇒ 返回 ``0``：该事件在**整个平面**上的增量恒为 0。
+    * ``margin`` 是安全余量（倍）。默认 1.0 = 恰好取到 ``F = 阈值`` 的半径。
+
+    ⚠️ 这不是「把尾部砍掉」那种数值截断：半径之外每个格子的能流都 < 阈值，
+    阈值型响应律在那里给出的增量**恰好是 0**。所以按它开窗**不改变任何去除量**，
+    只改变**剂量观测量**（``cumulative_fluence`` / ``illumination_count`` /
+    估计截获能量）的统计范围 —— 调用方必须如实上报被裁掉的比例。
+    """
+    if not (threshold > 0.0) or w <= 0.0 or pulse_energy_J <= 0.0:
+        return 0.0
+    ratio = peak_fluence(pulse_energy_J, w) / threshold
+    if ratio <= 1.0:
+        return 0.0
+    return float(margin) * w * math.sqrt(math.log(ratio) / 2.0)
 
 
 def peak_fluence(pulse_energy_J: float, w: float) -> float:
@@ -92,6 +132,17 @@ class FluencePatch:
     nz: Any = None                    # (ny_win, nx_win) 法向 z 分量；正入射为 None
     visibility: dict[str, Any] | None = None   # 首次交点可见性统计
     intercepted_energy_plane_J: float | None = None  # 未经 μ 缩放的平面能量（诊断用）
+    # --- 窗口半径策略的诊断（性能开关，见 beam.WINDOW_POLICY_*）------------
+    #: 实际使用的**横向**窗口半径（斜入射时最终开窗还含平移项）
+    window_radius_m: float = 0.0
+    #: 超阈值半径；仅 ``above_threshold`` 策略下非 None
+    threshold_radius_m: float | None = None
+    #: 窗口半径策略（原样回传，便于诊断与断言）
+    window_radius_policy: str = WINDOW_POLICY_TAIL
+    #: 本事件实际计算的窗口格数
+    window_cells: int = 0
+    #: 若按既有 ε 尾部截断口径会计算的格数；仅 ``above_threshold`` 策略下给出
+    tail_window_cells: int | None = None
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -130,6 +181,13 @@ class BeamOptions:
     record_ledger: bool = True
     # 批次 J（T18）：动态角度——逐点法向 + 可见性；关闭时斜入射按**平面法向**处理
     dynamic_angle: bool = False
+    # --- 窗口半径策略（性能开关，默认关闭）--------------------------------
+    #: ``tail_epsilon``（默认）= 既有行为；``above_threshold`` = 只算可能超阈值的区域。
+    #: 后者在「深度 ≫ zR」的深孔算例里能省掉 90%+ 的计算（那些格子增量恒为 0）。
+    window_radius_policy: str = WINDOW_POLICY_TAIL
+    #: ``above_threshold`` 必需的响应阈值（J/m²）。缺失/非法时**报错**，不静默退化。
+    fluence_threshold: float | None = None
+    window_threshold_margin: float = DEFAULT_WINDOW_THRESHOLD_MARGIN
 
 
 def is_axial_direction(direction_unit: Any) -> bool:
@@ -285,10 +343,58 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
     _eps = options.tail_epsilon
     _oblique = not (axial and not dynamic)
 
+    # --- 窗口半径策略（性能开关，默认关闭）----------------------------------
+    _policy = str(getattr(options, "window_radius_policy", WINDOW_POLICY_TAIL))
+    _above_threshold = _policy == WINDOW_POLICY_ABOVE_THRESHOLD
+    _thr = getattr(options, "fluence_threshold", None)
+    _margin = float(getattr(options, "window_threshold_margin", DEFAULT_WINDOW_THRESHOLD_MARGIN))
+    if _policy not in WINDOW_POLICIES:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "window_radius_policy 取值非法",
+            field_path="beam.window_radius_policy",
+            actual=_policy,
+            requirement=f"取值之一：{list(WINDOW_POLICIES)}",
+        )
+    if _above_threshold and not (
+        isinstance(_thr, (int, float)) and math.isfinite(float(_thr)) and float(_thr) > 0.0
+    ):
+        # **不得静默退化**成 ε 截断：那会让调用者以为收缩已启用、实际没启用。
+        raise UFDemoError(
+            RESPONSE_SEMANTICS_INVALID,
+            "above_threshold 窗口策略必须提供正的响应阈值",
+            field_path="beam.fluence_threshold",
+            actual=_thr,
+            requirement="有限正数（与响应核同一量纲），用于求 F 仍超阈的最大半径",
+            suggestion="由 solver 从响应核的 threshold_internal 传入；取不到时不要启用该策略。",
+        )
+    if not (math.isfinite(_margin) and _margin >= 1.0):
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "window_threshold_margin 必须 >= 1",
+            field_path="beam.window_threshold_margin",
+            actual=_margin,
+            requirement=">= 1.0（1.0 = 恰好取到 F = 阈值的半径）",
+        )
+
+    emitted = float(event.energy_J)
+    threshold_radius: float | None = None   # 仅 above_threshold 策略下非 None
+    tail_radius_m = 0.0                     # 同一事件按 ε 口径的半径（如实上报被裁比例用）
+
+    def _radius(m_s: float) -> float:
+        """按当前策略给出**横向**半径（不含斜入射的窗口平移项）。"""
+        nonlocal threshold_radius, tail_radius_m
+        w_here = w_of_s(w0, m_s, zR)
+        tail_radius_m = cut_radius(w_here, _eps)
+        if _above_threshold:
+            threshold_radius = radius_above_threshold(emitted, w_here, float(_thr), _margin)
+            return threshold_radius
+        return tail_radius_m
+
     axial_span_true = 0.0
     # `r_cut` 是**横向**裁剪半径（不含斜入射的窗口平移项），后面算尾部截断比例要用它；
     # `window_r` 才是最终开窗半径（斜入射时含平移）。
-    r_cut = cut_radius(w0, _eps)
+    r_cut = _radius(0.0)
     window_r = r_cut if not _oblique else oblique_window_radius(r_cut, kvec, 0.0)
     if options.section is None:
         for _ in range(8):
@@ -302,26 +408,44 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
             axial_span_true = s_local
             m_s = s_local
             if not axial:
-                _r_probe = cut_radius(w_of_s(w0, m_s, zR), _eps)
+                _r_probe = _radius(m_s)
                 m_s += 2.5 * _r_probe * math.hypot(kvec[0], kvec[1])
-            r_new = cut_radius(w_of_s(w0, m_s, zR), _eps)
+            r_new = _radius(m_s)
             r_cut = r_new
             w_new = oblique_window_radius(r_new, kvec, s_local) if _oblique else r_new
             if w_new <= window_r * (1.0 + 1e-12):
                 break                      # 收敛：窗口已能容纳最大光斑
             window_r = w_new
 
+    window_cells = 0
+    tail_window_cells: int | None = None
     if options.section is not None:
         iy0, iy1, ix0, ix1 = options.section
         iy0, iy1 = max(0, int(iy0)), min(surface.grid.ny, int(iy1))
         ix0, ix1 = max(0, int(ix0)), min(surface.grid.nx, int(ix1))
+        window_cells = max(0, iy1 - iy0) * max(0, ix1 - ix0)
+    elif _above_threshold and float(threshold_radius or 0.0) <= 0.0:
+        # 峰值能流本身已 <= 阈值 ⇒ **整个平面**上的增量恒为 0。窗口取空（不制造去除），
+        # 发射能量照常记账，见下面的 note。
+        _anchor = int(np.searchsorted(surface.y, fy, side="left"))
+        iy0 = iy1 = min(max(0, _anchor), surface.grid.ny)
+        _anchor = int(np.searchsorted(surface.x, fx, side="left"))
+        ix0 = ix1 = min(max(0, _anchor), surface.grid.nx)
     else:
         # 用裁剪半径在坐标轴上直接定位窗口，而不是用最近网格点 + 固定跨度：
         # 焦点远离计算域时必须得到空窗口，不能吸附到边界后错误地覆盖部分网格。
         iy0, iy1 = _window_bounds(surface.y, fy, window_r)
         ix0, ix1 = _window_bounds(surface.x, fx, window_r)
-
-    emitted = float(event.energy_J)
+        window_cells = max(0, iy1 - iy0) * max(0, ix1 - ix0)
+        if _above_threshold:
+            # 对照口径：若仍按 ε 尾部截断开窗会算多少格。**只用于如实上报**被裁掉的比例，
+            # 不参与任何物理计算；两种口径用同一个 axial_span_true，可直接相比。
+            _tr = tail_radius_m if not _oblique else oblique_window_radius(
+                tail_radius_m, kvec, axial_span_true
+            )
+            _ty0, _ty1 = _window_bounds(surface.y, fy, _tr)
+            _tx0, _tx1 = _window_bounds(surface.x, fx, _tr)
+            tail_window_cells = max(0, _ty1 - _ty0) * max(0, _tx1 - _tx0)
 
     if iy1 <= iy0 or ix1 <= ix0:
         return FluencePatch(
@@ -338,10 +462,19 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
             estimated_intercepted_energy_J=0.0,
             domain_truncated_fraction=1.0,
             tail_truncated_fraction=1.0,
-            notes=["局部窗口与计算域无交集：记录发射能量，不制造去除。"],
+            notes=[(
+                "窗口按**超阈值半径**收缩为空：本事件峰值能流已不超响应阈值，"
+                "在整个平面上的增量恒为 0。该能量只是「低于阈值、对去除无贡献」，"
+                "不是域截断，也不得解释为热损失。"
+            ) if _above_threshold else "局部窗口与计算域无交集：记录发射能量，不制造去除。"],
             geometry_mode=options.geometry_feedback,
             oblique=False,
             dynamic_angle=dynamic,
+            window_radius_m=float(r_cut),
+            threshold_radius_m=threshold_radius,
+            window_radius_policy=_policy,
+            window_cells=int(window_cells),
+            tail_window_cells=tail_window_cells,
         )
     xn = surface.x[ix0:ix1]
     yn = surface.y[iy0:iy1]
@@ -477,6 +610,11 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
           nz=(None if axial_flat_shortcut else n_z),
         visibility=vis_stats,
         intercepted_energy_plane_J=total_plane,
+        window_radius_m=float(r_cut),
+        threshold_radius_m=threshold_radius,
+        window_radius_policy=_policy,
+        window_cells=int(window_cells),
+        tail_window_cells=tail_window_cells,
     )
 
 

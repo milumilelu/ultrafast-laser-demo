@@ -368,6 +368,30 @@ def solve(
     rois = [RoiSpec.from_dict(r, i, config.unit) for i, r in enumerate(config.output.roi or ())]
     cs_cfg = dict(config.output.cross_section or {}) if config.output.cross_section else None
 
+    # --- 窗口半径策略（性能开关，默认关闭）---------------------------------
+    # 阈值型响应核在 ``F <= 阈值`` 处返回**恰好 0**，所以"不可能超阈值"的格子
+    # 对去除量没有贡献，不必计算。深孔算例（深度 ≫ zR）下这类格子占窗口的 99%。
+    # 阈值取**当前激活的核**声明的 ``threshold_internal``；分相时取最小者
+    # （最保守 = 最大窗口，绝不会因此漏掉可烧蚀的格子）。
+    # 取不到阈值时**明确回退**并写警告 —— 绝不假装收缩已启用。
+    window_policy = str(getattr(config.solver, "window_radius_policy", "tail_epsilon"))
+    window_threshold: float | None = None
+    if window_policy == "above_threshold":
+        _thr_candidates: list[float] = []
+        for _law_obj in ([law] if law is not None else []) + list(phase_laws.values()):
+            _v = getattr(_law_obj, "threshold_internal", None)
+            if isinstance(_v, (int, float)) and math.isfinite(float(_v)) and float(_v) > 0.0:
+                _thr_candidates.append(float(_v))
+        if _thr_candidates:
+            window_threshold = min(_thr_candidates)
+        else:
+            window_policy = "tail_epsilon"
+            warnings.append(
+                "请求了 window_radius_policy=above_threshold，但当前响应核**没有声明**可用阈值"
+                "（threshold_internal）—— 无法计算超阈值半径，已回退到既有 tail_epsilon 窗口，"
+                "**未启用**任何收缩。"
+            )
+
     if progress_callback:
         progress_callback(
             {
@@ -399,6 +423,19 @@ def solve(
         "emitted_energy_internal": 0.0,
         "estimated_intercepted_energy_internal": 0.0,
         "max_domain_truncated_fraction": 0.0,
+        "window_radius_policy": window_policy,
+        # ``above_threshold`` 策略的**口径变化**必须可追踪：窗口内超阈值半径之外
+        # 的格子不再计算（它们对去除量贡献恒为 0，但会被计入剂量观测量）。
+        "threshold_window": {
+            "enabled": window_policy == "above_threshold",
+            "threshold_internal": window_threshold,
+            "margin": float(config.solver.window_threshold_margin),
+            "events": 0,
+            "window_cells_total": 0,
+            "tail_window_cells_total": 0,
+            "cells_skipped_fraction": None,
+            "collapsed_events": 0,
+        },
         "note": (
             "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，"
             "不得解释为热损失或被吸收能量；这只检查光学输入账本。"
@@ -582,6 +619,12 @@ def solve(
             )
             n_events = int(grouped_stats["n_events"])
             last_event = grouped_stats["last_event"]
+            if window_policy == "above_threshold":
+                warnings.append(
+                    "分组批量路径（mode=grouped）不支持窗口半径策略 above_threshold："
+                    "该路径在块级冻结几何下批量计算，本次仍按既有 tail_epsilon 窗口。"
+                    "如需超阈值收缩请用 mode=reference。"
+                )
             if grouped_stats["cancelled"]:
                 result.status = "cancelled"
                 result.diagnostics["stage"] = "event_loop"
@@ -619,6 +662,9 @@ def solve(
             geometry_feedback=config.solver.geometry_feedback,
             tail_epsilon=config.solver.tail_epsilon,
             dynamic_angle=bool(config.solver.dynamic_angle),
+            window_radius_policy=window_policy,
+            fluence_threshold=window_threshold,
+            window_threshold_margin=float(config.solver.window_threshold_margin),
         )
         patch = beam_patch(event, surface, opt)
 
@@ -626,6 +672,17 @@ def solve(
         ledger["emitted_energy_internal"] += patch.emitted_energy_J
         ledger["estimated_intercepted_energy_internal"] += patch.estimated_intercepted_energy_J
         ledger["max_domain_truncated_fraction"] = max(ledger["max_domain_truncated_fraction"], patch.domain_truncated_fraction)
+
+        # 窗口半径策略的累计诊断（如实上报被裁掉的格子比例）
+        _tw = ledger.get("threshold_window")
+        if _tw is not None and _tw["enabled"]:
+            _tw["events"] += 1
+            _tw["window_cells_total"] += int(getattr(patch, "window_cells", 0))
+            _tail_cells = getattr(patch, "tail_window_cells", None)
+            if _tail_cells is not None:
+                _tw["tail_window_cells_total"] += int(_tail_cells)
+            if patch.empty:
+                _tw["collapsed_events"] += 1
 
         # 批次 J：几何修正统计（正入射时 patch.visibility/mu 为 None，本段不执行）
         if patch.visibility is not None:
@@ -785,11 +842,26 @@ def solve(
 
     # 域截断警告聚合成一条（细则 5.4：记录数值截断说明，但不刷屏）
     trunc = result.diagnostics["fluence_ledger"]["max_domain_truncated_fraction"]
-    if trunc > 1e-6:
-        warnings.append(
-            f"有脉冲的能流尾部超出计算域，最坏情况未截获约 {trunc:.3%} 的发射能量；"
-            "该能量不重新归一化给剩余网格，也不解释为热损失。"
+    _tw_final = result.diagnostics["fluence_ledger"].get("threshold_window") or {}
+    if _tw_final.get("tail_window_cells_total"):
+        _tw_final["cells_skipped_fraction"] = 1.0 - (
+            _tw_final["window_cells_total"] / _tw_final["tail_window_cells_total"]
         )
+    if trunc > 1e-6:
+        if window_policy == "above_threshold":
+            warnings.append(
+                f"窗口半径策略 above_threshold：最坏情况有 {trunc:.3%} 的发射能量未计入窗口。"
+                "这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，"
+                "不是「能流尾部超出计算域」，也不得解释为热损失；"
+                "累计能流/照射计数等**剂量观测量**只在该半径内统计，"
+                f"被裁掉的窗口格数占比见 fluence_ledger.threshold_window"
+                f"（{_tw_final.get('cells_skipped_fraction')}）。"
+            )
+        else:
+            warnings.append(
+                f"有脉冲的能流尾部超出计算域，最坏情况未截获约 {trunc:.3%} 的发射能量；"
+                "该能量不重新归一化给剩余网格，也不解释为热损失。"
+            )
     geom_note = "固定几何解析基准：本事件使用初始表面高度计算离焦，忽略当前高度变化。"
     if config.solver.geometry_feedback == "fixed_geometry" and geom_note in warnings:
         pass  # 已由 beam 提示一次即可
