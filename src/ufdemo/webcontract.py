@@ -1031,7 +1031,8 @@ def upstream_compare_payload(body: Mapping[str, Any], *, project_root: str | Pat
 def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[str, Any]:
     """执行一次实验标定（C4）。**参数真正改变求解过程**。"""
     from .calibration import (
-        PredictionSpec, calibrate_gain, group_split, load_experiment_csv,
+        ObservationSpec, PredictionSpec, calibrate_gain, group_split,
+        load_experiment_csv,
     )
 
     exp_file = Path(str(body.get("experimentFile") or ""))
@@ -1060,8 +1061,42 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
                           requirement="卡路径")
     override = dict(body.get("responseOverride") or {}) or None
     tr, ho, info = group_split(rows, holdout_groups=max(1, len(rows) // 5))
-    spec = PredictionSpec(material_card_file=card, window_um=20.0, dx_um=0.5,
-                          response_override=override)
+    # --- 观测口径与加工几何：**显式声明，不得静默用默认**（ADR-0021）----------
+    # 实验表里**没有**"加工区域多大 / 平均深度是哪个窗口的均值"这两列。
+    # 曾经硬编码 window_um=20 ⇒ 标定实际仿真的是 **20×20 μm 的弓字形面扫描**，
+    # 且统计口径 = 全区域均值 —— 与 CSV 里声明的平均深度是不是同一个东西，
+    # 取决于实验实际扫了多大、怎么统计的。这两件事只能由**使用者声明**。
+    win = float(body.get("calibrationWindowUm") or 0.0)
+    reg = float(body.get("calibrationRegionUm") or 0.0)
+    obs_kind = str(body.get("calibrationObservationKind") or "full_region_mean")
+    if obs_kind not in ("full_region_mean", "center_window_mean"):
+        raise UFDemoError(
+            CONFIG_INVALID, "calibrationObservationKind 取值非法",
+            field_path="calibration.calibrationObservationKind", actual=obs_kind,
+            requirement="full_region_mean | center_window_mean",
+        )
+    cw = body.get("calibrationCenterWindowUm")
+    center_window = (float(cw[0]), float(cw[1])) if cw else None
+    if obs_kind == "center_window_mean" and not center_window:
+        raise UFDemoError(
+            CONFIG_INVALID, "center_window_mean 必须给出窗口尺寸",
+            field_path="calibration.calibrationCenterWindowUm", actual=cw,
+            requirement="[wx, wy]（μm）",
+        )
+    assumptions: dict[str, Any] = {
+        "windowUm": win if win > 0 else 20.0,
+        "regionUm": reg if reg > 0 else (win if win > 0 else 20.0),
+        "observationKind": obs_kind,
+        "centerWindowUm": list(center_window) if center_window else None,
+        "assumed": not bool(win),           # 未显式给 ⇒ 20 μm 是**假设**
+    }
+    spec = PredictionSpec(
+        material_card_file=card,
+        window_um=assumptions["windowUm"], dx_um=0.5,
+        machining_region_um=assumptions["regionUm"],
+        observation=ObservationSpec(kind=obs_kind, center_window_um=center_window),
+        response_override=override,
+    )
     res = calibrate_gain(tr, spec=spec, holdout_rows=ho,
                          bounds=(float(body.get("gainMin") or 0.05),
                                  float(body.get("gainMax") or 20.0)),
@@ -1071,6 +1106,15 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
     d["ok"] = True
     d["split"] = info
     d["pulseDurationFs"] = tau
+    d["observationBasis"] = {
+        **assumptions,
+        "note": (
+            "标定仿真的是上述尺寸的弓字形面扫描，统计口径见 observationKind。"
+            + ("⚠️ **加工区域未声明**，按 20 μm 假设 —— 实验实际扫了多大、"
+               "平均深度怎么统计的，需要使用者确认后显式传入。"
+               if assumptions["assumed"] else "")
+        ),
+    }
     # 过拟合判定放在**服务层**做一次，界面直接显示，避免前端各写一套
     hb = (res.metrics()["holdout"]["mae_before_um"], res.metrics()["holdout"]["mae_after_um"])
     d["overfitWarning"] = bool(hb[0] is not None and hb[1] is not None and hb[1] > hb[0])
