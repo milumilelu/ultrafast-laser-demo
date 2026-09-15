@@ -405,7 +405,25 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
     # 见 :func:`max_ablation_radius`）那一段**仍然能烧蚀**的环带切掉。
     # 事件 40 实测：局部窗口 8×9 只算出 20 个非零格，而真实是 87 个 ——
     # 那 67 个格子被静默漏掉，且下游误差会累积（N>=2 候选偏 0.7%）。
-    axial_span_true = max(abs(float(np.min(h_ref)) - fz), abs(float(np.max(h_ref)) - fz))
+    # ⚠️ 全网格极值改用 **SurfaceState 增量维护的标量**（O(1)）——
+    # 高度场只减不增，增量维护与全网格 min/max **逐位等价**（见 ADR-0022）。
+    # 这曾是 above_threshold 开窗后剩余的主要开销（每事件对全网格 2 次归约）。
+    def _extrema(arr: Any) -> tuple[float, float]:
+        return float(np.min(arr)), float(np.max(arr))
+
+    if options.geometry_feedback == "fixed_geometry":
+        _f_min = getattr(surface, "initial_height_min_m", None)
+        _f_max = getattr(surface, "initial_height_max_m", None)
+        if _f_min is None or _f_max is None:
+            _f_min, _f_max = _extrema(surface.initial_height)
+        _h_min, _h_max = float(_f_min), float(_f_max)
+    else:
+        _c_min = getattr(surface, "height_min_m", None)
+        _c_max = getattr(surface, "height_max_m", None)
+        if _c_min is None or _c_max is None:
+            _c_min, _c_max = _extrema(surface.height)
+        _h_min, _h_max = float(_c_min), float(_c_max)
+    axial_span_true = max(abs(_h_min - fz), abs(_h_max - fz))
     _max_s = axial_span_true
     if not axial:
         # 斜入射时 s = X·k_x + Y·k_y + Z·k_z 还含**横向**项，会额外增大离焦；

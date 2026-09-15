@@ -46,11 +46,13 @@ def test_defocus_uses_local_heights_and_expanded_window():
     cfg = make_config(raw)
     surface = SurfaceState.initialize(cfg.grid, cfg.laser)
     surface.height[:] = -3e-5
+    surface.refresh_height_extrema()   # 绕过了 apply_increment ⇒ 极值须刷新
     event = next(iter_events(cfg.path, cfg.laser))
     patch = beam_patch(event, surface, BeamOptions(geometry_feedback="axial_defocus"))
     assert patch.estimated_intercepted_energy_J == pytest.approx(event.energy_J, rel=1e-6)
     assert patch.spot_radius == pytest.approx(cfg.laser.spot_radius_m * math.sqrt(10))
     surface.height[200, 200] = 0
+    surface.refresh_height_extrema()
     patch = beam_patch(event, surface, BeamOptions(geometry_feedback="axial_defocus"))
     assert patch.fluence[200-patch.iy0, 200-patch.ix0] == pytest.approx(
         peak_fluence(event.energy_J, cfg.laser.spot_radius_m))

@@ -86,8 +86,27 @@ class SurfaceState:
     threshold_exceeded_mask: Any = None
     warnings: list[str] = field(default_factory=list)
     counters_max: int = 0
+    #: **全网格高度极值**（增量维护，O(1) 读取）。高度场**只减不增**，
+    #: 所以这两个量只会在 ``apply_increment`` / ``apply_block_increment`` 里变小 ——
+    #: 增量维护与全网格 min/max **逐位等价**，却把 beam_patch 每事件的全网格扫描省掉。
+    #: 见 ADR-0022。
+    height_min_m: float = 0.0
+    height_max_m: float = 0.0
+    initial_height_min_m: float = 0.0
+    initial_height_max_m: float = 0.0
     history_enabled: bool = False
     structure: Any = field(default_factory=_StructureProtocol)
+
+    def refresh_height_extrema(self) -> None:
+        """重算全网格高度极值（高度场**只减不增** ⇒ 与全网格 min/max 逐位等价）。
+
+        供**绕过** ``apply_increment`` 直接写 ``self.height`` 的调用方使用
+        （例如测试直接改高度场）：增量计数器会因此过期，必须显式刷新。
+        """
+        import numpy as np
+
+        self.height_min_m = float(self.height.min())
+        self.height_max_m = float(self.height.max())
 
     # -- 构造 ---------------------------------------------------------------
     @staticmethod
@@ -120,6 +139,11 @@ class SurfaceState:
             y=y,
             height=h0.copy(),
             initial_height=h0.copy(),
+            # 全网格极值：增量维护（高度只减不增 ⇒ 逐位等价），beam_patch 不必再全网格 min/max
+            height_min_m=float(h0.min()),
+            height_max_m=float(h0.max()),
+            initial_height_min_m=float(h0.min()),
+            initial_height_max_m=float(h0.max()),
             phase_id=np.zeros((grid.ny, grid.nx), dtype=np.uint16),
             exposure_count=np.zeros((grid.ny, grid.nx), dtype=np.uint32),
             cumulative_fluence=np.zeros((grid.ny, grid.nx), dtype=np.float64),
@@ -236,6 +260,9 @@ class SurfaceState:
                     "被截断的候选量计入「未应用候选去除体积」。"
                 )
         self.height[iy0:iy1, ix0:ix1] -= applied
+        # 全网格极值增量维护：高度只减不增 ⇒ 与全网格 min/max **逐位等价**（O(窗口)）
+        self.height_min_m = min(self.height_min_m, float(self.height[iy0:iy1, ix0:ix1].min()))
+        self.height_max_m = min(self.height_max_m, float(self.height[iy0:iy1, ix0:ix1].max()))
 
         # 第 8 步：达到界面后更新相标签（下一真实脉冲才对新相响应）
         if structure is not None and not getattr(structure, "is_uniform", True):
@@ -349,6 +376,8 @@ class SurfaceState:
             )
 
         self.height[win] -= d
+        self.height_min_m = min(self.height_min_m, float(self.height[win].min()))
+        self.height_max_m = min(self.height_max_m, float(self.height[win].max()))
 
         n_touched_cells = 0
         counter_before = 0

@@ -71,6 +71,9 @@ def _run(mode: str, *, batch_size: int = 64, zR: float | None = None,
     raw["solver"]["mode"] = mode
     raw["solver"]["batch_size"] = batch_size
     raw["solver"]["acceleration"] = accel
+    # 这些测试比的是**批量与逐脉冲的等价**，不是窗口口径 ⇒ 显式钉住既有 ε 口径，
+    # 与默认策略（above_threshold，ADR-0022）解耦；分组路径不支持超阈值开窗。
+    raw["solver"]["window_radius_policy"] = "tail_epsilon"
     if geometry_feedback is not None:
         raw["solver"]["geometry_feedback"] = geometry_feedback
     return solve(_cfg(raw), _card(raw))

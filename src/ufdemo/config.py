@@ -817,6 +817,12 @@ class SolverConfig:
     #: 逐层对焦 / 动态补偿 / 焦点跟随表面**未实现**：声明其它值一律拒绝
     #: （fail closed），不做静默降级。
     focus_strategy: str = "fixed_original_surface"
+    #: **窗口半径策略的默认值**（ADR-0022）：``above_threshold`` 只计算
+    #: 「能流可能超过响应阈值」的区域 —— 对去除量**逐位等价**（阈值型核在
+    #: ``F <= F_th`` 处返回恰好 0），只把剂量观测量的统计范围缩小。
+    #: 核心模式不再让用户在主界面理解多种窗口算法（外部审查 IV 建议）；
+    #: 需要 ε 尾部截断口径的完整剂量统计时显式选 ``tail_epsilon``。
+    window_radius_policy: str = "above_threshold"
     history_enabled: bool = False
     tail_epsilon: float = 1e-8
     #: **窗口半径策略**（性能开关，默认关闭）。取值：
@@ -891,7 +897,7 @@ class SolverConfig:
                 requirement="0 < epsilon < 1（默认 1e-8，是数值设置，不是物理损伤阈值）",
             )
         wpol = _require_str(
-            raw.get("window_radius_policy", "tail_epsilon"),
+            raw.get("window_radius_policy", "above_threshold"),
             "solver.window_radius_policy",
             ("tail_epsilon", "above_threshold"),
         )

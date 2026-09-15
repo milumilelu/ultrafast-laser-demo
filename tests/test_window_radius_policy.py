@@ -120,9 +120,9 @@ def test_config_rejects_invalid_policy_and_margin():
     assert e2.value.code == CONFIG_INVALID
     # 默认关闭、默认余量 >= 1
     d = SolverConfig.from_dict({})
-    assert d.window_radius_policy == WINDOW_POLICY_TAIL
+    assert d.window_radius_policy == WINDOW_POLICY_ABOVE_THRESHOLD   # ADR-0022：默认安全开窗
     assert d.window_threshold_margin >= 1.0
-    assert d.to_dict()["window_radius_policy"] == WINDOW_POLICY_TAIL
+    assert d.to_dict()["window_radius_policy"] == WINDOW_POLICY_ABOVE_THRESHOLD
 
 
 def _flat_surface_patch(cfg, options, card):
@@ -332,10 +332,16 @@ def test_policy_bitwise_identical_through_full_config(example):
     assert tw["window_cells_total"] <= tw["tail_window_cells_total"]
 
 
-def test_default_policy_is_unchanged_by_this_feature():
-    """默认必须是既有行为：不传字段 = tail_epsilon，且诊断字段如实标 False。"""
+def test_default_policy_is_the_safe_windowing():
+    """默认策略（ADR-0022）= above_threshold；显式 tail_epsilon 仍可用。"""
     cfg, res = run_example("analytic_single_pulse.json")
     ledger = res.diagnostics["fluence_ledger"]
-    assert ledger["window_radius_policy"] == WINDOW_POLICY_TAIL
-    assert ledger["threshold_window"]["enabled"] is False
-    assert ledger["threshold_window"]["cells_skipped_fraction"] is None
+    assert ledger["window_radius_policy"] == WINDOW_POLICY_ABOVE_THRESHOLD
+    assert ledger["threshold_window"]["enabled"] is True
+    # 显式 tail_epsilon 仍可用（完整剂量统计口径）
+    _, res_tail = run_example("analytic_single_pulse.json",
+                              **{"solver.window_radius_policy": WINDOW_POLICY_TAIL})
+    lt = res_tail.diagnostics["fluence_ledger"]
+    assert lt["window_radius_policy"] == WINDOW_POLICY_TAIL
+    assert lt["threshold_window"]["enabled"] is False
+    assert lt["threshold_window"]["cells_skipped_fraction"] is None
