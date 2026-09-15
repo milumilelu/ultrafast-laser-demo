@@ -1066,9 +1066,16 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
     # 曾经硬编码 window_um=20 ⇒ 标定实际仿真的是 **20×20 μm 的弓字形面扫描**，
     # 且统计口径 = 全区域均值 —— 与 CSV 里声明的平均深度是不是同一个东西，
     # 取决于实验实际扫了多大、怎么统计的。这两件事只能由**使用者声明**。
-    win = float(body.get("calibrationWindowUm") or 0.0)
-    reg = float(body.get("calibrationRegionUm") or 0.0)
-    obs_kind = str(body.get("calibrationObservationKind") or "full_region_mean")
+    # 口径优先级：**显式传入 > 背景声明的实验统计口径 > 20 μm 假设**
+    from .config import load_shared_background as _lsb
+
+    _bg_decl = _lsb()
+    _declared_region = _bg_decl.experiment_machined_region_um
+    _declared_stat = _bg_decl.experiment_depth_statistic
+    win_in = float(body.get("calibrationWindowUm") or 0.0)
+    reg_in = body.get("calibrationRegionUm")
+    obs_kind = str(body.get("calibrationObservationKind")
+                   or _declared_stat or "full_region_mean")
     if obs_kind not in ("full_region_mean", "center_window_mean"):
         raise UFDemoError(
             CONFIG_INVALID, "calibrationObservationKind 取值非法",
@@ -1083,12 +1090,38 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
             field_path="calibration.calibrationCenterWindowUm", actual=cw,
             requirement="[wx, wy]（μm）",
         )
+    if reg_in is not None:
+        if isinstance(reg_in, (list, tuple)):
+            _region_pair = (float(reg_in[0]), float(reg_in[1]))
+        else:
+            _region_pair = (float(reg_in), float(reg_in))
+        _region_source = "explicit"
+    elif _declared_region is not None:
+        _region_pair = _declared_region
+        _region_source = "declared_in_background"
+    else:
+        _region_pair = (20.0, 20.0)
+        _region_source = "assumed"
+    window = win_in if win_in > 0 else max(_region_pair)
+    if window < max(_region_pair):
+        raise UFDemoError(
+            CONFIG_INVALID, "标定仿真域必须 ≥ 加工区",
+            field_path="calibration.calibrationWindowUm",
+            actual={"window_um": window, "region_um": list(_region_pair)},
+            requirement="window_um ≥ max(加工区)",
+        )
+    _region_source_desc = {
+        "explicit": "使用者显式传入",
+        "declared_in_background": "背景声明的实验统计口径（用户 2026-09-15 确认 200×200 μm 全区均值）",
+        "assumed": "20 μm 假设",
+    }[_region_source]
     assumptions: dict[str, Any] = {
-        "windowUm": win if win > 0 else 20.0,
-        "regionUm": reg if reg > 0 else (win if win > 0 else 20.0),
+        "windowUm": window,
+        "regionUm": list(_region_pair),
         "observationKind": obs_kind,
         "centerWindowUm": list(center_window) if center_window else None,
-        "assumed": not bool(win),           # 未显式给 ⇒ 20 μm 是**假设**
+        "regionSource": _region_source,
+        "assumed": _region_source == "assumed",
     }
     spec = PredictionSpec(
         material_card_file=card,
@@ -1112,7 +1145,8 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
             "标定仿真的是上述尺寸的弓字形面扫描，统计口径见 observationKind。"
             + ("⚠️ **加工区域未声明**，按 20 μm 假设 —— 实验实际扫了多大、"
                "平均深度怎么统计的，需要使用者确认后显式传入。"
-               if assumptions["assumed"] else "")
+               if assumptions["assumed"] else
+               f"（加工区域来自{_region_source_desc}）")
         ),
     }
     # 过拟合判定放在**服务层**做一次，界面直接显示，避免前端各写一套

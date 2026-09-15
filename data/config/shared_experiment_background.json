@@ -75,8 +75,15 @@
     "effective_single_line_width_um": 5.0,
     "provenance": "用户 2026-09-15 指定（先设为 5 μm）",
     "evidence_status": "user_declared_process_fact",
-    "note": "**实际烧蚀单线宽度**，与 nominal 光学值 2w0 = 1.749 μm **不是一回事** —— 它包含了阈值以上区域的展宽与热影响。用于覆盖/搭接判断，并据此反推**等效光斑半径**，使模型给出的烧蚀宽度与它一致。",
+    "note": "**实际烧蚀单线宽度**，与 nominal 光学值 2w0 = 1.749 μm **不是一回事** —— 它包含了阈值以上区域的展宽与热影响。用于覆盖/搭接判断。⚠️ **不再反推等效光斑半径**（ADR-0020，用户 2026-09-15 确认）：那是把加工结果反解成光学输入，会使光学随频率与假定 F_th 漂移；它现在只作**对照量**。",
     "not_optical_measurement": "这是工艺事实（单线打出来多宽），不是光场测量；不得当作束腰半径使用，也不得与 nominal w0 混为一谈。"
+  },
+  "experiment_statistic": {
+    "machined_region_um": [200.0, 200.0],
+    "depth_statistic": "full_region_mean",
+    "provenance": "用户 2026-09-15 明确：实验表的范围是 200×200 μm，平均深度是均值",
+    "evidence_status": "user_declared_process_fact",
+    "note": "实验 CSV 的 mean_depth_um 是**整个 200×200 μm 加工区**的均值。标定必须用**同一几何**（200×200 弓字形）与**同一口径**（全加工区均值），否则两边在比不同的量。"
   },
   "morphology": {
     "machined_shape": "rectangular_pocket",

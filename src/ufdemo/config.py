@@ -2234,6 +2234,22 @@ class SharedExperimentBackground:
 
     # -- 工艺事实：实际单线宽度（≠ 光学束腰） --------------------------------
     @property
+    def experiment_machined_region_um(self) -> tuple[float, float] | None:
+        """实验表声明的**加工区尺寸** ``(wx, wy)``（μm）；未声明时 ``None``。"""
+        d = self.raw.get("experiment_statistic") or {}
+        v = d.get("machined_region_um")
+        if not v:
+            return None
+        return (float(v[0]), float(v[1]))
+
+    @property
+    def experiment_depth_statistic(self) -> str | None:
+        """实验表声明的**深度统计口径**（``full_region_mean`` 等）；未声明时 ``None``。"""
+        d = self.raw.get("experiment_statistic") or {}
+        v = str(d.get("depth_statistic") or "").strip()
+        return v or None
+
+    @property
     def effective_line_width_m(self) -> float | None:
         """**实际烧蚀单线宽度**（用户声明的工艺事实）。
 
