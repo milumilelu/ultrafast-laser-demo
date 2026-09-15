@@ -366,6 +366,11 @@ class PredictionSpec:
     #: 这样边界效应不主导统计，也能看出"路径有没有跑出加工区"。
     #: 两者**同心**（网格以 ``center_x_m=0`` 为中心）。
     machining_region_um: float | None = None
+    #: **加工前的原始上表面高度**（m）。焦点策略是 ``fixed_original_surface``：
+    #: 焦平面恒为这个值，**不随槽底下降调整**。这里显式传给网格与路径，
+    #: 使「焦平面 = 原始表面」**按构造成立**，而不是依赖它是 0。
+    #: 非零值用于模拟工件表面高于/低于基准面的情形。
+    initial_height_m: float = 0.0
     observation: ObservationSpec = field(default_factory=ObservationSpec)
     #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
     #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
@@ -442,6 +447,9 @@ def build_row_config(
         spacing_um=row.hatch_spacing_um,
         pass_count=row.pass_count,
         scan_speed_mm_s=row.scan_speed_mm_s,
+        # **焦平面 = 加工前的原始上表面**（不是 0、也不随层数变化）。
+        # 由 config.validate_run 复核「每一段的 z 都等于 grid.initial_height_m」。
+        focus_z_m=float(spec.initial_height_m),
     )
 
     raw: dict[str, Any] = {
@@ -450,7 +458,12 @@ def build_row_config(
         "unit": {"mode": "SI"},
         "material_id": material_id,
         "material_card_file": spec.material_card_file,
-        "grid": {"nx": nx, "ny": ny, "dx_m": spec.dx_um * 1e-6, "dy_m": spec.dx_um * 1e-6},
+        "grid": {
+            "nx": nx, "ny": ny,
+            "dx_m": spec.dx_um * 1e-6, "dy_m": spec.dx_um * 1e-6,
+            # 原始表面高度：焦平面就钉在它上面（focus_strategy=fixed_original_surface）
+            "initial_height_m": float(spec.initial_height_m),
+        },
         "laser": {
             **patch["laser"],
             "pulse_duration_s": row.pulse_duration_fs * 1e-15,

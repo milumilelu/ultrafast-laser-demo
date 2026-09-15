@@ -82,10 +82,23 @@
 
 ### 4.2 轴向距离 `s` 与离焦
 
-* 焦点策略（共用背景常数）：`fixed_original_surface` + `axial_defocus`
-  ⇒ 焦点 Z **恒为初始表面**，离焦量 = **当前高度**：`s = h(q) - z_f`。
+* 焦点策略：**焦平面恒为加工前的原始上表面** `z0`（`solver.focus_strategy =
+  "fixed_original_surface"`）。离焦量 = **当前高度与该焦平面之差**：`s = h(q) - z_f`。
+* **两个开关别混**：
+  * `focus_strategy` 定焦平面**位置**（恒为 `z0`，不随槽底下降）——见 ADR-0018；
+  * `geometry_feedback` 决定有没有**被动离焦**：
+    `axial_defocus` ⇒ `w(d) = w0·sqrt(1+(d/zR)²)`；`fixed_geometry` ⇒ 离焦恒 0。
+    后者只是**冻结几何的解析基准**（批次 A–I 逐位对照用），不是深孔加工的物理模型。
+* 三重约束（ADR-0018）：声明层只收 `fixed_original_surface`（其它值 → `CONFIG_INVALID`）；
+  构造层由 `PredictionSpec.initial_height_m` 同时写进 `grid.initial_height_m` 与路径每段 z；
+  校验层由 `validate_run` 复核「每段端点 z == `grid.initial_height_m`」，不等即**失败关闭**。
+  每次运行在 `result.metadata["focus"]` 记录策略 / `z_m` / `layer_refocus=false` / `geometry_feedback`。
 * 后果：孔越深 → 离焦越大 → 光斑越大。本算例一趟烧到 **132 µm** ≫ `zR = 4.465 µm`
   ⇒ 离焦 **30 倍** ⇒ 光斑 `1.33 → 39 µm`。
+* ⚠️ 光斑是**逐格**的：某格的 `w` 由该格**自身**的高度决定。所以「离焦使光斑长大」
+  只发生在**已经打深的格子**上；扫描线之间的**未加工平地**处在焦平面上、仍是 `w0`。
+  这意味着「光斑长大 ⇒ 大 hatch 也能覆盖」不成立 —— 实测 hatch=10、槽底 r_abl 15.5 µm 时
+  仍有 16/40 行零去除。
 
 ### 4.3 窗口必须覆盖「全部可能超阈值的格子」
 
@@ -243,6 +256,7 @@ values = δ · ln(F / threshold_internal)  # 仅 mask 内
 
 | 想改/想看 | 位置 |
 |---|---|
+| 焦平面 / 焦点策略 | `SolverConfig.focus_strategy`；`PredictionSpec.initial_height_m`；`validate_run`；ADR-0018 |
 | 事件枚举 | `paths.iter_events()`；段定义 `config.PathSegment.position_at()` |
 | 能流/窗口 | `beam.beam_patch()`；半径 `cut_radius()` / `max_ablation_radius()` |
 | 窗口策略 | `BeamOptions.window_radius_policy`；`SolverConfig.window_radius_policy` |

@@ -805,6 +805,18 @@ class PathConfig:
 class SolverConfig:
     mode: str = "reference"
     geometry_feedback: str = "fixed_geometry"
+    #: **焦平面策略**。本项目只开放 ``fixed_original_surface``：焦平面恒为
+    #: **加工前的原始上表面** z0，不随槽底下降做 Z 调整（任务书 §6）。
+    #:
+    #: ⚠️ 与 ``geometry_feedback`` 是**两个不同的开关**（背景文件里也这么写）：
+    #:   * ``focus_strategy`` 决定**焦平面的位置**（恒为 z0）；
+    #:   * ``geometry_feedback="axial_defocus"`` 提供**被动离焦**
+    #:     ``w(d) = w0·sqrt(1+(d/zR)²)`` —— 表面下降使光斑变大，这是几何反馈，
+    #:     不是主动调焦。**不得**因为停用动态入射角就连带停用它。
+    #:
+    #: 逐层对焦 / 动态补偿 / 焦点跟随表面**未实现**：声明其它值一律拒绝
+    #: （fail closed），不做静默降级。
+    focus_strategy: str = "fixed_original_surface"
     history_enabled: bool = False
     tail_epsilon: float = 1e-8
     #: **窗口半径策略**（性能开关，默认关闭）。取值：
@@ -856,6 +868,19 @@ class SolverConfig:
     def from_dict(raw: Mapping[str, Any]) -> "SolverConfig":
         mode = _require_str(raw.get("mode", "reference"), "solver.mode", ("reference", "grouped"))
         gf = _require_str(raw.get("geometry_feedback", "fixed_geometry"), "solver.geometry_feedback", GEOMETRY_FEEDBACK_MODES)
+        focus_strategy = str(raw.get("focus_strategy", "fixed_original_surface") or "").strip()
+        if focus_strategy != "fixed_original_surface":
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.focus_strategy 只支持 fixed_original_surface",
+                field_path="solver.focus_strategy",
+                actual=focus_strategy,
+                requirement="'fixed_original_surface'（焦平面恒为加工前原始上表面）",
+                suggestion=(
+                    "本项目**不提供**逐层 Z 调整 / 焦点跟随表面 / 动态补偿（任务书 §6）。"
+                    "被动离焦是另一个开关：用 solver.geometry_feedback='axial_defocus'。"
+                ),
+            )
         eps = _require_finite_positive(raw.get("tail_epsilon", 1e-8), "solver.tail_epsilon")
         if not (0.0 < eps < 1.0):
             raise UFDemoError(
@@ -922,6 +947,7 @@ class SolverConfig:
         return SolverConfig(
             mode=mode,
             geometry_feedback=gf,
+            focus_strategy=focus_strategy,
             history_enabled=_require_bool(raw.get("history_enabled", False), "solver.history_enabled"),
             tail_epsilon=eps,
             window_radius_policy=wpol,
@@ -949,6 +975,7 @@ class SolverConfig:
         return {
             "mode": self.mode,
             "geometry_feedback": self.geometry_feedback,
+            "focus_strategy": self.focus_strategy,
             "history_enabled": self.history_enabled,
             "tail_epsilon": self.tail_epsilon,
             "window_radius_policy": self.window_radius_policy,
@@ -1596,6 +1623,45 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
                 suggestion="关闭 history_enabled；启用历史耦合需提供经过验证的孵化响应核。",
             )
         )
+
+    # 0. 焦平面必须恒为**加工前的原始上表面**（solver.focus_strategy=fixed_original_surface）
+    #    from_dict 只拦得住「声明了别的策略」；这里挡住**声明对、路径却把焦点放别处**
+    #    这种静默用错焦平面的情形（例如手写配置把焦点放到了槽底）。
+    #    判据是**构造性**的：每一段的 z 都必须等于 grid.initial_height_m。
+    if str(getattr(config.solver, "focus_strategy", "fixed_original_surface")) == "fixed_original_surface":
+        z0 = float(getattr(config.grid, "initial_height_m", 0.0) or 0.0)
+        segs = tuple(getattr(config.path, "segments", ()) or ())
+        offenders: list[tuple[Any, str, float]] = []
+        for seg in segs:
+            for key in ("start_xyz_m", "end_xyz_m"):
+                xyz = getattr(seg, key, None)
+                if xyz is None:
+                    continue
+                if abs(float(xyz[2]) - z0) > 1e-12:
+                    offenders.append((getattr(seg, "segment_id", "?"), key, float(xyz[2])))
+        if offenders:
+            sid, key, z_val = offenders[0]
+            fail(
+                UFDemoError(
+                    CONFIG_INVALID,
+                    "焦平面必须恒为加工前的原始上表面",
+                    field_path=f"path.segments[{sid}].{key}[2]",
+                    actual={"z_m": z_val, "grid.initial_height_m": z0,
+                            "n_offending_endpoints": len(offenders)},
+                    requirement="每一段的 z 都等于 grid.initial_height_m",
+                    suggestion=(
+                        "把路径的 z 设成原始表面高度。本项目**不提供**逐层 Z 调整 / "
+                        "焦点跟随表面 / 动态补偿（任务书 §6）；若确实要模拟离焦偏置，"
+                        "需要先显式开放另一种 focus_strategy。"
+                    ),
+                )
+            )
+        else:
+            notes.append(
+                f"焦平面：固定于加工前原始上表面 z0 = {z0 * 1e6:.6f} µm，"
+                f"{len(segs)} 段端点全部一致；被动离焦由 geometry_feedback 单独决定"
+                "（axial_defocus ⇒ w(d)=w0·sqrt(1+(d/zR)²)）。"
+            )
 
     # 1. 模式准入
     if allowed and config.run_mode not in allowed:

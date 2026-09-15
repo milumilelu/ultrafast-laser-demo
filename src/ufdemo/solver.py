@@ -419,6 +419,20 @@ def solve(
         "final_phase_cell_counts": {},
         "phase_names": ({p.phase_id: p.name for p in structure.phases} if structured else {}),
     }
+    # 焦平面策略写进元数据：让**每一次运行**的光学假设可审计，
+    # 而不是只靠背景文件里的一句口头约定。见 docs/decisions/ADR-0018。
+    _gf = str(getattr(config.solver, "geometry_feedback", "fixed_geometry"))
+    result.metadata["focus"] = {
+        "strategy": str(getattr(config.solver, "focus_strategy", "fixed_original_surface")),
+        "z_m": float(getattr(config.grid, "initial_height_m", 0.0) or 0.0),
+        "layer_refocus": False,
+        "geometry_feedback": _gf,
+        "passive_defocus": _gf == "axial_defocus",
+        "note": (
+            "焦平面恒为**加工前原始上表面**，不随槽底下降做 Z 调整（任务书 §6）；"
+            "表面下降造成的**被动离焦**由 geometry_feedback 单独决定。"
+        ),
+    }
     result.diagnostics["fluence_ledger"] = {
         "emitted_energy_internal": 0.0,
         "estimated_intercepted_energy_internal": 0.0,
