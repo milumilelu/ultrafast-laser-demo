@@ -172,7 +172,12 @@ class MaterialSpec:
 
     # -- 载入 ---------------------------------------------------------------
     @staticmethod
-    def from_dict(raw: Mapping[str, Any], *, card_sha256: str | None = None) -> "MaterialSpec":
+    def from_dict(
+        raw: Mapping[str, Any],
+        *,
+        card_sha256: str | None = None,
+        protocol_base: str | Path | None = None,
+    ) -> "MaterialSpec":
         if not isinstance(raw, Mapping):
             raise UFDemoError(CONFIG_INVALID, "材料卡必须是 JSON 对象", field_path="<material>", actual=type(raw).__name__)
         mid = raw.get("id")
@@ -205,7 +210,7 @@ class MaterialSpec:
             applicability=dict(raw.get("applicability", {}) or {}),
             provenance=dict(raw.get("provenance", {}) or {}),
             threshold_candidates=tuple(raw.get("threshold_candidates", ()) or ()),
-            reference_protocol=dict(raw.get("reference_protocol", {}) or {}),
+            reference_protocol=resolve_reference_protocol(raw, base=protocol_base),
             multi_response=_normalize_multi_response(raw.get("multi_response", {}) or {}),
             phases=tuple(raw.get("phases", ()) or ()),
             fixture_only=bool(raw.get("fixture_only", False)),
@@ -423,6 +428,135 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# ---------------------------------------------------------------------------
+# 参考协议装配（ADR-0021）
+#
+# 材料卡只登记「引用」：``{"protocol_id": ..., "protocol_file": "data/protocols/<id>.json"}``。
+# 完整协议体（**源文献的装置条件**）在 ``data/protocols/`` 下独立存放；本函数把它装配回
+# ``MaterialSpec.reference_protocol``，形状与分离前**完全一致** ⇒ config / references /
+# webcontract 等消费方零改动。
+#
+# 为什么必须分开（2026-09-17）：光束参数（λ/τ/f/w0）是**设备量**，不是材料属性。
+# 核函数 ``a = δ·ln(F/F_th)`` 是局域能流定律，与光斑无关 —— 实测 ``response.py`` 与
+# ``solver.py`` 里**零** w0 引用，卡里的 w0 从不进入物理计算，只作「条件门禁」。
+# 留在卡里会被误读成材料参数，而且同一台设备的条件要在多张卡里各抄一遍。
+#
+# 三层归属（不得互相串位）：
+#   * 材料属性（δ、F_th、相结构）    → ``data/materials/*.json``
+#   * 源文献装置条件（协议）          → ``data/protocols/*.json``
+#   * 本机设备（NA/M²/名义 w0 与 zR） → ``data/config/shared_experiment_background.json``
+#
+# 装配后卡片的 w0 与**本机名义光学**（0.874 µm）不匹配时会被条件门禁如实拒绝 ——
+# 这不是缺陷：那张卡描述的是源文献那台机器，同一条 ``validate_run`` 会给出
+# ``CONDITION_MISMATCH`` 并指明实际值与要求值。
+# ---------------------------------------------------------------------------
+
+REFERENCE_PROTOCOL_DIR = "data/protocols"
+
+#: 装配进 ``reference_protocol`` 的协议字段（保持分离前的键集为子集，只做超集扩展）
+_PROTOCOL_RUNTIME_KEYS: tuple[str, ...] = (
+    "required_laser",
+    "required_history",
+    "protocol_note",
+    "reference_peak_fluence_J_m2",
+    "source_ids",
+)
+
+
+def resolve_reference_protocol(
+    raw: Mapping[str, Any], *, base: str | Path | None = None
+) -> dict[str, Any]:
+    """把卡里的 ``reference_protocol`` 引用装配成完整协议字典。
+
+    * 无 ``reference_protocol`` → ``{}``；
+    * 已内联 ``required_laser``/``required_history``（人工 fixture）→ **原样返回**；
+    * 引用形式 → 读 ``protocol_file`` 并装配；文件缺失或 ``protocol_id`` 不一致 ⇒ **如实报错**，
+      绝不返回空协议、也绝不静默降级。
+    """
+    rp = dict(raw.get("reference_protocol") or {})
+    if not rp:
+        return {}
+    if "required_laser" in rp or "required_history" in rp:
+        return rp
+
+    pid = rp.get("protocol_id")
+    rel = rp.get("protocol_file")
+    if not isinstance(pid, str) or not pid:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "reference_protocol 缺少 protocol_id",
+            field_path="reference_protocol.protocol_id",
+            actual=rp,
+            requirement="非空字符串",
+        )
+    if not isinstance(rel, str) or not rel:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "材料卡既未内联参考协议，也未给出 reference_protocol.protocol_file",
+            field_path="reference_protocol.protocol_file",
+            actual=pid,
+            requirement='形如 "data/protocols/<protocol_id>.json"',
+            suggestion="参考协议已独立存放（ADR-0021）；请用 tools/migrate_materials.py 重新生成材料卡。",
+        )
+
+    # 解析协议文件的候选根目录：先按调用方给的基址（通常是卡片所在树的根，这样
+    # 生成器把产物写到临时目录时也能自洽解析），再回退到 resource_root()（wheel /
+    # 自定义资源目录 / 环境变量覆盖）。都不命中才报错 —— 报错时把**所有**试过的
+    # 路径写进 actual，避免"只看到一个不存在的路径"而误判。
+    roots: list[Path] = []
+    if base is not None:
+        roots.append(Path(base))
+    try:
+        # 延迟导入：``resource_root`` 在包 __init__ 里定义，顶层导入会形成环
+        from . import resource_root
+
+        fallback = resource_root()
+        if fallback not in roots:
+            roots.append(fallback)
+    except Exception:  # noqa: BLE001 - 资源根不可用时只保留已给的基址
+        pass
+
+    path: Path | None = None
+    for root in roots:
+        cand = root / rel
+        if cand.exists():
+            path = cand
+            break
+    if path is None:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "参考协议文件不存在",
+            field_path="reference_protocol.protocol_file",
+            actual=[str(r / rel) for r in roots],
+            requirement=f"{pid} 的协议文件应存在于上述任一路径",
+            suggestion="重跑 tools/migrate_materials.py 生成 data/protocols/。",
+        )
+    try:
+        proto = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "参考协议文件不是合法 JSON",
+            field_path="reference_protocol.protocol_file",
+            actual=f"{path}: {exc}",
+        ) from exc
+    if proto.get("protocol_id") != pid:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "协议文件与卡内 protocol_id 不一致",
+            field_path="reference_protocol.protocol_id",
+            actual={"card": pid, "file": proto.get("protocol_id")},
+            requirement="两者必须相同",
+            suggestion="材料卡与协议库不同步：重跑 tools/migrate_materials.py。",
+        )
+
+    out: dict[str, Any] = {"protocol_id": pid, "protocol_file": rel}
+    for key in _PROTOCOL_RUNTIME_KEYS:
+        if key in proto:
+            out[key] = proto[key]
+    return out
+
+
 def load_material_card(path: str | Path) -> MaterialSpec:
     p = Path(path)
     if not p.exists():
@@ -434,7 +568,15 @@ def load_material_card(path: str | Path) -> MaterialSpec:
             suggestion="核对路径；真实材料卡在 data/materials/，人工 fixture 在 tests/fixtures/。",
         )
     raw = json.loads(p.read_text(encoding="utf-8"))
-    return MaterialSpec.from_dict(raw, card_sha256=_sha256_file(p))
+    # 协议引用按**卡片所在树的根**解析：``<root>/data/materials/x.json`` 的根是
+    # ``parents[2]``（materials→data→root），于是 ``data/protocols/<id>.json`` 命中。
+    # 这样生成器把产物写到临时目录、或 wheel 换装到别的 prefix 时都能自洽；
+    # 解析不到再回退 resource_root()（见 resolve_reference_protocol）。
+    resolved = p.resolve()
+    base = resolved.parents[2] if len(resolved.parents) >= 3 else resolved.parent
+    return MaterialSpec.from_dict(
+        raw, card_sha256=_sha256_file(p), protocol_base=base
+    )
 
 
 def load_material_catalog(material_dir: str | Path, *, include_non_physical: bool = True) -> dict[str, MaterialSpec]:

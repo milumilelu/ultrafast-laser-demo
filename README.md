@@ -467,6 +467,48 @@ PYTHONPATH=src python -m ufdemo.webapp --runs-dir runs/_web   # 隔离输出
 
 ---
 
+## 3i. 参考协议外置：三层参数归属（ADR-0021）
+
+> 起因：评审指出「**光斑半径是设备参数，不是材料卡的参数**」。核查后确认这是对的。
+
+**三层归属（不得串位）**：
+
+| 层 | 内容 | 在哪 |
+|---|---|---|
+| 材料 | δ、F_th、相结构、证据状态 | `data/materials/*.json` |
+| **源文献装置** | λ / τ / f / w0、有效 N、峰值能流 | `data/protocols/<protocol_id>.json` |
+| **本机设备** | NA、M²、名义 w0 与 z_R、功率 | `data/config/shared_experiment_background.json` |
+
+材料卡只保留**引用**：
+
+```json
+"reference_protocol": {
+  "protocol_id": "ysz_crown_machining_effective_n3",
+  "protocol_file": "data/protocols/ysz_crown_machining_effective_n3.json"
+}
+```
+
+加载时由 `materials.resolve_reference_protocol()` 装配回 `MaterialSpec.reference_protocol`，
+**键集是分离前的超集** ⇒ `config.py` / `references.py` / `webcontract.py` 等消费方零改动。
+
+**为什么必须分开**：核函数 `a = δ·ln(F/F_th)` 是**局域能流**定律，与光斑无关 ——
+`solver.py` 与 `response.py` 里**零** w0 引用，材料卡里的 w0 从不进入物理计算，
+只作「条件门禁」。留在卡里会被误读成材料参数，而且同一台设备的条件要在多张卡里各抄一遍。
+
+**一个必须知道的后果**：文献装置与本机设备的光斑可以差很多。氧化锆加工卡要求
+w0 = 16 µm（JMPT 论文装置），本机名义光学是 0.874 µm（NA 0.45 / M² 1.2），
+**相差 18 倍**，两者一起过 `validate_run` 会被 `CONDITION_MISMATCH` 如实拒绝。
+所以「借用文献装置复现文献」与「用本机名义光学预测」是**两种不同的运行**，
+不能混为一谈 —— 演示/汇报时要说清用的是哪一种。
+
+**坏引用一律报错**（`CONFIG_INVALID` + 精确 `field_path`）：文件缺失、`protocol_id` 不一致、
+只有 `protocol_id` 没有 `protocol_file` —— 绝不返回空协议、绝不降级执行。
+
+**协议库与生成器必须同步**：协议由 `tools/migrate_materials.py` 产出，
+手改 `data/protocols/` 而不改生成器会被 `tests/test_reference_protocol_files.py` 抓到。
+
+---
+
 ## 4. 关键约定（改动前先看 `docs/decisions/`）
 
 * **单位**：物理模式内部 SI；合成模式内部无量纲（`x/L_ref`、`h/L_ref`、
@@ -628,11 +670,13 @@ ultrafast-demo/
 │   ├── ui_demo_probe.py       # 端到端演示可用性检查（批次 G：前后端对接全链路）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
+├── data/protocols/       # 参考协议库：源文献的实验装置条件（ADR-0021）
 ├── data/curves/          # 响应曲线卡（*.curve.json + *.points.csv，批次 F）
+├── data/config/          # 共享实验背景：本机设备层（NA/M²/名义 w0 与 zR，ADR-0020 冻结）
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置（含合成结构实例、查表算例与斜入射/斜平面示例）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0016）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0021）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -645,7 +689,7 @@ ultrafast-demo/
 ## 7. 测试与报告
 
 ```bash
-python -m pytest -q                  # 394 项，全部通过（A–C 63 + D 18 + E 逻辑 61 + 界面冒烟 18 + F 查表 91 + G 分相 21 + H 阈值/入口/水印 42 + I 分组 26 + J 斜入射 23 + 回归 5）
+python -m pytest -q                  # 737 passed, 1 xfailed（截至 ADR-0021，2026-09-17；实测数见 docs/reports/pytest_output.txt，本行不再逐批维护）
 python -m pytest -q -m g05           # 只跑文献语义回归
 python -m pytest -q -m g06           # 只跑分相结构检查（批次 G）
 python -m pytest -q -m g07           # 斜入射与表面几何（批次 J）

@@ -17,11 +17,11 @@
   "card_version": "1.0.0",
   "code": {
     "build_batch": "L",
-    "commit": "71e7b5455618ce2e91ac99036543730210652a80",
+    "commit": "f8524bcf37ecea0158e301cabe55b48ad6ecdaa4",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 27,
-    "source_manifest_sha256": "0be69aa638e8cfa0615cb6b5d01db5cbf600fd29e1f8aad985c909317468f95a",
+    "source_manifest_sha256": "3c16e51277d518929df74b16e044957a9a3c8cea58c448b9079c244fd3c358b8",
     "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
@@ -46,6 +46,14 @@
   },
   "events_processed": 21,
   "evidence_status": "literature_reported",
+  "focus": {
+    "geometry_feedback": "fixed_geometry",
+    "layer_refocus": false,
+    "note": "焦平面恒为**加工前原始上表面**，不随槽底下降做 Z 调整（任务书 §6）；表面下降造成的**被动离焦**由 geometry_feedback 单独决定。",
+    "passive_defocus": false,
+    "strategy": "fixed_original_surface",
+    "z_m": 0.0
+  },
   "laser_metadata": {
     "direction_unit_input": [
       0.0,
@@ -139,7 +147,7 @@
     "structure_type": "particle_composite",
     "target_volume_fraction": 0.32,
     "truncation_note": "跨相截断是有损近似：被截断的候选量记为「未应用候选去除体积」，不是剩余热量，也不是界面能量传输结果。",
-    "unapplied_candidate_removal_volume_internal": 3.249360458653769,
+    "unapplied_candidate_removal_volume_internal": 3.2493604586537694,
     "volume_fraction": {
       "actual_volume_fraction": {
         "Al_matrix": 0.72815,
@@ -208,6 +216,7 @@
     "evidence_status": "literature_reported",
     "material_id": "alsic_sicp_aa2024_1030nm",
     "notes": [
+      "焦平面：固定于加工前原始上表面 z0 = 0.000000 µm，5 段端点全部一致；被动离焦由 geometry_feedback 单独决定（axial_defocus ⇒ w(d)=w0·sqrt(1+(d/zR)²)）。",
       "合成演示：所有长度按 L_ref 归一、能流按 F_ref 归一，禁止导出物理 μm 深度。",
       "合成结构：particle_composite｜算法 structure_v1｜种子 20260910｜相 ['Al_matrix', 'SiC_particle']。跨相截断是有损近似，被截断的候选量记为「未应用候选去除体积」，不是剩余能量。",
       "合成结构模式：逐事件去除核由分相内联定义提供（父卡仅提供结构身份）；父卡逐事件核不可用：响应类型 'missing' 不是固定阈值对数核；缺 fluence_basis、depth_direction、threshold、delta_m"
@@ -219,6 +228,7 @@
   },
   "warnings": [
     "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "窗口半径策略 above_threshold：最坏情况有 0.734% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.7739854877721043）。",
     "跨相截断频繁：21/21 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
     "有 18 个事件出现相标签切换，累计 300 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
   ],
@@ -243,11 +253,12 @@
     "unit_system": "dimensionless",
     "warnings": [
       "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+      "窗口半径策略 above_threshold：最坏情况有 0.734% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.7739854877721043）。",
       "跨相截断频繁：21/21 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
       "有 18 个事件出现相标签切换，累计 300 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
     ]
   },
-  "written_at_utc": "2026-09-15T05:10:02.144122+00:00",
+  "written_at_utc": "2026-09-17T04:39:47.962894+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

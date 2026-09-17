@@ -1,0 +1,33 @@
+{
+  "protocol_id": "ysz_crown_machining_effective_n3",
+  "protocol_version": "1.0.0",
+  "kind": "source_experiment_beam",
+  "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+  "required_laser": {
+    "wavelength_m": {
+      "value": 1.03e-06,
+      "rel_tol": 0.01
+    },
+    "pulse_duration_s": {
+      "value": 2.08e-13,
+      "rel_tol": 0.05
+    },
+    "repetition_rate_Hz": {
+      "value": 33300.0,
+      "rel_tol": 0.01
+    },
+    "spot_radius_m": {
+      "value": 1.6e-05,
+      "rel_tol": 0.05
+    }
+  },
+  "required_history": {
+    "effective_count": 3,
+    "definition": "area_equivalent_ysz_eq9"
+  },
+  "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+  "reference_peak_fluence_J_m2": 501000.0,
+  "source_ids": [
+    "S01"
+  ]
+}

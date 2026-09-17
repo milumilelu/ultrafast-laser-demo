@@ -30,25 +30,7 @@
   },
   "reference_protocol": {
     "protocol_id": "diamond_scd_1030nm_candidate",
-    "required_laser": {
-      "wavelength_m": {
-        "value": 1.03e-06,
-        "rel_tol": 0.01
-      },
-      "pulse_duration_s": {
-        "value": null,
-        "rel_tol": 0.05
-      },
-      "repetition_rate_Hz": {
-        "value": 300000.0,
-        "rel_tol": 0.05
-      }
-    },
-    "required_history": {
-      "effective_count": 1,
-      "definition": "single_pulse"
-    },
-    "protocol_note": "脉宽未核实：完整条件核实前不启用。"
+    "protocol_file": "data/protocols/diamond_scd_1030nm_candidate.json"
   },
   "source_equation": "单脉冲阈值候选（2026）",
   "source_figure_or_table": "F01 P49（S06）",

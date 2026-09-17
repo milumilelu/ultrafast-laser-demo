@@ -6,20 +6,20 @@
     },
     "fluence_ledger": {
       "emitted_energy_internal": 185.70723485890707,
-      "estimated_intercepted_energy_internal": 185.70723289863784,
-      "max_domain_truncated_fraction": 1.0555696428049544e-08,
+      "estimated_intercepted_energy_internal": 185.53821059592337,
+      "max_domain_truncated_fraction": 0.0009101652022986961,
       "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。",
       "threshold_window": {
-        "cells_skipped_fraction": null,
+        "cells_skipped_fraction": 0.6707874227358237,
         "collapsed_events": 0,
-        "enabled": false,
-        "events": 0,
+        "enabled": true,
+        "events": 16,
         "margin": 1.25,
-        "tail_window_cells_total": 0,
-        "threshold_internal": null,
-        "window_cells_total": 0
+        "tail_window_cells_total": 59536,
+        "threshold_internal": 0.7,
+        "window_cells_total": 19600
       },
-      "window_radius_policy": "tail_epsilon"
+      "window_radius_policy": "above_threshold"
     },
     "geometry": {
       "backfacing_cells_total": 0,
@@ -98,7 +98,7 @@
       "used_for_depth": false
     }
   },
-  "elapsed_s": 0.03994590003276244,
+  "elapsed_s": 0.013007499976083636,
   "errors": [],
   "events_processed": 16,
   "events_total": 16,
@@ -107,6 +107,7 @@
   "status": "completed",
   "warnings": [
     "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "窗口半径策略 above_threshold：最坏情况有 0.091% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.6707874227358237）。",
     "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
     "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
   ]

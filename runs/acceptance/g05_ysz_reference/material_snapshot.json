@@ -36,30 +36,8 @@
     ]
   },
   "reference_protocol": {
-    "protocol_id": "ysz_crown_machining_effective_n3",
-    "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
-    "required_history": {
-      "definition": "area_equivalent_ysz_eq9",
-      "effective_count": 3
-    },
-    "required_laser": {
-      "pulse_duration_s": {
-        "rel_tol": 0.05,
-        "value": 2.08e-13
-      },
-      "repetition_rate_Hz": {
-        "rel_tol": 0.01,
-        "value": 33300.0
-      },
-      "spot_radius_m": {
-        "rel_tol": 0.05,
-        "value": 1.6e-05
-      },
-      "wavelength_m": {
-        "rel_tol": 0.01,
-        "value": 1.03e-06
-      }
-    }
+    "protocol_file": "data/protocols/ysz_crown_machining_effective_n3.json",
+    "protocol_id": "ysz_crown_machining_effective_n3"
   },
   "response": {
     "delta_m": 3.9e-07,
@@ -78,7 +56,6 @@
   "structure_type": "homogeneous",
   "validity_domain": {
     "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。",
-    "peak_fluence_J_m2": 501000.0,
     "protocol_id": "ysz_crown_machining_effective_n3",
     "scope": "reference_protocol_only"
   }

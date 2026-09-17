@@ -95,30 +95,8 @@
       ]
     },
     "reference_protocol": {
-      "protocol_id": "cfrp_t700_yb01_threshold_only",
-      "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。",
-      "required_history": {
-        "definition": "Fth1 反演基准，仅为占位定义",
-        "effective_count": 1
-      },
-      "required_laser": {
-        "pulse_duration_s": {
-          "rel_tol": 0.05,
-          "value": 9e-14
-        },
-        "repetition_rate_Hz": {
-          "rel_tol": 0.02,
-          "value": 1000.0
-        },
-        "spot_radius_m": {
-          "rel_tol": 0.1,
-          "value": 3e-06
-        },
-        "wavelength_m": {
-          "rel_tol": 0.02,
-          "value": 8e-07
-        }
-      }
+      "protocol_file": "data/protocols/cfrp_t700_yb01_threshold_only.json",
+      "protocol_id": "cfrp_t700_yb01_threshold_only"
     },
     "response": {
       "delta_m": null,
@@ -144,11 +122,11 @@
       "scope": "reference_protocol_only"
     }
   },
-  "card_sha256": "fa235f8fab4dc66e85a14a1ac9f76545fe11769d12861526edc0f25635af0a45",
+  "card_sha256": "9ccb47330930d71548de7cb302960012faee38fdb333c629478e444a2aefab2c",
   "schema_version": "1.0",
   "watermark": {
     "acceleration": "off",
-    "card_sha256": "fa235f8fab4dc66e85a14a1ac9f76545fe11769d12861526edc0f25635af0a45",
+    "card_sha256": "9ccb47330930d71548de7cb302960012faee38fdb333c629478e444a2aefab2c",
     "card_version": "1.0.0",
     "depth_label": "L_ref",
     "evidence_status": "literature_reported",
@@ -167,6 +145,7 @@
     "unit_system": "dimensionless",
     "warnings": [
       "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+      "窗口半径策略 above_threshold：最坏情况有 0.091% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.6707874227358237）。",
       "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
       "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
     ]

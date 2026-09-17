@@ -28,21 +28,7 @@
   },
   "reference_protocol": {
     "protocol_id": "diamond_scd_1030nm_700fs_threshold",
-    "required_laser": {
-      "wavelength_m": {
-        "value": 1.03e-06,
-        "rel_tol": 0.01
-      },
-      "pulse_duration_s": {
-        "value": 7e-13,
-        "rel_tol": 0.05
-      }
-    },
-    "required_history": {
-      "effective_count": 1,
-      "definition": "single_pulse"
-    },
-    "protocol_note": "与 400 fs 分支分开保存，禁止混用。"
+    "protocol_file": "data/protocols/diamond_scd_1030nm_700fs_threshold.json"
   },
   "source_equation": "单脉冲阈值（2019）",
   "source_figure_or_table": "F01 P48（S05）",

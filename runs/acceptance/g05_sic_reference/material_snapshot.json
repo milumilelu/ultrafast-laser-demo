@@ -44,26 +44,8 @@
     ]
   },
   "reference_protocol": {
-    "protocol_id": "sic4h_cface_multishot_reference_N",
-    "protocol_note": "首个参考评估器允许直接输入原文的有效 N；完整工况映射须另核原图/原表。",
-    "required_history": {
-      "definition": "original_paper_effective_N",
-      "effective_count": 720
-    },
-    "required_laser": {
-      "pulse_duration_s": {
-        "rel_tol": 0.05,
-        "value": 3e-13
-      },
-      "repetition_rate_Hz": {
-        "rel_tol": 0.02,
-        "value": 200000.0
-      },
-      "wavelength_m": {
-        "rel_tol": 0.01,
-        "value": 1.035e-06
-      }
-    }
+    "protocol_file": "data/protocols/sic4h_cface_multishot_reference_N.json",
+    "protocol_id": "sic4h_cface_multishot_reference_N"
   },
   "response": {
     "delta_m": null,

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>超快激光加工工艺仿真 · 矩形槽</title>
+<style>
+  :root{
+    --ink:#0f172a; --ink2:#475569; --ink3:#94a3b8;
+    --line:#e2e8f0; --bg:#ffffff; --soft:#f8fafc;
+    --accent:#2563eb;
+    --mono:ui-monospace,SFMono-Regular,Consolas,"Cascadia Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+  .page{max-width:1380px;margin:0 auto;padding:42px 44px 56px}
+
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:34px}
+  h1{margin:0;font-size:23px;font-weight:600;letter-spacing:-.015em}
+  header .sub{color:var(--ink2);font-size:13.5px;margin-top:7px}
+
+  .layout{display:grid;grid-template-columns:296px minmax(0,1fr);gap:44px;align-items:start}
+  @media (max-width:1080px){.layout{grid-template-columns:1fr;gap:28px}}
+
+  h2{font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+     color:var(--ink3);margin:0 0 16px}
+
+  .field{margin-bottom:22px}
+  .field .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+  .field .lab .n{font-size:13px;color:var(--ink2)}
+  .field .lab .v{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+  select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;
+         font-family:var(--sans);font-size:13.5px;color:var(--ink);background:#fff;cursor:pointer}
+  select:focus{outline:none;border-color:var(--accent)}
+  input[type=range]{width:100%;height:20px;-webkit-appearance:none;background:transparent;margin:0;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:#fff;border:2px solid var(--accent);margin-top:-7px;box-shadow:0 1px 4px rgba(37,99,235,.3)}
+
+  button.go{width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
+            font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px;
+            transition:background .15s}
+  button.go:hover{background:#1d4ed8}
+  button.go:disabled{background:#cbd5e1;cursor:not-allowed}
+
+  .proto{margin-top:30px;padding-top:22px;border-top:1px solid var(--line)}
+  .proto .row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0}
+  .proto .k{color:var(--ink3)}
+  .proto .v{font-family:var(--mono);color:var(--ink2)}
+
+  .view{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:22px}
+  #field{display:block;width:100%;height:auto;border-radius:8px;background:#fff}
+  .scale{display:flex;align-items:center;gap:10px;margin-top:14px;font-family:var(--mono);
+         font-size:11.5px;color:var(--ink2)}
+  .scale .bar{flex:1;height:8px;border-radius:4px;border:1px solid var(--line)}
+
+  .sec2{margin-top:26px;background:var(--soft);border:1px solid var(--line);
+        border-radius:14px;padding:22px}
+  #prof{display:block;width:100%;height:auto}
+
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+  @media (max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}}
+  .m{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .m .k{font-size:12px;color:var(--ink3)}
+  .m .v{font-family:var(--mono);font-size:21px;font-weight:600;letter-spacing:-.02em;margin-top:5px}
+  .m .v em{font-style:normal;font-size:12px;font-weight:400;color:var(--ink3);margin-left:3px}
+
+  .msg{margin-top:20px;font-size:13px;color:var(--ink2)}
+  .msg.err{color:#b91c1c}
+  .hint{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>超快激光加工工艺仿真</h1>
+    <div class="sub">矩形槽形貌预测 · 逐脉冲事件求解器 · 固定焦点被动离焦</div>
+  </header>
+
+  <div class="layout">
+
+    <div>
+      <h2>输入</h2>
+
+      <div class="field">
+        <div class="lab"><span class="n">材料</span></div>
+        <select id="card"></select>
+      </div>
+
+      <div class="field">
+        <div class="lab"><span class="n">加工区域</span><span class="v" id="v-region">100 µm</span></div>
+        <input type="range" id="s-region" min="60" max="160" step="10" value="100">
+      </div>
+
+      <div class="field">
+        <div class="lab"><span class="n">填充间距 h</span><span class="v" id="v-hatch">4.0 µm</span></div>
+        <input type="range" id="s-hatch" min="2" max="10" step="1" value="4">
+      </div>
+
+      <div class="field">
+        <div class="lab"><span class="n">加工层数 N</span><span class="v" id="v-passes">2</span></div>
+        <input type="range" id="s-passes" min="1" max="4" step="1" value="2">
+      </div>
+
+      <button class="go" id="run">开始仿真</button>
+      <div class="msg" id="msg"></div>
+
+      <div class="proto">
+        <h2>协议参数（自动）</h2>
+        <div id="proto"></div>
+        <div class="hint">激光条件从材料卡的参考协议自动读取，避免与门控不一致。</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="view">
+        <canvas id="field" width="880" height="560"></canvas>
+        <div class="scale">
+          <span>0</span><span class="bar" id="cbar"></span><span id="cmax">—</span>
+        </div>
+      </div>
+
+      <div class="sec2">
+        <canvas id="prof" width="880" height="220"></canvas>
+        <div class="hint" id="proflab">中心剖面（沿 x 方向）</div>
+      </div>
+
+      <div class="metrics">
+        <div class="m"><div class="k">平均深度</div><div class="v" id="k-mean">—<em>µm</em></div></div>
+        <div class="m"><div class="k">最大深度</div><div class="v" id="k-max">—<em>µm</em></div></div>
+        <div class="m"><div class="k">中心深度</div><div class="v" id="k-center">—<em>µm</em></div></div>
+        <div class="m"><div class="k">脉冲事件</div><div class="v" id="k-events">—</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let busy = false;
+
+const CMAP = [
+  [248,250,252],[219,234,254],[147,197,253],[96,165,250],
+  [59,130,246],[37,99,235],[29,78,216],[30,58,138],[23,37,84]
+];
+function cmap(t){
+  t = Math.max(0, Math.min(1, t));
+  const x = t * (CMAP.length - 1), i = Math.min(CMAP.length-2, Math.floor(x)), f = x - i;
+  const a = CMAP[i], b = CMAP[i+1];
+  return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
+}
+
+function syncLabels(){
+  $("v-region").textContent = $("s-region").value + " µm";
+  $("v-hatch").textContent  = (+$("s-hatch").value).toFixed(1) + " µm";
+  $("v-passes").textContent = $("s-passes").value;
+}
+
+function to2d(layer, nx, ny){
+  if (!Array.isArray(layer)) return null;
+  if (Array.isArray(layer[0])) return layer;                 // 已是 ny×nx
+  const flat = layer;
+  if (flat.length !== nx*ny) return null;
+  const out = [];
+  for (let j=0;j<ny;j++) out.push(flat.slice(j*nx, (j+1)*nx));
+  return out;
+}
+
+function drawField(depth, nx, ny, cmax){
+  const cv = $("field"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,W,H);
+
+  const off = document.createElement("canvas");
+  off.width = nx; off.height = ny;
+  const octx = off.getContext("2d");
+  const img = octx.createImageData(nx, ny), px = img.data;
+  for (let j=0;j<ny;j++){
+    const src = depth[j], dst = (ny-1-j)*nx*4;
+    for (let i=0;i<nx;i++){
+      const c = cmap(cmax>0 ? (src[i]||0)/cmax : 0), o = dst+i*4;
+      px[o]=c[0]; px[o+1]=c[1]; px[o+2]=c[2]; px[o+3]=255;
+    }
+  }
+  octx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(off,0,0,nx,ny,0,0,W,H);
+}
+
+function drawProfile(depth, nx, ny, cmax){
+  const cv = $("prof"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height, L=58, R=16, T=14, B=30;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  const row = depth[Math.floor(ny/2)] || [];
+  const ymax = Math.max(cmax, 1e-9);
+  const X = i => L + (W-L-R) * (i/Math.max(1,nx-1));
+  const Y = v => H-B - (H-T-B) * (v/ymax);
+
+  ctx.strokeStyle="#eef1f4"; ctx.lineWidth=1; ctx.font="10.5px ui-monospace";
+  for (let k=0;k<=3;k++){
+    const y = Y(ymax*k/3);
+    ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(W-R,y); ctx.stroke();
+    ctx.fillStyle="#94a3b8"; ctx.textAlign="right";
+    ctx.fillText((ymax*k/3).toFixed(1), L-8, y+3.5);
+  }
+  ctx.beginPath(); ctx.moveTo(X(0), Y(row[0]||0));
+  for (let i=1;i<nx;i++) ctx.lineTo(X(i), Y(row[i]||0));
+  ctx.strokeStyle="#2563eb"; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,H-B); ctx.lineTo(W-R,H-B);
+  ctx.strokeStyle="#dbe3ec"; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle="#64748b"; ctx.textAlign="center"; ctx.font="11px ui-monospace";
+  ctx.fillText("位置 x（µm）", (L+W-R)/2, H-8);
+  ctx.save(); ctx.translate(14,(T+H-B)/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText("深度 µm",0,0); ctx.restore();
+}
+
+function renderScale(cmax){
+  const g=[];
+  for (let i=0;i<=16;i++){ const c=cmap(i/16); g.push(`rgb(${c[0]|0},${c[1]|0},${c[2]|0}) ${i*6.25}%`); }
+  $("cbar").style.background = "linear-gradient(to right,"+g.join(",")+")";
+  $("cmax").textContent = cmax.toFixed(1) + " µm";
+}
+
+function renderProto(dm){
+  if (!dm) return;
+  const rows = [
+    ["材料卡", dm.materialId],
+    ["波长", dm.wavelengthNm.toFixed(0) + " nm"],
+    ["脉宽", dm.pulseDurationFs.toFixed(0) + " fs"],
+    ["重复频率", dm.repetitionRateKHz.toFixed(1) + " kHz"],
+    ["光斑半径", dm.spotRadiusUm.toFixed(1) + " µm"],
+    ["扫描速度", dm.speedMmS.toFixed(1) + " mm/s"],
+    ["峰值通量", dm.peakFluenceJcm2.toFixed(1) + " J/cm²"],
+    ["单脉冲能量", dm.pulseEnergyUJ.toFixed(1) + " µJ"],
+    ["有效脉冲数", String(dm.effectiveCount)],
+    ["路径段", dm.nSegments + " 段"],
+  ];
+  $("proto").innerHTML = rows.map(([k,v]) =>
+    `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+}
+
+function fail(msg){ $("msg").className = "msg err"; $("msg").textContent = msg; }
+
+async function run(){
+  if (busy) return;
+  busy = true;
+  $("run").disabled = true;
+  $("run").textContent = "求解中…";
+  $("msg").className = "msg";
+  $("msg").textContent = "正在逐脉冲求解…";
+  try{
+    const r = await fetch("/api/demo-rect", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        materialCardFile: $("card").value,
+        regionUm: +$("s-region").value,
+        hatchUm: +$("s-hatch").value,
+        passes: +$("s-passes").value,
+        dxUm: 1.0,
+      }),
+    });
+    if (!r.ok){ fail("服务返回 HTTP " + r.status); return; }
+    const d = await r.json();
+    if (!d || d.status !== "completed"){
+      const ers = (d && d.errors) || [];
+      fail("求解未完成：" + (ers.length ? ers.map(e => e.message).join("；") : (d && d.status) || "未知"));
+      return;
+    }
+    const nx = d.grid.nx, ny = d.grid.ny;
+    const depth = to2d(d.layers.depth, nx, ny);
+    if (!depth){ fail("返回的深度层格式无法识别"); return; }
+
+    let mx = 0;
+    for (let j=0;j<ny;j++) for (let i=0;i<nx;i++) if (depth[j][i] > mx) mx = depth[j][i];
+    const cmax = mx * 1e6;                       // m → µm
+
+    drawField(depth, nx, ny, mx);
+    // 剖面按 µm 画（内部量是 m，直接画会让刻度全是 0.0）
+    drawProfile(depth.map(r => r.map(v => v * 1e6)), nx, ny, mx * 1e6);
+    renderScale(cmax);
+
+    const st = d.stats || {};
+    const um = v => (typeof v === "number" ? (v*1e6) : NaN);
+    $("k-mean").innerHTML   = um(st.mean_depth_internal).toFixed(1)   + "<em>µm</em>";
+    $("k-max").innerHTML    = um(st.max_depth_internal).toFixed(1)    + "<em>µm</em>";
+    $("k-center").innerHTML = um(st.center_depth_internal).toFixed(1) + "<em>µm</em>";
+    $("k-events").textContent = (d.eventsProcessed || 0).toLocaleString();
+
+    renderProto(d.demo);
+    $("msg").textContent = "已完成 · " + Math.round((d.elapsedS||0)*1000) + " ms";
+  }catch(e){
+    fail("请求失败：" + e.message);
+  }finally{
+    busy = false;
+    $("run").disabled = false;
+    $("run").textContent = "开始仿真";
+  }
+}
+
+/* 当前具备**完整参考协议**（波长/脉宽/频率/光斑全声明）的材料卡。
+   其余卡缺 required_laser，无法自动配置激光条件 —— 极简版只列能直接跑通的。 */
+const CARDS = [
+  { f: "data/materials/zirconia_ysz_machining_effective_n3.json",
+    n: "氧化锆 YSZ · 文献加工卡（1030 nm / 208 fs / 33.3 kHz）" },
+];
+
+async function boot(){
+  const sel = $("card");
+  sel.innerHTML = "";
+  for (const c of CARDS){
+    const o = document.createElement("option");
+    o.value = c.f; o.textContent = c.n;
+    sel.appendChild(o);
+  }
+  run();
+}
+
+["s-region","s-hatch","s-passes"].forEach(id =>
+  $(id).addEventListener("input", syncLabels));
+$("card").addEventListener("change", run);
+$("run").addEventListener("click", run);
+
+syncLabels();
+boot();
+</script>
+</body>
+</html>

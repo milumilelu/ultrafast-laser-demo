@@ -35,29 +35,7 @@
   },
   "reference_protocol": {
     "protocol_id": "cfrp_t700_yb01_threshold_only",
-    "required_laser": {
-      "wavelength_m": {
-        "value": 8e-07,
-        "rel_tol": 0.02
-      },
-      "pulse_duration_s": {
-        "value": 9e-14,
-        "rel_tol": 0.05
-      },
-      "repetition_rate_Hz": {
-        "value": 1000.0,
-        "rel_tol": 0.02
-      },
-      "spot_radius_m": {
-        "value": 3e-06,
-        "rel_tol": 0.1
-      }
-    },
-    "required_history": {
-      "effective_count": 1,
-      "definition": "Fth1 反演基准，仅为占位定义"
-    },
-    "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。"
+    "protocol_file": "data/protocols/cfrp_t700_yb01_threshold_only.json"
   },
   "source_equation": "Fth(N) = Fth1 * N^(S-1)",
   "source_figure_or_table": "F01 P16-P18（S03）",

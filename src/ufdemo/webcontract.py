@@ -28,7 +28,7 @@ import numpy as np
 
 from . import ui_service as U
 from .config import RunConfig, validate_run
-from .errors import UFDemoError
+from .errors import CONFIG_INVALID, UFDemoError
 from .materials import load_material_card
 
 # 前端图层选择器暴露的图层（顺序即界面顺序）
@@ -431,7 +431,10 @@ def catalog_payload(material_dir: str | Path) -> list[dict[str, Any]]:
                 "validityScope": (m.validity_domain or {}).get("scope"),
                 "validityNote": (m.validity_domain or {}).get("note"),
                 "protocolId": (m.validity_domain or {}).get("protocol_id"),
-                "peakFluenceJm2": (m.validity_domain or {}).get("peak_fluence_J_m2"),
+                # 峰值能流是**源文献装置条件**，ADR-0021 起随协议存放，不再挂在卡片的
+                # validity_domain 下；装配后的 reference_protocol 里读，输出字段名不变。
+                "peakFluenceJm2": (m.reference_protocol or {}).get("reference_peak_fluence_J_m2"),
+                "protocolFile": (m.reference_protocol or {}).get("protocol_file"),
                 "sourceEquation": m.source_equation,
                 "sourceFigureOrTable": m.source_figure_or_table,
                 "limitations": jsonable((m.raw or {}).get("limitations")),
@@ -1193,6 +1196,158 @@ def plan_payload(body: Mapping[str, Any], *, project_root: str | Path) -> dict[s
     d = res.to_dict()
     d["ok"] = True
     return d
+
+
+def demo_rect_payload(
+    body: Mapping[str, Any],
+    *,
+    out_base: str | Path,
+    project_root: str | Path,
+    curves_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """**极简演示端点**：给材料卡 + 间距/层数/区域，跑一次矩形槽。
+
+    为什么另开一个端点而不是让前端拼完整配置：
+    协议参数（波长/脉宽/频率/光斑）必须与材料卡的 ``reference_protocol`` 一致，
+    **手填极易不匹配而被门控拒绝**（实测：500 fs / 20 kHz / 0.87 µm 全被拒）。
+    所以这里**从卡里自动读**，速度再由 ``N_eff=(π/4)(2w₀f)/v`` 反推，
+    保证"演示怎么点都能跑通"，且跑出来的仍是**真实材料卡的定量结果**。
+    """
+    import math
+
+    from .materials import load_material_card
+    from .planning import serpentine_plan
+
+    card_rel = str(body.get("materialCardFile") or "")
+    if not card_rel:
+        raise UFDemoError(CONFIG_INVALID, "缺少材料卡", field_path="materialCardFile")
+    base = Path(project_root)
+    card_path = Path(card_rel)
+    if not card_path.is_absolute():
+        card_path = base / card_rel
+    spec = load_material_card(card_path)
+
+    rp = spec.reference_protocol or {}
+    rl = rp.get("required_laser") or {}
+
+    def _v(key: str) -> float:
+        x = (rl.get(key) or {}).get("value")
+        if not isinstance(x, (int, float)) or x <= 0:
+            raise UFDemoError(
+                CONFIG_INVALID,
+                f"材料卡未声明 reference_protocol.required_laser.{key}，无法自动配置",
+                field_path=f"reference_protocol.required_laser.{key}",
+                requirement="带正 value 的条目",
+                suggestion="换用带完整 reference_protocol 的材料卡，或走完整版界面手填参数。",
+            )
+        return float(x)
+
+    w0 = _v("spot_radius_m")
+    tau = _v("pulse_duration_s")
+    freq = _v("repetition_rate_Hz")
+    lam = _v("wavelength_m")
+
+    n_eff = (rp.get("required_history") or {}).get("effective_count")
+    n_eff = float(n_eff) if isinstance(n_eff, (int, float)) and n_eff > 0 else 3.0
+    speed_m_s = (math.pi / 4.0) * (2.0 * w0 * freq) / n_eff
+
+    # 峰值能流属**源文献装置条件**：ADR-0021 起随协议存放（装配后从 reference_protocol 读）
+    peak = rp.get("reference_peak_fluence_J_m2")
+    if not isinstance(peak, (int, float)) or peak <= 0:
+        raise UFDemoError(
+            CONFIG_INVALID, "参考协议未声明 reference_peak_fluence_J_m2，无法自动配置脉冲能量",
+            field_path="reference_protocol.reference_peak_fluence_J_m2",
+            requirement="正数（J/m²）",
+            suggestion="在 data/protocols/<protocol_id>.json 里补 reference_peak_fluence_J_m2，"
+                       "或走完整版界面手填脉冲能量。",
+        )
+    peak = float(peak)
+    energy = peak * math.pi * w0 * w0 / 2.0   # F0 = 2E/(πw₀²)
+
+    resp = spec.response or {}
+    region = float(body.get("regionUm") or 100.0)
+    hatch = float(body.get("hatchUm") or 4.0)
+    passes = int(body.get("passes") or 2)
+    dx = float(body.get("dxUm") or 1.0)
+    margin = float(body.get("marginUm") or 10.0)
+    domain = region + 2.0 * margin
+
+    plan = serpentine_plan(
+        region_um=(region, region), spacing_um=hatch,
+        pass_count=passes, scan_speed_mm_s=speed_m_s * 1e3,
+    )
+    segs = plan.to_segments_config()
+    n = max(4, int(round(domain * 1e-6 / (dx * 1e-6))))
+
+    cfg: dict[str, Any] = {
+        "schema_version": "1.0",   # 与 config.SCHEMA_VERSION 一致
+        "label": str(body.get("label") or "demo_rect"),
+        "run_mode": "reference_case",
+        "unit_system": "SI",
+        "material_id": spec.id,
+        "material_card_file": str(card_path),
+        "seed": int(body.get("seed") or 20260917),
+        "grid": {
+            "nx": n, "ny": n, "dx_m": dx * 1e-6, "dy_m": dx * 1e-6,
+            "center_x_m": 0.0, "center_y_m": 0.0, "origin": "cell_center",
+            "initial_surface": "flat", "initial_height_m": 0.0,
+        },
+        "laser": {
+            "wavelength_m": lam, "pulse_duration_s": tau,
+            "pulse_energy_J": energy, "repetition_rate_Hz": freq,
+            "spot_radius_m": w0, "focus_xyz_m": [0.0, 0.0, 0.0],
+            "direction_unit": [0.0, 0.0, 1.0],
+            "rayleigh_range_m": None, "m2": None,
+            "power_measurement_location": "sample_surface",
+            "parameter_sources": [f"reference_protocol:{rp.get('protocol_id')}"],
+        },
+        "path": {"t0_s": 0.0, "time_tolerance_s": 1e-12, "segments": segs},
+        "solver": {
+            "mode": "reference", "geometry_feedback": "fixed_geometry",
+            "history_enabled": False, "tail_epsilon": 1e-08,
+            "memory_budget_bytes": 2147483648, "budget_safety_factor": 1.5,
+            "cancel_check_interval": 256, "acceleration": "off",
+            "multiline_incubation": False, "structured_interface": False,
+        },
+        "output": {
+            "snapshot_policy": "passes", "snapshot_every_n_passes": 1,
+            "max_snapshots": 8, "max_snapshot_bytes": 268435456,
+            "cross_section": {"axis": "x", "offsets_m": [0.0, region * 1e-6 / 5.0]},
+            "roi": [{"name": "center", "radius_m": region * 1e-6 / 5.0,
+                     "center_xy_m": [0.0, 0.0]}],
+        },
+        "reference_conditions": {
+            "protocol_id": rp.get("protocol_id"),
+            "fluence_basis": "incident_peak_fluence",
+            "effective_count": n_eff,
+            "threshold_kind": resp.get("threshold_kind"),
+            "threshold_J_m2": resp.get("threshold_J_m2"),
+            "spot_radius_m": w0, "repetition_rate_Hz": freq,
+            "peak_fluence_J_m2": peak,
+        },
+    }
+
+    out = solve_payload(
+        cfg,   # 注意：solve_payload 收的就是配置本身（拆 params 是 webapp 路由的活）
+        out_base=out_base, project_root=project_root,
+        label=str(cfg["label"]), curves_dir=curves_dir,
+    )
+    # 把"这次用的协议参数"一并回给前端，演示时可以直接展示"输入是什么"
+    out["demo"] = {
+        "materialId": spec.id,
+        "protocolId": rp.get("protocol_id"),
+        "wavelengthNm": lam * 1e9,
+        "pulseDurationFs": tau * 1e15,
+        "repetitionRateKHz": freq / 1e3,
+        "spotRadiusUm": w0 * 1e6,
+        "speedMmS": speed_m_s * 1e3,
+        "peakFluenceJcm2": peak / 1e4,
+        "pulseEnergyUJ": energy * 1e6,
+        "effectiveCount": n_eff,
+        "regionUm": region, "hatchUm": hatch, "passes": passes, "dxUm": dx,
+        "nSegments": len(segs),
+    }
+    return out
 
 
 def shared_background_payload() -> dict[str, Any]:

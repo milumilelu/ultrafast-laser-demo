@@ -53,12 +53,214 @@ MISSING_INPUTS = [
 ]
 
 MAT_OUT = ROOT / "data" / "materials"
+PROTO_OUT = ROOT / "data" / "protocols"
 REF_OUT = ROOT / "data" / "references"
 REPORTS = ROOT / "docs" / "reports"
 
 
 def sha256_file(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# 参考协议库：**源文献的实验装置条件**（与材料属性分离）
+#
+# 为什么不写在材料卡里（2026-09-17，ADR-0021）：
+#   光束参数（λ/τ/f/w0）是**设备量**，不是材料属性。核函数 ``a = δ·ln(F/F_th)``
+#   是局域能流定律，与光斑无关 —— 实测 ``response.py`` 与 `solver.py` 里
+#   **零** w0 引用，材料卡里的 w0 从不进入物理计算，只作「条件门禁」。
+#   留在卡里会被误读成材料参数，而且同一台设备的条件要在多张卡里各抄一遍。
+#
+# 三层归属（不得互相串位）：
+#   * 材料属性（δ、F_th、相结构）        → 材料卡 data/materials/*.json
+#   * 源文献装置条件（协议，本表）        → data/protocols/<protocol_id>.json
+#   * 本机设备（NA/M²/名义 w0 与 zR）     → data/config/shared_experiment_background.json
+#
+# ``reference_peak_fluence_J_m2`` 原先挂在卡片的 ``validity_domain`` 下，同属光束量，
+# 一并迁入协议，由加载器装配回 ``spec.reference_protocol``。
+# ---------------------------------------------------------------------------
+
+PROTOCOLS: dict[str, dict[str, Any]] = {
+    "ysz_crown_machining_effective_n3": {
+        "protocol_id": "ysz_crown_machining_effective_n3",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.03e-06,
+                "rel_tol": 0.01,
+            },
+            "pulse_duration_s": {
+                "value": 2.08e-13,
+                "rel_tol": 0.05,
+            },
+            "repetition_rate_Hz": {
+                "value": 33300.0,
+                "rel_tol": 0.01,
+            },
+            "spot_radius_m": {
+                "value": 1.6e-05,
+                "rel_tol": 0.05,
+            },
+        },
+        "required_history": {
+            "effective_count": 3,
+            "definition": "area_equivalent_ysz_eq9",
+        },
+        "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+        "reference_peak_fluence_J_m2": 501000.0,
+        "source_ids": ["S01"],
+    },
+    "cfrp_t700_yb01_threshold_only": {
+        "protocol_id": "cfrp_t700_yb01_threshold_only",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 8e-07,
+                "rel_tol": 0.02,
+            },
+            "pulse_duration_s": {
+                "value": 9e-14,
+                "rel_tol": 0.05,
+            },
+            "repetition_rate_Hz": {
+                "value": 1000.0,
+                "rel_tol": 0.02,
+            },
+            "spot_radius_m": {
+                "value": 3e-06,
+                "rel_tol": 0.1,
+            },
+        },
+        "required_history": {
+            "effective_count": 1,
+            "definition": "Fth1 反演基准，仅为占位定义",
+        },
+        "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。",
+        "source_ids": ["S03", "S18", "S21"],
+    },
+    "inconel718_n10_threshold_reference": {
+        "protocol_id": "inconel718_n10_threshold_reference",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.03e-06,
+                "rel_tol": 0.02,
+            },
+            "pulse_duration_s": {
+                "value": 2.67e-13,
+                "rel_tol": 0.1,
+            },
+        },
+        "required_history": {
+            "effective_count": 10,
+            "definition": "fixed_point_N10",
+        },
+        "protocol_note": "同文加工系列约 267 fs；λ=1030 nm 为绿光/近红外分支。",
+        "source_ids": ["S04", "S12", "S13"],
+    },
+    "sic4h_cface_multishot_reference_N": {
+        "protocol_id": "sic4h_cface_multishot_reference_N",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.035e-06,
+                "rel_tol": 0.01,
+            },
+            "pulse_duration_s": {
+                "value": 3e-13,
+                "rel_tol": 0.05,
+            },
+            "repetition_rate_Hz": {
+                "value": 200000.0,
+                "rel_tol": 0.02,
+            },
+        },
+        "required_history": {
+            "effective_count": 720,
+            "definition": "original_paper_effective_N",
+        },
+        "protocol_note": "首个参考评估器允许直接输入原文的有效 N；完整工况映射须另核原图/原表。",
+        "source_ids": ["S02"],
+    },
+    "diamond_scd_1030nm_400fs_threshold": {
+        "protocol_id": "diamond_scd_1030nm_400fs_threshold",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.03e-06,
+                "rel_tol": 0.01,
+            },
+            "pulse_duration_s": {
+                "value": 4e-13,
+                "rel_tol": 0.05,
+            },
+        },
+        "required_history": {
+            "effective_count": 1,
+            "definition": "single_pulse",
+        },
+        "protocol_note": "不得与 700 fs 分支混合取平均。",
+        "source_ids": ["S05"],
+    },
+    "diamond_scd_1030nm_700fs_threshold": {
+        "protocol_id": "diamond_scd_1030nm_700fs_threshold",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.03e-06,
+                "rel_tol": 0.01,
+            },
+            "pulse_duration_s": {
+                "value": 7e-13,
+                "rel_tol": 0.05,
+            },
+        },
+        "required_history": {
+            "effective_count": 1,
+            "definition": "single_pulse",
+        },
+        "protocol_note": "与 400 fs 分支分开保存，禁止混用。",
+        "source_ids": ["S05"],
+    },
+    "diamond_scd_1030nm_candidate": {
+        "protocol_id": "diamond_scd_1030nm_candidate",
+        "protocol_version": "1.0.0",
+        "kind": "source_experiment_beam",
+        "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        "required_laser": {
+            "wavelength_m": {
+                "value": 1.03e-06,
+                "rel_tol": 0.01,
+            },
+            "pulse_duration_s": {
+                "value": None,
+                "rel_tol": 0.05,
+            },
+            "repetition_rate_Hz": {
+                "value": 300000.0,
+                "rel_tol": 0.05,
+            },
+        },
+        "required_history": {
+            "effective_count": 1,
+            "definition": "single_pulse",
+        },
+        "protocol_note": "脉宽未核实：完整条件核实前不启用。",
+        "source_ids": ["S06"],
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -134,20 +336,12 @@ CARDS: list[dict[str, Any]] = [
                               "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"},
         "reference_protocol": {
             "protocol_id": "ysz_crown_machining_effective_n3",
-            "required_laser": {
-                "wavelength_m": {"value": 1.03e-06, "rel_tol": 0.01},
-                "pulse_duration_s": {"value": 208e-15, "rel_tol": 0.05},
-                "repetition_rate_Hz": {"value": 33300.0, "rel_tol": 0.01},
-                "spot_radius_m": {"value": 1.6e-05, "rel_tol": 0.05},
-            },
-            "required_history": {"effective_count": 3, "definition": "area_equivalent_ysz_eq9"},
-            "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+            "protocol_file": "data/protocols/ysz_crown_machining_effective_n3.json",
         },
         "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
         "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
         "validity_domain": {"scope": "reference_protocol_only",
                             "protocol_id": "ysz_crown_machining_effective_n3",
-                            "peak_fluence_J_m2": 501000.0,
                             "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。"},
         "applicability": {"physical_material_prediction_allowed": True,
                           "condition": "仅限 reference_protocol 声明的条件匹配工况"},
@@ -214,14 +408,7 @@ CARDS: list[dict[str, Any]] = [
                                "history_activation_policy": "由扫描多脉冲试验反演；未标定条件默认关闭"},
         "reference_protocol": {
             "protocol_id": "cfrp_t700_yb01_threshold_only",
-            "required_laser": {
-                "wavelength_m": {"value": 8.0e-07, "rel_tol": 0.02},
-                "pulse_duration_s": {"value": 90e-15, "rel_tol": 0.05},
-                "repetition_rate_Hz": {"value": 1000.0, "rel_tol": 0.02},
-                "spot_radius_m": {"value": 3.0e-06, "rel_tol": 0.10},
-            },
-            "required_history": {"effective_count": 1, "definition": "Fth1 反演基准，仅为占位定义"},
-            "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。",
+            "protocol_file": "data/protocols/cfrp_t700_yb01_threshold_only.json",
         },
         "source_equation": "Fth(N) = Fth1 * N^(S-1)",
         "source_figure_or_table": "F01 P16-P18（S03）",
@@ -258,12 +445,7 @@ CARDS: list[dict[str, Any]] = [
                                "note": "阈值的 N 定义固定为 10，禁止当作单脉冲阈值。"},
         "reference_protocol": {
             "protocol_id": "inconel718_n10_threshold_reference",
-            "required_laser": {
-                "wavelength_m": {"value": 1.03e-06, "rel_tol": 0.02},
-                "pulse_duration_s": {"value": 267e-15, "rel_tol": 0.10},
-            },
-            "required_history": {"effective_count": 10, "definition": "fixed_point_N10"},
-            "protocol_note": "同文加工系列约 267 fs；λ=1030 nm 为绿光/近红外分支。",
+            "protocol_file": "data/protocols/inconel718_n10_threshold_reference.json",
         },
         "source_equation": "固定点 N=10 阈值（图4）",
         "source_figure_or_table": "F01 P22-P24（S04 图4）",
@@ -340,13 +522,7 @@ CARDS: list[dict[str, Any]] = [
                                "history_activation_policy": "未标定扫描条件，默认关闭；逐事件扩展须另标 engineering_extension"},
         "reference_protocol": {
             "protocol_id": "sic4h_cface_multishot_reference_N",
-            "required_laser": {
-                "wavelength_m": {"value": 1.035e-06, "rel_tol": 0.01},
-                "pulse_duration_s": {"value": 300e-15, "rel_tol": 0.05},
-                "repetition_rate_Hz": {"value": 200000.0, "rel_tol": 0.02},
-            },
-            "required_history": {"effective_count": 720, "definition": "original_paper_effective_N"},
-            "protocol_note": "首个参考评估器允许直接输入原文的有效 N；完整工况映射须另核原图/原表。",
+            "protocol_file": "data/protocols/sic4h_cface_multishot_reference_N.json",
         },
         "source_equation": "式(5) N_eff=K*(2*w0*f)/v；式(6) Fth(N)=F_inf+(F1-F_inf)*exp(-k*(N-1))；式(7) AR=delta_eff*ln(F0/Fth(N))",
         "source_figure_or_table": "F01 P38-P43（S02 图6、式5–式7）",
@@ -385,10 +561,7 @@ CARDS: list[dict[str, Any]] = [
         "history_definition": {"mode": "none", "exposure_count_meaning": "not_applicable"},
         "reference_protocol": {
             "protocol_id": "diamond_scd_1030nm_400fs_threshold",
-            "required_laser": {"wavelength_m": {"value": 1.03e-06, "rel_tol": 0.01},
-                               "pulse_duration_s": {"value": 400e-15, "rel_tol": 0.05}},
-            "required_history": {"effective_count": 1, "definition": "single_pulse"},
-            "protocol_note": "不得与 700 fs 分支混合取平均。",
+            "protocol_file": "data/protocols/diamond_scd_1030nm_400fs_threshold.json",
         },
         "source_equation": "单脉冲阈值（2019）",
         "source_figure_or_table": "F01 P47（S05）",
@@ -415,10 +588,7 @@ CARDS: list[dict[str, Any]] = [
         "history_definition": {"mode": "none", "exposure_count_meaning": "not_applicable"},
         "reference_protocol": {
             "protocol_id": "diamond_scd_1030nm_700fs_threshold",
-            "required_laser": {"wavelength_m": {"value": 1.03e-06, "rel_tol": 0.01},
-                               "pulse_duration_s": {"value": 700e-15, "rel_tol": 0.05}},
-            "required_history": {"effective_count": 1, "definition": "single_pulse"},
-            "protocol_note": "与 400 fs 分支分开保存，禁止混用。",
+            "protocol_file": "data/protocols/diamond_scd_1030nm_700fs_threshold.json",
         },
         "source_equation": "单脉冲阈值（2019）",
         "source_figure_or_table": "F01 P48（S05）",
@@ -447,11 +617,7 @@ CARDS: list[dict[str, Any]] = [
         "history_definition": {"mode": "none", "exposure_count_meaning": "not_applicable"},
         "reference_protocol": {
             "protocol_id": "diamond_scd_1030nm_candidate",
-            "required_laser": {"wavelength_m": {"value": 1.03e-06, "rel_tol": 0.01},
-                               "pulse_duration_s": {"value": None, "rel_tol": 0.05},
-                               "repetition_rate_Hz": {"value": 300000.0, "rel_tol": 0.05}},
-            "required_history": {"effective_count": 1, "definition": "single_pulse"},
-            "protocol_note": "脉宽未核实：完整条件核实前不启用。",
+            "protocol_file": "data/protocols/diamond_scd_1030nm_candidate.json",
         },
         "source_equation": "单脉冲阈值候选（2026）",
         "source_figure_or_table": "F01 P49（S06）",
@@ -543,11 +709,53 @@ def read_f01_records() -> list[dict[str, Any]]:
     return out
 
 
+def _write_text_lf(path: Path, text: str, encoding: str = "utf-8") -> None:
+    """**显式写 LF**。
+
+    仓库 ``.gitattributes`` 是 ``* text=auto eol=lf``。若用默认的
+    ``Path.write_text``，Windows 上文本模式会把 ``\\n`` 翻成 ``\\r\\n``：git 归一化后
+    **看不到 diff**，但文件的 sha256 变了 —— 于是
+    ``tests/test_dataset_permissions.py::test_material_cards_unchanged``
+    会莫名其妙报「材料卡被改写」，而 ``git diff`` 空空如也。2026-09-17 实测踩到。
+    """
+    path.write_text(text, encoding=encoding, newline="\n")
+
+
 def write_card(card: dict[str, Any]) -> Path:
     MAT_OUT.mkdir(parents=True, exist_ok=True)
     p = MAT_OUT / f"{card['id']}.json"
-    p.write_text(json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_text_lf(p, json.dumps(card, ensure_ascii=False, indent=2) + "\n")
     return p
+
+
+def write_protocols(protocols: dict[str, dict[str, Any]]) -> list[Path]:
+    """参考协议**独立成文件**：``data/protocols/<protocol_id>.json``。
+
+    卡片只保留 ``reference_protocol.protocol_id`` + ``protocol_file`` 引用；
+    完整协议体由加载器装配回 ``MaterialSpec.reference_protocol``（形状不变，
+    因此 config/references/webcontract 等消费方零改动）。
+
+    ``required_laser`` 里值为 ``null`` 的项（如未核实的脉宽）**必须原样保留** ——
+    ``null`` 表示「缺数据」，不得用相近值补，也不得删除该键。
+    """
+    PROTO_OUT.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for pid, proto in protocols.items():
+        p = PROTO_OUT / f"{pid}.json"
+        _write_text_lf(p, json.dumps(proto, ensure_ascii=False, indent=2) + "\n")
+        paths.append(p)
+    return paths
+
+
+def protocol_null_report(protocols: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """列出协议里值为 null 的条件项，便于人工确认「缺数据」被如实保留。"""
+    rows = []
+    for pid, proto in protocols.items():
+        for key, spec in (proto.get("required_laser") or {}).items():
+            if isinstance(spec, dict) and spec.get("value") is None:
+                rows.append({"protocol_id": pid, "condition": key, "value": None,
+                             "note": "条件未确认：不得用相近值补"})
+    return rows
 
 
 def write_thermal_symbol_cards(cards: list[dict[str, Any]]) -> None:
@@ -707,21 +915,29 @@ def main() -> int:
         "limitations": ["禁止导出物理 μm 深度。", "禁止据此比较七种材料真实加工速度。"],
         "provenance": {"source_ids": [], "from": "细则 2.2 沙盒规则"},
     }
+    # --- 参考协议库（先写协议，卡片里的引用才能解析）------------------------
+    proto_paths = write_protocols(PROTOCOLS)
+    print(f"== 参考协议：{len(proto_paths)} 个写入 {PROTO_OUT.relative_to(ROOT)} ==")
+    null_rows = protocol_null_report(PROTOCOLS)
+    for r in null_rows:
+        print(f"   [条件未确认] {r['protocol_id']}.{r['condition']} = null（原样保留）")
+
     paths = [write_card(c) for c in CARDS]
     sp = MAT_OUT / "_synthetic_demo_isotropic.json"
-    sp.write_text(json.dumps(synthetic, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_text_lf(sp, json.dumps(synthetic, ensure_ascii=False, indent=2) + "\n")
     paths.append(sp)
     print(f"== 执行卡：{len(paths)} 张写入 {MAT_OUT.relative_to(ROOT)} ==")
 
     # --- 原始来源快照（与执行卡分开保存）----------------------------------
     snap = REF_OUT / "material_card_templates_source_snapshot.json"
     shutil.copyfile(F02, snap)
-    (REF_OUT / "seven_materials_parameter_register_source_snapshot.sha256").write_text(
-        f"{before[str(F01)]}  seven_materials_parameter_register.xlsx\n", encoding="utf-8")
-    (REF_OUT / "INPUT_VERSION_FINGERPRINTS.json").write_text(json.dumps({
+    _write_text_lf(
+        REF_OUT / "seven_materials_parameter_register_source_snapshot.sha256",
+        f"{before[str(F01)]}  seven_materials_parameter_register.xlsx\n")
+    _write_text_lf(REF_OUT / "INPUT_VERSION_FINGERPRINTS.json", json.dumps({
         "source_files": hash_rows,
         "note": "原始来源快照按字节复制；执行卡另行生成，两者分别保存。",
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    }, ensure_ascii=False, indent=2) + "\n")
     print(f"== 来源快照写入 {REF_OUT.relative_to(ROOT)} ==")
 
     # --- 迁移 CSV ---------------------------------------------------------
@@ -782,6 +998,37 @@ def main() -> int:
     for r in adm:
         print(f"  [{r['verdict']}] {r['probe']}（期望 {r['expected']}）→ {r['observed_codes']}")
 
+    # --- 协议注册表（谁在引用哪个协议、协议要求什么）------------------------
+    users: dict[str, list[str]] = {}
+    for card in list(CARDS) + [synthetic]:
+        rp = card.get("reference_protocol") or {}
+        if rp.get("protocol_id"):
+            users.setdefault(rp["protocol_id"], []).append(card["id"])
+    reg_rows = []
+    for pid, proto in PROTOCOLS.items():
+        rl = proto.get("required_laser") or {}
+        reg_rows.append({
+            "protocol_id": pid,
+            "protocol_file": f"data/protocols/{pid}.json",
+            "used_by_cards": "|".join(sorted(users.get(pid, []))) or "(无)",
+            "n_cards": len(users.get(pid, [])),
+            "required_laser_keys": "|".join(sorted(rl)),
+            "required_laser_values": "|".join(
+                f"{k}={rl[k].get('value')}" for k in sorted(rl)),
+            "effective_count": (proto.get("required_history") or {}).get("effective_count"),
+            "reference_peak_fluence_J_m2": proto.get("reference_peak_fluence_J_m2"),
+        })
+    reg_csv = REPORTS / "protocol_registry.csv"
+    with open(reg_csv, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(reg_rows[0].keys()))
+        w.writeheader()
+        w.writerows(reg_rows)
+    print(f"== 协议注册表：{len(reg_rows)} 行 → {reg_csv.relative_to(ROOT)} ==")
+    orphan = [p for p in PROTOCOLS if not users.get(p)]
+    if orphan:
+        print(f"  !! 无人引用的协议：{orphan}", file=sys.stderr)
+        return 1
+
     # --- 哈希复核：原文件必须不变 -----------------------------------------
     after = {str(F01): sha256_file(F01), str(F02): sha256_file(F02)}
     unchanged = before == after
@@ -790,7 +1037,8 @@ def main() -> int:
         print("  !! 原文件被修改，违反细则 4.4 第 6 项", file=sys.stderr)
         return 1
 
-    (REPORTS / "input_hash_check.csv").write_text(
+    _write_text_lf(
+        REPORTS / "input_hash_check.csv",
         "input,expected_sha256,actual_sha256,match,note\n" + "\n".join(
             f"{r['input']},{r['expected_sha256']},{r.get('actual_sha256')},{r['match']},{r.get('note','')}"
             for r in hash_rows) + "\n",

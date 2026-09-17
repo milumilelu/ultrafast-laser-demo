@@ -1,4 +1,6 @@
 """审查发现的非零时钟、离焦、单位和持久化回归。"""
+import ast
+import builtins
 import copy
 import math
 
@@ -114,3 +116,89 @@ def test_local_visibility_uses_global_surface_for_upstream_occluders():
     local = first_intersection_visibility(h[:, 9:12], g, k, section=(1, 4, 9, 12), global_height=h)
     full = first_intersection_visibility(h, g, k, section=(1, 4, 9, 12))
     assert np.array_equal(local, full)
+
+
+# ---------------------------------------------------------------------------
+# 错误码常量必须真的被导入
+#
+# 2026-09-17 审查发现：``webcontract.py`` 有 12 处、``config.py`` 有 1 处
+# ``UFDemoError(<错误码>, ...)`` 用到的常量**从未 import**。这些都在*错误路径*上，
+# 所以正常运行时全绿、测试也全绿；一旦真的触发，抛的却是 ``NameError`` 而不是
+# 结构化错误 —— 于是「能力不足/参数不匹配」被伪装成「程序崩了」，
+# 恰好违背本项目「宁可拒绝，不可静默降级」的红线。
+# 本测试用静态扫描把这类问题挡在提交之前，不需要额外依赖。
+# ---------------------------------------------------------------------------
+
+_ERROR_FACTORY = "UFDemoError"
+
+
+def _bound_names(tree):
+    """模块内所有被绑定的名字（保守超集：import、赋值、def/class、形参、except as…）。"""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                names.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                names.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            names.add(node.id)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        elif isinstance(node, ast.MatchAs) and node.name:
+            names.add(node.name)
+        elif isinstance(node, ast.MatchStar) and node.name:
+            names.add(node.name)
+    return names
+
+
+def _unbound_error_codes(path):
+    """返回 ``[(行号, 名字), …]``：``UFDemoError`` 首个实参是未绑定名字的位置。"""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    bound = _bound_names(tree) | set(dir(builtins))
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        f = node.func
+        if isinstance(f, ast.Name) and f.id == _ERROR_FACTORY:
+            a0 = node.args[0]
+            if isinstance(a0, ast.Name) and a0.id not in bound:
+                bad.append((node.lineno, a0.id))
+    return bad
+
+
+def test_error_code_constants_are_imported():
+    offenders = {}
+    for py in sorted((ROOT / "src" / "ufdemo").glob("*.py")):
+        bad = _unbound_error_codes(py)
+        if bad:
+            offenders[py.name] = bad
+    assert not offenders, (
+        "以下 UFDemoError(...) 的第一个参数是未绑定名字，触发时会抛 NameError "
+        "而不是结构化错误码：" + repr(offenders)
+    )
+
+
+def test_scanner_detects_missing_error_code_import(tmp_path):
+    """自检：扫描器必须能识别「漏导入错误码」这种写法，避免测试退化成恒真。"""
+    bad_src = (
+        "from ufdemo.errors import UFDemoError\n"
+        "raise UFDemoError(NOT_IMPORTED_CODE, 'boom')\n"
+    )
+    p = tmp_path / "bad.py"
+    p.write_text(bad_src, encoding="utf-8")
+    assert _unbound_error_codes(p) == [(2, "NOT_IMPORTED_CODE")]
+
+    good_src = (
+        "from ufdemo.errors import CONFIG_INVALID, UFDemoError\n"
+        "raise UFDemoError(CONFIG_INVALID, 'boom')\n"
+    )
+    q = tmp_path / "good.py"
+    q.write_text(good_src, encoding="utf-8")
+    assert _unbound_error_codes(q) == []

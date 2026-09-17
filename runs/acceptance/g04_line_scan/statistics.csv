@@ -18,8 +18,8 @@ max_depth_internal,3.000000000000001e-07,m
 center_depth_internal,2.0000000000000007e-07,m
 mean_depth_internal,2.361380496720783e-08,m
 n_abating_cells,1453,
-max_cumulative_fluence_internal,93940.1382835433,J/m^2
-max_illumination_count,7,
+max_cumulative_fluence_internal,93890.56098930651,J/m^2
+max_illumination_count,3,
 max_exposure_count,3,
 height_min_internal,-3.000000000000001e-07,m
 height_max_internal,0.0,m

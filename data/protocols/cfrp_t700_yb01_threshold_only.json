@@ -1,0 +1,34 @@
+{
+  "protocol_id": "cfrp_t700_yb01_threshold_only",
+  "protocol_version": "1.0.0",
+  "kind": "source_experiment_beam",
+  "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+  "required_laser": {
+    "wavelength_m": {
+      "value": 8e-07,
+      "rel_tol": 0.02
+    },
+    "pulse_duration_s": {
+      "value": 9e-14,
+      "rel_tol": 0.05
+    },
+    "repetition_rate_Hz": {
+      "value": 1000.0,
+      "rel_tol": 0.02
+    },
+    "spot_radius_m": {
+      "value": 3e-06,
+      "rel_tol": 0.1
+    }
+  },
+  "required_history": {
+    "effective_count": 1,
+    "definition": "Fth1 反演基准，仅为占位定义"
+  },
+  "protocol_note": "整体等效参数，不是树脂与纤维分别的参数。",
+  "source_ids": [
+    "S03",
+    "S18",
+    "S21"
+  ]
+}

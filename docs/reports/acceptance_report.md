@@ -1,10 +1,10 @@
 # 验收报告（批次 A–H：M0 最小闭环 + T07 参考评估器 + T09 界面 + T10 查表 + T11–T13 分相结构 + T14 受限阈值协议/七材料能力入口/标签）
 
-- 生成时间（UTC）：2026-09-15T05:11:16.349020+00:00
-- 代码版本：commit=71e7b5455618ce2e91ac99036543730210652a80｜工作区有改动=True｜源码清单哈希=0be69aa638e8cfa0…
+- 生成时间（UTC）：2026-09-17T04:40:55.616705+00:00
+- 代码版本：commit=f8524bcf37ecea0158e301cabe55b48ad6ecdaa4｜工作区有改动=True｜源码清单哈希=3c16e51277d51892…
 - 执行环境：Python 3.13.14｜NumPy 2.3.5｜Windows-11-10.0.26100-SP0
 - 结果目录：`C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance`
-- 汇总：通过 181｜失败 0｜未运行 2
+- 汇总：通过 180｜失败 1｜未运行 2
 
 > 公式核查、数值实现验证、实验复现三栏分开记录。本报告不含任何实验复现结论：
 > A–C 只做到「公式核查 + 数值实现验证」；D 的 YSZ/SiC 参考量也只做到「公式核查」；
@@ -78,10 +78,10 @@
 | G09-UI | app.py（Streamlit） | 初始 solve_count | 0 | 0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 初始无冻结结果 | frozen=None | frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交计算：solve_count 恰好 +1 | 1 | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-15T05:10:06.498054+00:00） |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 改参数未提交：旧结果标为「上一次运行」且不求解 | is_stale=True｜solve_count=1｜界面出现「上一次运行」 | is_stale=True｜solve_count=1｜label=上一次运行（2026-09-17T04:39:52.284938+00:00） |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 改参数后 solve_count 不变 | 1 | 1 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 快照回放 / 切图层 / 旋转视图 / 切截面：solve_count 不变 | 1（不变） | 1 |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260915T051006_cdbz |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 读取历史运行：read_count +1 且 solve_count 不变 | read_count=1｜solve_count=0 | read_count=1｜solve_count=0｜run_id=ui_run_20260917T043952_bd1c |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 回放水印与导出 watermark.json 逐字段一致 | material_id/run_mode/unit_mode 全部一致 | 导出存在=True｜material_id=analytic_fixture_not_a_material｜run_mode=reference_case｜unit_mode=SI |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 参考评估器「评估」：不进入逐事件求解、不产生形貌 | solve_count=0｜产出参考结果｜frozen=None | solve_count=0｜有参考结果=True｜frozen=None |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 查表「查值」：不触发求解、不读取历史 | solve_count=0｜产出查表结果｜read_count=0 | solve_count=0｜read_count=0｜有查表结果=True |  |  | 通过 | 数值实现验证 |
@@ -96,7 +96,7 @@
 | G09-UI | app.py（Streamlit） | 参考模式：加速面板如实说明未启用批量（不假装加速过） | grouped=False｜effective_mode=reference｜含「非全局误差证明」边界说明 | grouped=False｜effective_mode=reference｜boundary_note 存在=True |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 几何修正：入射角/动态角度可切换，且支持范围与近似标注可见 | solve_count+1｜斜入射与动态角度均生效｜面板含 n_z/入射角支持范围 | solve_count=0→1｜斜入射=True｜动态角度=True｜光轴夹角=59.99999999999999｜法向厚度转换=0｜支持范围 n_z≥0.5、入射角≤60.0 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 正入射：不显示几何修正面板（未启用即不显示） | geometry_diagnostics 为空字典 | 空字典=True |  |  | 通过 | 数值实现验证 |
-| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 401 个运行目录 |  |  | 通过 | 数值实现验证 |
+| G09-UI | app.py（Streamlit） | 探针运行输出位置 | 隔离到 C:\Users\RZF\Desktop\博士课题资料\工艺仿真软件\ultrafast-demo\runs\acceptance\_ui_probe | 已写入 461 个运行目录 |  |  | 通过 | 数值实现验证 |
 | G09-UI | app.py（Streamlit） | 提交运行目录 | 存在 metadata.json | 存在 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | cfrp_laminated_ply.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
 | G09-demo | app.py（端到端链路） | 示例发现 | alsic_particle_composite.json 出现在界面示例列表 | 在列表中 |  |  | 通过 | 数值实现验证 |
@@ -193,7 +193,7 @@
 | G07 | （竖直墙 + 60°） | 遮挡出现在墙的迎光侧 | 被遮挡列全部位于墙(x=80)迎光侧 | 列范围=64–79 |  | < 80 | 通过 | 数值实现验证 |
 | G08 | examples/ten_pulses.json | 深度场最大绝对差 (m) | 与逐脉冲参考接近浮点一致 | 0.000e+00（尺度 2.000e-06） | 0.000e+00 | rel <= 1e-12 | 通过 | 数值实现验证 |
 | G08 | examples/ten_pulses.json | 归一化 L2 差（完整逐脉冲对照） | 与逐脉冲参考接近浮点一致 | 0.000e+00 | 0.000e+00 | <= 1e-12 | 通过 | 数值实现验证 |
-| G08 | examples/ten_pulses.json | 曝光/照射计数逐位一致 | 与参考逐位相等 | 曝光=True｜照射=True |  | 两者皆为 True | 通过 | 数值实现验证 |
+| G08 | examples/ten_pulses.json | 曝光/照射计数逐位一致 | 与参考逐位相等 | 曝光=True｜照射=False |  | 两者皆为 True | 失败 | 数值实现验证 |
 | G08 | axial_defocus + zR=10μm（弱几何变化） | 深度场逐点判据通过数 | 全部单元满足 abs(d_g-d_ref) <= 0.01|d_ref| + 0.01δ_test | 25921/25921 通过（最大相对差 0.5639%） | 5.6394e-03 | rel <= 1% | 通过 | 数值实现验证 |
 | G08 | axial_defocus + zR=10μm（弱几何变化） | 去除体积相对差 | abs(Vg-Vr) <= 0.01|Vr| + A_domain·0.01δ_test | 0.1888% | 1.8882e-03 | rel <= 1% | 通过 | 数值实现验证 |
 | G08 | 分组 × 分相/历史/动态角度 | 配置层拦截（CONFIG_INVALID） | 三种组合全部被拒 | {'structured_interface': True, 'history_enabled': True, 'dynamic_angle': True} |  | 全部为 True | 通过 | 数值实现验证 |

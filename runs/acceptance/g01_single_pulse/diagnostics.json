@@ -6,20 +6,20 @@
     },
     "fluence_ledger": {
       "emitted_energy_internal": 1.1606702178681694e-05,
-      "estimated_intercepted_energy_internal": 1.1606702060440452e-05,
-      "max_domain_truncated_fraction": 1.0187324539501219e-08,
+      "estimated_intercepted_energy_internal": 1.1533345290497603e-05,
+      "max_domain_truncated_fraction": 0.006320218013246448,
       "note": "发射能量与估计截获能量之差只反映数值裁剪与计算域边界，不得解释为热损失或被吸收能量；这只检查光学输入账本。",
       "threshold_window": {
-        "cells_skipped_fraction": null,
+        "cells_skipped_fraction": 0.7622430161874189,
         "collapsed_events": 0,
-        "enabled": false,
-        "events": 0,
+        "enabled": true,
+        "events": 1,
         "margin": 1.25,
-        "tail_window_cells_total": 0,
-        "threshold_internal": null,
-        "window_cells_total": 0
+        "tail_window_cells_total": 14641,
+        "threshold_internal": 10000.0,
+        "window_cells_total": 3481
       },
-      "window_radius_policy": "tail_epsilon"
+      "window_radius_policy": "above_threshold"
     },
     "geometry": {
       "backfacing_cells_total": 0,
@@ -88,12 +88,14 @@
       "used_for_depth": false
     }
   },
-  "elapsed_s": 0.0021460000425577164,
+  "elapsed_s": 0.0018584999488666654,
   "errors": [],
   "events_processed": 1,
   "events_total": 1,
   "removal_available": true,
   "run_id": "g01_single_pulse",
   "status": "completed",
-  "warnings": []
+  "warnings": [
+    "窗口半径策略 above_threshold：最坏情况有 0.632% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.7622430161874189）。"
+  ]
 }

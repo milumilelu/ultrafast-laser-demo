@@ -17,5 +17,7 @@
   "source_type": "synthetic_definition",
   "unit_mode": "dimensionless",
   "unit_system": "dimensionless",
-  "warnings": []
+  "warnings": [
+    "窗口半径策略 above_threshold：最坏情况有 0.632% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.7622430161874189）。"
+  ]
 }

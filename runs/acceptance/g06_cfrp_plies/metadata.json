@@ -13,15 +13,15 @@
     "y",
     "x"
   ],
-  "card_sha256": "fa235f8fab4dc66e85a14a1ac9f76545fe11769d12861526edc0f25635af0a45",
+  "card_sha256": "9ccb47330930d71548de7cb302960012faee38fdb333c629478e444a2aefab2c",
   "card_version": "1.0.0",
   "code": {
     "build_batch": "L",
-    "commit": "71e7b5455618ce2e91ac99036543730210652a80",
+    "commit": "f8524bcf37ecea0158e301cabe55b48ad6ecdaa4",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 27,
-    "source_manifest_sha256": "0be69aa638e8cfa0615cb6b5d01db5cbf600fd29e1f8aad985c909317468f95a",
+    "source_manifest_sha256": "3c16e51277d518929df74b16e044957a9a3c8cea58c448b9079c244fd3c358b8",
     "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
@@ -46,6 +46,14 @@
   },
   "events_processed": 16,
   "evidence_status": "literature_reported",
+  "focus": {
+    "geometry_feedback": "fixed_geometry",
+    "layer_refocus": false,
+    "note": "焦平面恒为**加工前原始上表面**，不随槽底下降做 Z 调整（任务书 §6）；表面下降造成的**被动离焦**由 geometry_feedback 单独决定。",
+    "passive_defocus": false,
+    "strategy": "fixed_original_surface",
+    "z_m": 0.0
+  },
   "laser_metadata": {
     "direction_unit_input": [
       0.0,
@@ -61,7 +69,7 @@
     "peak_fluence_internal": 7.3890560989306495,
     "power_measurement_location": "sample_surface"
   },
-  "material_card_sha256": "fa235f8fab4dc66e85a14a1ac9f76545fe11769d12861526edc0f25635af0a45",
+  "material_card_sha256": "9ccb47330930d71548de7cb302960012faee38fdb333c629478e444a2aefab2c",
   "run_id": "g06_cfrp_plies",
   "run_mode": "synthetic_demo",
   "schema_version": "1.0",
@@ -223,6 +231,7 @@
     "evidence_status": "literature_reported",
     "material_id": "cfrp_t700_yb01_800nm",
     "notes": [
+      "焦平面：固定于加工前原始上表面 z0 = 0.000000 µm，1 段端点全部一致；被动离焦由 geometry_feedback 单独决定（axial_defocus ⇒ w(d)=w0·sqrt(1+(d/zR)²)）。",
       "合成演示：所有长度按 L_ref 归一、能流按 F_ref 归一，禁止导出物理 μm 深度。",
       "分相结构：逐事件响应取自 structure.phases 的内联合成定义；材料卡仅提供身份与能力，其 SI 响应字段 ['threshold_J_m2'] 不参与计算（各相阈值单独标定）。",
       "合成结构：laminated_fiber_composite｜算法 structure_v1｜种子 20260911｜相 ['resin', 'fiber']。跨相截断是有损近似，被截断的候选量记为「未应用候选去除体积」，不是剩余能量。",
@@ -235,12 +244,13 @@
   },
   "warnings": [
     "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+    "窗口半径策略 above_threshold：最坏情况有 0.091% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.6707874227358237）。",
     "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
     "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
   ],
   "watermark": {
     "acceleration": "off",
-    "card_sha256": "fa235f8fab4dc66e85a14a1ac9f76545fe11769d12861526edc0f25635af0a45",
+    "card_sha256": "9ccb47330930d71548de7cb302960012faee38fdb333c629478e444a2aefab2c",
     "card_version": "1.0.0",
     "depth_label": "L_ref",
     "evidence_status": "literature_reported",
@@ -259,11 +269,12 @@
     "unit_system": "dimensionless",
     "warnings": [
       "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；被截断的候选量计入「未应用候选去除体积」。",
+      "窗口半径策略 above_threshold：最坏情况有 0.091% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.6707874227358237）。",
       "跨相截断频繁：14/16 个事件被相界面截断。此时逐事件形貌对相界面的位置更敏感，属于有损近似，请谨慎解读。",
       "有 14 个事件出现相标签切换，累计 106 个单元暴露到新相；新相响应从下一个真实脉冲开始，本脉冲不对新相重复施加完整能量。"
     ]
   },
-  "written_at_utc": "2026-09-15T05:10:03.083151+00:00",
+  "written_at_utc": "2026-09-17T04:39:48.858243+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

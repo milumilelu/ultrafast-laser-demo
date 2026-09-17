@@ -31,21 +31,7 @@
   },
   "reference_protocol": {
     "protocol_id": "inconel718_n10_threshold_reference",
-    "required_laser": {
-      "wavelength_m": {
-        "value": 1.03e-06,
-        "rel_tol": 0.02
-      },
-      "pulse_duration_s": {
-        "value": 2.67e-13,
-        "rel_tol": 0.1
-      }
-    },
-    "required_history": {
-      "effective_count": 10,
-      "definition": "fixed_point_N10"
-    },
-    "protocol_note": "同文加工系列约 267 fs；λ=1030 nm 为绿光/近红外分支。"
+    "protocol_file": "data/protocols/inconel718_n10_threshold_reference.json"
   },
   "source_equation": "固定点 N=10 阈值（图4）",
   "source_figure_or_table": "F01 P22-P24（S04 图4）",

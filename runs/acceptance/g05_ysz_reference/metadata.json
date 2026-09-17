@@ -2,11 +2,11 @@
   "case_id": "g05_ysz_effective_n_conversion",
   "code": {
     "build_batch": "L",
-    "commit": "71e7b5455618ce2e91ac99036543730210652a80",
+    "commit": "f8524bcf37ecea0158e301cabe55b48ad6ecdaa4",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 27,
-    "source_manifest_sha256": "0be69aa638e8cfa0615cb6b5d01db5cbf600fd29e1f8aad985c909317468f95a",
+    "source_manifest_sha256": "3c16e51277d518929df74b16e044957a9a3c8cea58c448b9079c244fd3c358b8",
     "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
@@ -20,7 +20,7 @@
   },
   "events_processed": 0,
   "labels": {
-    "card_sha256": "56b00c09771a194ab4e868ef277f3c6d2d0a6134e1e3ab2d6a73a7022d95efff",
+    "card_sha256": "42cd061acfe195b79e99beda9e014666aef222eb8f9df17168bc01842c9f2481",
     "card_version": "1.0.0",
     "evidence_status": "literature_reported",
     "material_id": "zirconia_ysz_machining_effective_n3",
@@ -56,7 +56,7 @@
     "evidence_status": "literature_reported",
     "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
     "labels": {
-      "card_sha256": "56b00c09771a194ab4e868ef277f3c6d2d0a6134e1e3ab2d6a73a7022d95efff",
+      "card_sha256": "42cd061acfe195b79e99beda9e014666aef222eb8f9df17168bc01842c9f2481",
       "card_version": "1.0.0",
       "evidence_status": "literature_reported",
       "material_id": "zirconia_ysz_machining_effective_n3",
@@ -114,7 +114,7 @@
   "run_mode": "reference_case",
   "schema_version": "1.0",
   "status": "completed",
-  "written_at_utc": "2026-09-15T05:10:00.216551+00:00",
+  "written_at_utc": "2026-09-17T04:39:46.232712+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

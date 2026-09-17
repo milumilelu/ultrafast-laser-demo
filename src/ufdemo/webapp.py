@@ -355,6 +355,18 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     curves_dir=ctx.curves_dir,   # U07：实测曲线驱动的求解
                 )
             self._send_json(payload)
+        elif path == "/api/demo-rect":
+            # 极简演示：材料卡 + 间距/层数/区域即可，协议参数从卡里自动读。
+            # 与 /api/solve 走同一个求解器与落盘，只是省掉了手填完整配置。
+            body = self._read_body()
+            with _SOLVE_LOCK:
+                payload = W.demo_rect_payload(
+                    body,
+                    out_base=ctx.runs_dir,
+                    project_root=ctx.project_root,
+                    curves_dir=ctx.curves_dir,
+                )
+            self._send_json(payload)
         elif path == "/api/preview":
             body = self._read_body()
             params = body.get("params")

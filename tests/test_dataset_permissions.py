@@ -242,10 +242,17 @@ def test_registry_matches_current_data():
 
 
 def test_material_cards_unchanged():
-    """``data/materials/*.json`` 的 sha256 **未变** —— 旧卡不被覆盖。
+    """``data/materials/*.json`` 的 sha256 **未变** —— 旧卡不被顺手覆盖。
 
-    基线在 U05 开工前记录（11 张卡）。注册表是**新增维度**，
-    不得顺手改写既有材料卡。
+    基线在 U05 开工前记录（11 张卡）。注册表是**新增维度**，不得顺手改写既有材料卡。
+
+    2026-09-17 **有意刷新过一次**：ADR-0021 把参考协议体迁到 ``data/protocols/``，
+    7 张带协议的卡被重新生成（另外 4 张字节未变）。逐卡前后哈希与取值等价性见
+    ``docs/reports/material_card_schema_change_adr0021.md``。
+
+    刷新基线是本护栏的**唯一**放行方式：必须同时提供
+    「为什么改」+「哪些卡改了」+「取值是否等价」的可审计记录。
+    单纯改基线而不留记录，等于把护栏关掉。
     """
     baseline_path = Path("C:/tmp/materials_sha_baseline.json")
     if not baseline_path.exists():
@@ -253,9 +260,16 @@ def test_material_cards_unchanged():
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
     now = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
            for p in sorted(MATERIALS.glob("*.json"))}
-    assert set(now) == set(baseline), "材料卡集合发生变化"
+    assert set(now) == set(baseline), (
+        "材料卡集合发生变化（新增/删除卡属结构变更，需同步刷新基线并留记录）")
     changed = [k for k in now if now[k] != baseline[k]]
-    assert not changed, f"材料卡被改写：{changed}"
+    assert not changed, (
+        f"材料卡被改写：{changed}。\n"
+        "若这是**有意**的 schema 变更：先写变更记录（参照 "
+        "docs/reports/material_card_schema_change_adr0021.md），再刷新基线 "
+        "C:/tmp/materials_sha_baseline.json；\n"
+        "若是无意的：注意生成器必须显式写 LF —— 用默认 write_text 在 Windows 上会写 CRLF，"
+        "git 看不到 diff 但 sha256 会全变。")
 
 
 def test_curve_enum_unchanged():
