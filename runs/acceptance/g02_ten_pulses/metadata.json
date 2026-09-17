@@ -17,11 +17,11 @@
   "card_version": "1.0.0",
   "code": {
     "build_batch": "L",
-    "commit": "f8524bcf37ecea0158e301cabe55b48ad6ecdaa4",
+    "commit": "e4f7f3f8602161929800aa8f9f308620267221ff",
     "git_available": true,
     "python": "3.13.14",
     "source_file_count": 27,
-    "source_manifest_sha256": "3c16e51277d518929df74b16e044957a9a3c8cea58c448b9079c244fd3c358b8",
+    "source_manifest_sha256": "a987c84f54afbebdadee5dbb484b2a3a87edf5aa7a267ff21bf815e06a3c5b31",
     "ufdemo_version": "0.9.1",
     "working_tree_dirty": true
   },
@@ -158,7 +158,7 @@
       "窗口半径策略 above_threshold：最坏情况有 0.632% 的发射能量未计入窗口。这部分能流**低于响应阈值**，对去除量的贡献恰好为 0，不是「能流尾部超出计算域」，也不得解释为热损失；累计能流/照射计数等**剂量观测量**只在该半径内统计，被裁掉的窗口格数占比见 fluence_ledger.threshold_window（0.7622430161874189）。"
     ]
   },
-  "written_at_utc": "2026-09-17T04:39:39.135231+00:00",
+  "written_at_utc": "2026-09-17T05:51:46.087758+00:00",
   "written_files": [
     "config.json",
     "material_snapshot.json",

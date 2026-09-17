@@ -1229,13 +1229,18 @@ def demo_rect_payload(
 
     rp = spec.reference_protocol or {}
     rl = rp.get("required_laser") or {}
+    # 「源文献装置描述」（w0/f 等）—— ADR-0021 补记后不再参与门禁，
+    # 但 demo 仍从这里取 w0/f 来装配能流场与扫描速度（保持既有演示行为不变）。
+    sb = rp.get("source_beam") or {}
 
     def _v(key: str) -> float:
         x = (rl.get(key) or {}).get("value")
+        if not (isinstance(x, (int, float)) and x > 0):
+            x = (sb.get(key) or {}).get("value") if isinstance(sb.get(key), Mapping) else sb.get(key)
         if not isinstance(x, (int, float)) or x <= 0:
             raise UFDemoError(
                 CONFIG_INVALID,
-                f"材料卡未声明 reference_protocol.required_laser.{key}，无法自动配置",
+                f"材料卡协议未声明 {key}（required_laser / source_beam 均无），无法自动配置",
                 field_path=f"reference_protocol.required_laser.{key}",
                 requirement="带正 value 的条目",
                 suggestion="换用带完整 reference_protocol 的材料卡，或走完整版界面手填参数。",

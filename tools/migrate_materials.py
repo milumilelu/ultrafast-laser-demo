@@ -83,9 +83,15 @@ def sha256_file(p: Path) -> str:
 PROTOCOLS: dict[str, dict[str, Any]] = {
     "ysz_crown_machining_effective_n3": {
         "protocol_id": "ysz_crown_machining_effective_n3",
-        "protocol_version": "1.0.0",
+        "protocol_version": "1.1.0",
         "kind": "source_experiment_beam",
         "note": "本文件描述**源文献实验装置**的光束条件与历史定义，用于判定材料卡的适用域。它不是本机设备参数 —— 本机光学见 data/config/shared_experiment_background.json（NA/M²/名义 w0 与 zR，ADR-0020 冻结）。",
+        # ⚠️ required_laser 只登记**决定 F_th/δ 有效性的物理量**（λ、τ）。
+        # 2026-09-17 订正（ADR-0021 补记）：w0 与 f 是「源文献装置的描述」，不是适用条件 ——
+        # 实测保持 F0/N_eff/hatch-per-w0 不变、只扫 w0 ∈ {16,8,4,2,0.874} µm，
+        # 中心深度逐位相同（相对极差 4.5e-16）⇒ w0 不进物理。把 w0 声明成 required
+        # 会把「文献材料参数 + 本机光束」这条正确用法拦死。f 只经 N_eff 起作用，而
+        # N_eff 已单独硬门禁（required_history.effective_count）。
         "required_laser": {
             "wavelength_m": {
                 "value": 1.03e-06,
@@ -95,14 +101,11 @@ PROTOCOLS: dict[str, dict[str, Any]] = {
                 "value": 2.08e-13,
                 "rel_tol": 0.05,
             },
-            "repetition_rate_Hz": {
-                "value": 33300.0,
-                "rel_tol": 0.01,
-            },
-            "spot_radius_m": {
-                "value": 1.6e-05,
-                "rel_tol": 0.05,
-            },
+        },
+        "source_beam": {
+            "spot_radius_m": 1.6e-05,
+            "repetition_rate_Hz": 33300.0,
+            "note": "源文献装置描述（非适用条件）：w0=16 µm、f=33.3 kHz；仅供对照与 N_eff=(π/4)(2w₀f)/v 的复算，不参与门禁。",
         },
         "required_history": {
             "effective_count": 3,
@@ -836,18 +839,27 @@ def admission_report(cards_by_id: dict[str, MaterialSpec]) -> list[dict[str, Any
     run_probe("unconfirmed_pulsewidth_candidate", "diamond_scd_cvd_1030nm_pulsewidth_unconfirmed", "reject",
               reference_conditions={"protocol_id": "diamond_scd_1030nm_candidate",
                                     "fluence_basis": "incident_peak_fluence", "effective_count": 1})
-    # 6. YSZ 有效加工核条件匹配 → 允许
+    # 6. YSZ 有效加工核条件匹配 → 允许。
+    #    2026-09-17：改用**本机名义光斑 0.874 µm** —— 证明「文献材料参数 + 本机光束」
+    #    这条正确用法现在能过门禁（协议不再把 w0 声明为 required，见 ADR-0021 补记）。
     run_probe("ysz_protocol_matched", "zirconia_ysz_machining_effective_n3", "accept",
               laser={"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15,
                      "pulse_energy_J": 2.01464053689406e-04, "repetition_rate_Hz": 33300.0,
-                     "spot_radius_m": 1.6e-05, "focus_xyz_m": [0.0, 0.0, 0.0],
+                     "spot_radius_m": 0.874e-06, "focus_xyz_m": [0.0, 0.0, 0.0],
                      "direction_unit": [0.0, 0.0, 1.0]},
               reference_conditions={"protocol_id": "ysz_crown_machining_effective_n3",
                                     "fluence_basis": "incident_peak_fluence", "effective_count": 3})
-    # 7. YSZ 条件不匹配（光斑半径不符）→ 必须拒绝
+    # 7. YSZ **有效脉冲数**不一致 → 必须拒绝（这才是真正不可替换的条件）。
+    #    2026-09-17 订正：原探针用「光斑半径不符」当拒绝理由 —— 但 w0 不进物理
+    #    （ADR-0021 补记实测极差 4.5e-16），协议也不再把它声明为 required。
+    #    真正不可替换的是**累积制程**：该 F_th 是 N_eff=3 的有效阈值，换 N 就是换参数。
     run_probe("ysz_protocol_mismatch", "zirconia_ysz_machining_effective_n3", "reject",
+              laser={"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15,
+                     "pulse_energy_J": 2.01464053689406e-04, "repetition_rate_Hz": 33300.0,
+                     "spot_radius_m": 0.874e-06, "focus_xyz_m": [0.0, 0.0, 0.0],
+                     "direction_unit": [0.0, 0.0, 1.0]},
               reference_conditions={"protocol_id": "ysz_crown_machining_effective_n3",
-                                    "fluence_basis": "incident_peak_fluence", "effective_count": 3})
+                                    "fluence_basis": "incident_peak_fluence", "effective_count": 10})
     return rows
 
 

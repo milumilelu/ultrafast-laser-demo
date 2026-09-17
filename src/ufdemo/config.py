@@ -1534,44 +1534,58 @@ def check_reference_conditions(config: RunConfig, material: Any) -> list[UFDemoE
                 )
             )
 
-    mapping = {
-        "wavelength_m": config.laser.wavelength_m,
-        "pulse_duration_s": config.laser.pulse_duration_s,
-        "repetition_rate_Hz": config.laser.repetition_rate_Hz,
-        "spot_radius_m": config.laser.spot_radius_m,
+    # --- 光束条件：**只匹配决定 δ/F_th 是否适用的量** -----------------------
+    #
+    # 2026-09-17 收窄。原先这里把协议 ``required_laser`` 的每一项都与运行配置逐字比对，
+    # 其中包括 ``spot_radius_m`` 与 ``repetition_rate_Hz`` —— 那两项**不是** δ/F_th 的
+    # 适用条件，要求它们匹配会**把「用本机光束」这条正确用法拦死**：
+    #
+    #   * ``spot_radius_m``：**实测与深度无关**。保持峰值能流 F0、有效脉冲数 N_eff、
+    #     搭接比 hatch/w₀ 不变，扫 w₀ = 16 → 8 → 4 → 2 → 0.874 µm（相差 18 倍），
+    #     中心深度**逐位相同**（62.660403 µm，相对极差 4.5e-16）。
+    #     ⟹ w₀ 只是尺度/机器描述，不是物理量。
+    #   * ``repetition_rate_Hz``：单脉冲阈值不依赖频率；多脉冲效应已由
+    #     ``required_history.effective_count`` 单独硬门禁（见上），频率是**冗余条件**。
+    #     若改频率，只需同步改扫描速度使 N_eff 不变即可（这正是 N_eff 门禁的语义）。
+    #
+    # **必须保留** ``wavelength_m`` 与 ``pulse_duration_s``：两者**真的**决定 δ/F_th 是否适用
+    # （吸收与「脉宽→阈值」标度关系）。在 700 fs 条件下套用 400 fs 卡标定的阈值就是错的
+    # （金刚石两分支阈值 82000 vs 129000 J/m²，见 ``materials._probe_diamond_no_pulsewidth_mix``）。
+    #
+    # 光束条件仍随材料卡声明、也在结果里可查；只是 w₀ 与 f 不再阻塞执行。
+    # 依据与实测见 ``docs/decisions/ADR-0021`` 补记。
+    cond_map = {
+        "wavelength_m": ("波长", config.laser.wavelength_m),
+        "pulse_duration_s": ("脉宽", config.laser.pulse_duration_s),
     }
-    zh = {
-        "wavelength_m": "波长",
-        "pulse_duration_s": "脉宽",
-        "repetition_rate_Hz": "重复频率",
-        "spot_radius_m": "1/e² 光斑半径",
-    }
-    for key, spec in (proto.get("required_laser", {}) or {}).items():
+    for key, (zh_name, actual) in cond_map.items():
+        spec = (proto.get("required_laser", {}) or {}).get(key)
+        if spec is None:
+            continue
         value = spec.get("value") if isinstance(spec, Mapping) else spec
-        tol = float(spec.get("rel_tol", 1e-6)) if isinstance(spec, Mapping) else 1e-6
-        actual = mapping.get(key)
         if value is None:
             continue
+        tol = float(spec.get("rel_tol", 1e-6)) if isinstance(spec, Mapping) else 1e-6
         if actual is None:
             errs.append(
                 UFDemoError(
                     CONDITION_MISMATCH,
-                    f"激光{zh.get(key, key)}未确认，参考模式拒绝定量执行",
+                    f"激光{zh_name}未确认，无法判定 δ/F_th 是否适用",
                     field_path=f"laser.{key}",
                     actual=None,
-                    requirement=f"该协议要求 {value}（相对容差 {tol:g}）",
-                    suggestion="补齐条件，或改用显式 synthetic_demo；禁止校验失败后自动切换模式。",
+                    requirement=f"该协议标定条件为 {value}（相对容差 {tol:g}）",
+                    suggestion="补齐该条件，或改用显式 synthetic_demo；禁止校验失败后自动切换模式。",
                 )
             )
         elif abs(float(actual) - float(value)) / abs(float(value)) > tol:
             errs.append(
                 UFDemoError(
                     CONDITION_MISMATCH,
-                    f"激光{zh.get(key, key)}与材料卡协议不匹配",
+                    f"激光{zh_name}超出该协议的标定条件",
                     field_path=f"laser.{key}",
                     actual=float(actual),
                     requirement=f"{value}（相对容差 {tol:g}）",
-                    suggestion="核对参数来源；超出有效窗口时不得继续作为 reference_case 输出。",
+                    suggestion="δ/F_th 只在该条件下标定；换条件需重新标定或换卡，不得直接沿用。",
                 )
             )
     return errs

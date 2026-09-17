@@ -460,6 +460,9 @@ _PROTOCOL_RUNTIME_KEYS: tuple[str, ...] = (
     "protocol_note",
     "reference_peak_fluence_J_m2",
     "source_ids",
+    # 「源文献装置描述」（w0/f 等）—— **不参与门禁**，仅供对照与 N_eff 复算。
+    # 2026-09-17 订正：w0 实测不进物理（极差 4.5e-16），f 只经 N_eff 起作用。
+    "source_beam",
 )
 
 

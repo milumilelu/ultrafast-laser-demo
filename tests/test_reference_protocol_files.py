@@ -123,12 +123,68 @@ def test_loader_assembles_same_shape_as_before_separation():
     rp = spec.reference_protocol
     for key in ("protocol_id", "required_laser", "required_history", "protocol_note"):
         assert key in rp, f"装配后缺少分离前就有的键：{key}"
-    assert sorted(rp["required_laser"]) == [
-        "pulse_duration_s", "repetition_rate_Hz", "spot_radius_m", "wavelength_m"]
-    assert rp["required_laser"]["spot_radius_m"]["value"] == pytest.approx(1.6e-05)
+    # 2026-09-17 订正（ADR-0021 补记）：w0/f 实测不进物理（极差 4.5e-16），
+    # 协议不再把它们声明为 required —— required 只留真正决定 F_th/δ 有效性的 λ/τ。
+    assert sorted(rp["required_laser"]) == ["pulse_duration_s", "wavelength_m"]
     # 新增：来源可追溯 + 峰值能流随协议
     assert rp["protocol_file"] == "data/protocols/ysz_crown_machining_effective_n3.json"
     assert rp["reference_peak_fluence_J_m2"] == pytest.approx(501000.0)
+
+
+def test_descriptive_beam_quantities_are_not_required():
+    """w0/f 是**源文献装置描述**，不是适用条件 —— 不得出现在 required_laser 里。
+
+    实测依据（ADR-0021 补记）：保持 F0/N_eff/hatch-per-w0 不变、只扫
+    w0 ∈ {16,8,4,2,0.874} µm，中心深度逐位相同（相对极差 4.5e-16）。
+    把 w0 声明成 required 会把「文献材料参数 + 本机光束」这条正确用法拦死。
+    """
+    spec = load_material_card(DATA_MATERIALS / "zirconia_ysz_machining_effective_n3.json")
+    rp = spec.reference_protocol
+    leaked = sorted(set(rp["required_laser"]) & {"spot_radius_m", "repetition_rate_Hz"})
+    assert not leaked, f"描述性光束量被声明成了 required：{leaked}"
+    # 但仍须保留为**描述信息**（对照与 N_eff 复算要用）
+    sb = rp.get("source_beam") or {}
+    assert sb.get("spot_radius_m") == pytest.approx(1.6e-05)
+    assert sb.get("repetition_rate_Hz") == pytest.approx(33300.0)
+
+
+def test_own_machine_beam_passes_the_gate():
+    """「文献材料参数 + 本机光束」必须能过门禁 —— 这是正确用法，不是越界。"""
+    from ufdemo.config import RunConfig, validate_run
+
+    spec = load_material_card(DATA_MATERIALS / "zirconia_ysz_machining_effective_n3.json")
+    rp = spec.reference_protocol
+    raw = {
+        "schema_version": "1.0", "run_mode": "reference_case", "unit_system": "SI",
+        "material_id": spec.id,
+        "material_card_file": str(DATA_MATERIALS / "zirconia_ysz_machining_effective_n3.json"),
+        "seed": 0,
+        "grid": {"nx": 41, "ny": 41, "dx_m": 1e-6, "dy_m": 1e-6, "center_x_m": 0.0,
+                 "center_y_m": 0.0, "origin": "cell_center", "initial_surface": "flat",
+                 "initial_height_m": 0.0},
+        "laser": {"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15,
+                  "pulse_energy_J": 6.0118e-07, "repetition_rate_Hz": 33300.0,
+                  "spot_radius_m": 0.874e-06, "focus_xyz_m": [0.0, 0.0, 0.0],
+                  "direction_unit": [0.0, 0.0, 1.0]},
+        "path": {"t0_s": 0.0, "segments": [
+            {"segment_id": 0, "pass_id": 0, "start_s": 0.0, "end_s": 1.0 / 33300.0,
+             "start_xyz_m": [0, 0, 0], "end_xyz_m": [0, 0, 0], "laser_on": True}]},
+        "solver": {"mode": "reference", "geometry_feedback": "fixed_geometry",
+                   "history_enabled": False},
+        "output": {"snapshot_policy": "none"},
+        "reference_conditions": {"protocol_id": rp["protocol_id"],
+                                 "fluence_basis": "incident_peak_fluence",
+                                 "effective_count": 3,
+                                 "threshold_kind": "machining_effective",
+                                 "threshold_J_m2": 12890.0,
+                                 "spot_radius_m": 0.874e-06,
+                                 "repetition_rate_Hz": 33300.0,
+                                 "peak_fluence_J_m2": 501000.0},
+    }
+    rep = validate_run(RunConfig.from_dict(raw), spec)
+    assert rep.ok, "本机光斑 + 文献材料参数被门禁拦下：\n" + "\n".join(
+        f"  [{e.get('code')}] {e.get('message')} ({e.get('field_path')})"
+        for e in rep.errors)
 
 
 def test_protocols_match_generator_literals():
