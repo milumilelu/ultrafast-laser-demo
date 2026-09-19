@@ -43,6 +43,21 @@ def _ok(tmp_path, **over):
     return out
 
 
+def test_estimate_only_returns_plan_without_creating_a_run(tmp_path):
+    """预估阶段复用同一配置校验，但不得执行求解或写入运行结果。"""
+    out = demo_rect_payload(
+        {**BASE, "processMode": "actual", "pulseDurationFs": 208.0,
+         "repetitionRateKHz": 40.0, "speedMmS": 20.0},
+        out_base=tmp_path,
+        project_root=ROOT,
+        estimate_only=True,
+    )
+    assert out["status"] == "estimated"
+    assert out["estimatedEvents"] > 0
+    assert out["estimatedSeconds"] > 0
+    assert not list(tmp_path.rglob("metadata.json"))
+
+
 # ---------------------------------------------------------------------------
 # 1. 覆盖能生效
 # ---------------------------------------------------------------------------
