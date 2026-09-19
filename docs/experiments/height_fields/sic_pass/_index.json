@@ -1,0 +1,769 @@
+[
+  {
+    "set": "120组",
+    "src": "10_高度.csv",
+    "file": "120组_10_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.016,
+    "z_max_um": 76.99
+  },
+  {
+    "set": "120组",
+    "src": "11_高度.csv",
+    "file": "120组_11_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 2.457,
+    "z_max_um": 98.558
+  },
+  {
+    "set": "120组",
+    "src": "12_高度.csv",
+    "file": "120组_12_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.052,
+    "z_max_um": 112.086
+  },
+  {
+    "set": "120组",
+    "src": "13-newlinestar_高度.csv",
+    "file": "120组_13-newlinestar_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.252,
+    "z_max_um": 96.081
+  },
+  {
+    "set": "120组",
+    "src": "14_高度.csv",
+    "file": "120组_14_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 1.64,
+    "z_max_um": 86.906
+  },
+  {
+    "set": "120组",
+    "src": "15_高度.csv",
+    "file": "120组_15_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.196,
+    "z_max_um": 109.128
+  },
+  {
+    "set": "120组",
+    "src": "16_高度.csv",
+    "file": "120组_16_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.047,
+    "z_max_um": 82.733
+  },
+  {
+    "set": "120组",
+    "src": "17_高度.csv",
+    "file": "120组_17_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.127,
+    "z_max_um": 54.173
+  },
+  {
+    "set": "120组",
+    "src": "18_高度.csv",
+    "file": "120组_18_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.174,
+    "z_max_um": 177.439
+  },
+  {
+    "set": "120组",
+    "src": "19_高度.csv",
+    "file": "120组_19_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.016,
+    "z_max_um": 187.44
+  },
+  {
+    "set": "120组",
+    "src": "1_高度.csv",
+    "file": "120组_1_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 1.158,
+    "z_max_um": 67.052
+  },
+  {
+    "set": "120组",
+    "src": "20_高度.csv",
+    "file": "120组_20_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.007,
+    "z_max_um": 189.094
+  },
+  {
+    "set": "120组",
+    "src": "21_高度.csv",
+    "file": "120组_21_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.019,
+    "z_max_um": 188.446
+  },
+  {
+    "set": "120组",
+    "src": "22_高度.csv",
+    "file": "120组_22_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.021,
+    "z_max_um": 187.393
+  },
+  {
+    "set": "120组",
+    "src": "23_高度.csv",
+    "file": "120组_23_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.017,
+    "z_max_um": 180.819
+  },
+  {
+    "set": "120组",
+    "src": "24_高度.csv",
+    "file": "120组_24_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.036,
+    "z_max_um": 187.966
+  },
+  {
+    "set": "120组",
+    "src": "25-newlinestart_高度.csv",
+    "file": "120组_25-newlinestart_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.132,
+    "z_max_um": 84.165
+  },
+  {
+    "set": "120组",
+    "src": "26_高度.csv",
+    "file": "120组_26_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.113,
+    "z_max_um": 103.399
+  },
+  {
+    "set": "120组",
+    "src": "27_高度.csv",
+    "file": "120组_27_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 4.972,
+    "z_max_um": 35.48
+  },
+  {
+    "set": "120组",
+    "src": "28_高度.csv",
+    "file": "120组_28_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.051,
+    "z_max_um": 47.665
+  },
+  {
+    "set": "120组",
+    "src": "29_高度.csv",
+    "file": "120组_29_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.274,
+    "z_max_um": 69.459
+  },
+  {
+    "set": "120组",
+    "src": "2_高度.csv",
+    "file": "120组_2_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.839,
+    "z_max_um": 71.792
+  },
+  {
+    "set": "120组",
+    "src": "30_高度.csv",
+    "file": "120组_30_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.792,
+    "z_max_um": 175.12
+  },
+  {
+    "set": "120组",
+    "src": "31_高度.csv",
+    "file": "120组_31_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.029,
+    "z_max_um": 181.41
+  },
+  {
+    "set": "120组",
+    "src": "32_高度.csv",
+    "file": "120组_32_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.031,
+    "z_max_um": 182.196
+  },
+  {
+    "set": "120组",
+    "src": "33_高度.csv",
+    "file": "120组_33_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.022,
+    "z_max_um": 178.745
+  },
+  {
+    "set": "120组",
+    "src": "34_高度.csv",
+    "file": "120组_34_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.008,
+    "z_max_um": 187.903
+  },
+  {
+    "set": "120组",
+    "src": "35_高度.csv",
+    "file": "120组_35_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.013,
+    "z_max_um": 189.589
+  },
+  {
+    "set": "120组",
+    "src": "36_高度.csv",
+    "file": "120组_36_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.002,
+    "z_max_um": 180.983
+  },
+  {
+    "set": "120组",
+    "src": "3_高度.csv",
+    "file": "120组_3_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.134,
+    "z_max_um": 77.525
+  },
+  {
+    "set": "120组",
+    "src": "4_高度.csv",
+    "file": "120组_4_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.363,
+    "z_max_um": 89.728
+  },
+  {
+    "set": "120组",
+    "src": "5_高度.csv",
+    "file": "120组_5_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 1.807,
+    "z_max_um": 83.659
+  },
+  {
+    "set": "120组",
+    "src": "6_高度.csv",
+    "file": "120组_6_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.146,
+    "z_max_um": 99.792
+  },
+  {
+    "set": "120组",
+    "src": "7_高度.csv",
+    "file": "120组_7_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 3.248,
+    "z_max_um": 82.566
+  },
+  {
+    "set": "120组",
+    "src": "8_高度.csv",
+    "file": "120组_8_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.392,
+    "z_max_um": 86.623
+  },
+  {
+    "set": "120组",
+    "src": "9_高度.csv",
+    "file": "120组_9_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.139,
+    "z_max_um": 79.148
+  },
+  {
+    "set": "20组",
+    "src": "1 2 3 4_高度.csv",
+    "file": "20组_1 2 3 4_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.174,
+    "z_max_um": 95.373
+  },
+  {
+    "set": "20组",
+    "src": "13 14 15 16_高度.csv",
+    "file": "20组_13 14 15 16_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 6.545,
+    "z_max_um": 63.819
+  },
+  {
+    "set": "20组",
+    "src": "17 18 19 20_高度.csv",
+    "file": "20组_17 18 19 20_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 1.727,
+    "z_max_um": 61.191
+  },
+  {
+    "set": "20组",
+    "src": "5 6 7 8_高度.csv",
+    "file": "20组_5 6 7 8_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.204,
+    "z_max_um": 68.672
+  },
+  {
+    "set": "20组",
+    "src": "9 10 11 12_高度.csv",
+    "file": "20组_9 10 11 12_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.035,
+    "z_max_um": 93.579
+  },
+  {
+    "set": "60组",
+    "src": "10_高度.csv",
+    "file": "60组_10_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 2.939,
+    "z_max_um": 72.249
+  },
+  {
+    "set": "60组",
+    "src": "11_高度.csv",
+    "file": "60组_11_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 11.067,
+    "z_max_um": 76.414
+  },
+  {
+    "set": "60组",
+    "src": "12_高度.csv",
+    "file": "60组_12_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.143,
+    "z_max_um": 83.75
+  },
+  {
+    "set": "60组",
+    "src": "13-newlinestart_高度.csv",
+    "file": "60组_13-newlinestart_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.869,
+    "z_max_um": 39.443
+  },
+  {
+    "set": "60组",
+    "src": "14_高度.csv",
+    "file": "60组_14_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.164,
+    "z_max_um": 38.609
+  },
+  {
+    "set": "60组",
+    "src": "15_高度.csv",
+    "file": "60组_15_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.931,
+    "z_max_um": 73.499
+  },
+  {
+    "set": "60组",
+    "src": "16_高度.csv",
+    "file": "60组_16_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.601,
+    "z_max_um": 79.565
+  },
+  {
+    "set": "60组",
+    "src": "17_高度.csv",
+    "file": "60组_17_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.012,
+    "z_max_um": 53.183
+  },
+  {
+    "set": "60组",
+    "src": "18_高度.csv",
+    "file": "60组_18_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.137,
+    "z_max_um": 47.884
+  },
+  {
+    "set": "60组",
+    "src": "1_高度.csv",
+    "file": "60组_1_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.277,
+    "z_max_um": 50.115
+  },
+  {
+    "set": "60组",
+    "src": "2_高度.csv",
+    "file": "60组_2_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.061,
+    "z_max_um": 57.354
+  },
+  {
+    "set": "60组",
+    "src": "3_高度.csv",
+    "file": "60组_3_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.366,
+    "z_max_um": 35.309
+  },
+  {
+    "set": "60组",
+    "src": "4_高度.csv",
+    "file": "60组_4_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 4.628,
+    "z_max_um": 53.541
+  },
+  {
+    "set": "60组",
+    "src": "5_高度.csv",
+    "file": "60组_5_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.014,
+    "z_max_um": 90.112
+  },
+  {
+    "set": "60组",
+    "src": "6_高度.csv",
+    "file": "60组_6_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.034,
+    "z_max_um": 84.281
+  },
+  {
+    "set": "60组",
+    "src": "7-newlinestart_高度.csv",
+    "file": "60组_7-newlinestart_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.082,
+    "z_max_um": 57.683
+  },
+  {
+    "set": "60组",
+    "src": "8_高度.csv",
+    "file": "60组_8_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.577,
+    "z_max_um": 46.867
+  },
+  {
+    "set": "60组",
+    "src": "9_高度.csv",
+    "file": "60组_9_高度.npz",
+    "shape": [
+      768,
+      1024
+    ],
+    "px_um": 0.688347,
+    "valid_fraction": 0.999999,
+    "z_min_um": 0.004,
+    "z_max_um": 87.868
+  }
+]
