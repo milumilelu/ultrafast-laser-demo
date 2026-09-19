@@ -1,0 +1,422 @@
+[
+  {
+    "group": 1,
+    "name": "MeasureData20260528095129",
+    "file": "001_MeasureData20260528095129.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 52.273
+  },
+  {
+    "group": 2,
+    "name": "MeasureData20260528095327",
+    "file": "002_MeasureData20260528095327.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 67.071
+  },
+  {
+    "group": 3,
+    "name": "MeasureData20260528095540",
+    "file": "003_MeasureData20260528095540.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 55.659
+  },
+  {
+    "group": 4,
+    "name": "MeasureData20260528095738",
+    "file": "004_MeasureData20260528095738.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 61.727
+  },
+  {
+    "group": 5,
+    "name": "MeasureData20260528095917",
+    "file": "005_MeasureData20260528095917.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 61.618
+  },
+  {
+    "group": 6,
+    "name": "MeasureData20260528100107",
+    "file": "006_MeasureData20260528100107.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 56.335
+  },
+  {
+    "group": 7,
+    "name": "MeasureData20260528100247",
+    "file": "007_MeasureData20260528100247.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 57.027
+  },
+  {
+    "group": 8,
+    "name": "MeasureData20260528100438",
+    "file": "008_MeasureData20260528100438.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 57.357
+  },
+  {
+    "group": 9,
+    "name": "MeasureData20260528100713",
+    "file": "009_MeasureData20260528100713.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 44.518
+  },
+  {
+    "group": 10,
+    "name": "MeasureData20260528100912",
+    "file": "010_MeasureData20260528100912.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 45.803
+  },
+  {
+    "group": 11,
+    "name": "MeasureData20260528101129",
+    "file": "011_MeasureData20260528101129.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 49.446
+  },
+  {
+    "group": 12,
+    "name": "MeasureData20260528101338",
+    "file": "012_MeasureData20260528101338.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 48.252
+  },
+  {
+    "group": 13,
+    "name": "MeasureData20260528101543",
+    "file": "013_MeasureData20260528101543.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 35.283
+  },
+  {
+    "group": 14,
+    "name": "MeasureData20260528101753",
+    "file": "014_MeasureData20260528101753.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 49.502
+  },
+  {
+    "group": 15,
+    "name": "MeasureData20260528101950",
+    "file": "015_MeasureData20260528101950.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 37.417
+  },
+  {
+    "group": 16,
+    "name": "MeasureData20260528102159",
+    "file": "016_MeasureData20260528102159.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 38.746
+  },
+  {
+    "group": 17,
+    "name": "MeasureData20260528102357",
+    "file": "017_MeasureData20260528102357.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 33.168
+  },
+  {
+    "group": 18,
+    "name": "MeasureData20260528102616",
+    "file": "018_MeasureData20260528102616.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 49.401
+  },
+  {
+    "group": 19,
+    "name": "MeasureData20260528102819",
+    "file": "019_MeasureData20260528102819.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 39.321
+  },
+  {
+    "group": 20,
+    "name": "MeasureData20260528103025",
+    "file": "020_MeasureData20260528103025.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 51.632
+  },
+  {
+    "group": 21,
+    "name": "MeasureData20260528103227",
+    "file": "021_MeasureData20260528103227.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 51.889
+  },
+  {
+    "group": 22,
+    "name": "MeasureData20260528103433",
+    "file": "022_MeasureData20260528103433.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 38.906
+  },
+  {
+    "group": 23,
+    "name": "MeasureData20260528103641",
+    "file": "023_MeasureData20260528103641.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 40.301
+  },
+  {
+    "group": 24,
+    "name": "MeasureData20260528103846",
+    "file": "024_MeasureData20260528103846.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 33.707
+  },
+  {
+    "group": 25,
+    "name": "MeasureData20260528104046",
+    "file": "025_MeasureData20260528104046.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 54.038
+  },
+  {
+    "group": 26,
+    "name": "MeasureData20260528104251",
+    "file": "026_MeasureData20260528104251.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 44.755
+  },
+  {
+    "group": 27,
+    "name": "MeasureData20260528104457",
+    "file": "027_MeasureData20260528104457.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 33.784
+  },
+  {
+    "group": 28,
+    "name": "MeasureData20260528104659",
+    "file": "028_MeasureData20260528104659.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 28.626
+  },
+  {
+    "group": 29,
+    "name": "MeasureData20260528104834",
+    "file": "029_MeasureData20260528104834.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 47.562
+  },
+  {
+    "group": 30,
+    "name": "MeasureData20260528104947",
+    "file": "030_MeasureData20260528104947.npz",
+    "shape": [
+      1536,
+      2048
+    ],
+    "dx_um": 0.344174,
+    "dy_um": 0.344174,
+    "valid_fraction": 1.0,
+    "z_min_um": 0.0,
+    "z_max_um": 35.03
+  }
+]
