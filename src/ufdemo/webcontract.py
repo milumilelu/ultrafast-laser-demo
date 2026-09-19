@@ -208,6 +208,7 @@ def run_to_payload(
         "eventsTotal": int(frozen.events_total),
         "removalAvailable": bool(frozen.removal_available),
         "stats": jsonable(frozen.statistics),
+        "roiStats": jsonable(getattr(frozen, "roi_statistics", [])),
         "warnings": jsonable(frozen.warnings),
         "errors": jsonable(frozen.errors),
         "elapsedS": jsonable(frozen.elapsed_s),
@@ -1052,18 +1053,36 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
                               field_path="calibration.experimentFile", actual=0,
                               requirement="≥ 1 行")
         tau = cands[0]
-    rows = [r for r in t.rows if abs(r.pulse_duration_fs - tau) < 1e-9 and r.mean_depth_um > 0]
-    if len(rows) < 4:
+    rows = [r for r in t.rows if abs(r.pulse_duration_fs - tau) < 1e-9]
+    fit_rows = [r for r in rows if r.use_for_fit is not False and r.mean_depth_um > 0]
+    quality = {
+        "nRawRows": t.n_raw_rows,
+        "nParsedRows": len(t.rows),
+        "nSelectedPulseDuration": len(rows),
+        "nNonPositiveRetained": sum(1 for r in rows if r.mean_depth_um <= 0),
+        "nExcludedByQuality": sum(1 for r in rows if r.use_for_fit is False),
+        "excludedReasons": [
+            {"sampleId": r.sample_id, "sourceRow": r.source_row,
+             "reason": ("use_for_fit=false" if r.use_for_fit is False else "non_positive_depth")}
+            for r in rows if r.use_for_fit is False or r.mean_depth_um <= 0
+        ],
+    }
+    if len(fit_rows) < 4:
         return {"ok": False,
+                "quality": quality,
                 "errors": [{"code": "INSUFFICIENT_ROWS",
-                            "message": f"脉宽 {tau:g} fs 的可用行不足（{len(rows)}）"}]}
+                            "message": f"脉宽 {tau:g} fs 的可用拟合行不足（{len(fit_rows)}）"}]}
     card = str(body.get("materialCardFile") or "")
     if not card:
         raise UFDemoError(CONFIG_INVALID, "缺少基座材料卡",
                           field_path="calibration.materialCardFile", actual=None,
                           requirement="卡路径")
     override = dict(body.get("responseOverride") or {}) or None
-    tr, ho, info = group_split(rows, holdout_groups=max(1, len(rows) // 5))
+    # 多遍终态必须按完整加工轨迹分组；不能让同一工艺的 N=1…N
+    # 被随机拆到训练与留出两侧。
+    tr, ho, info = group_split(
+        fit_rows, holdout_groups=max(1, len(fit_rows) // 5), group_by_trajectory=True
+    )
     # --- 观测口径与加工几何：**显式声明，不得静默用默认**（ADR-0021）----------
     # 实验表里**没有**"加工区域多大 / 平均深度是哪个窗口的均值"这两列。
     # 曾经硬编码 window_um=20 ⇒ 标定实际仿真的是 **20×20 μm 的弓字形面扫描**，
@@ -1140,6 +1159,7 @@ def calibrate_payload(body: Mapping[str, Any], *, project_root: str | Path) -> d
                          material_id=str(body.get("materialId") or ""))
     d = res.to_dict()
     d["ok"] = True
+    d["quality"] = quality
     d["split"] = info
     d["pulseDurationFs"] = tau
     d["observationBasis"] = {
@@ -1229,6 +1249,8 @@ def demo_rect_payload(
 
     rp = spec.reference_protocol or {}
     rl = rp.get("required_laser") or {}
+    process_mode = str(body.get("processMode") or "reference").strip().lower()
+    actual_process = process_mode in {"actual", "machine", "local", "calibrated"}
     # 「源文献装置描述」（w0/f 等）—— ADR-0021 补记后不再参与门禁，
     # 但 demo 仍从这里取 w0/f 来装配能流场与扫描速度（保持既有演示行为不变）。
     sb = rp.get("source_beam") or {}
@@ -1247,16 +1269,39 @@ def demo_rect_payload(
             )
         return float(x)
 
-    w0 = _v("spot_radius_m")
-    lam = _v("wavelength_m")
+    # The canonical actual-process branch inherits the shared instrument
+    # background.  The legacy/reference branch remains available explicitly
+    # for literature-card demonstrations and backwards-compatible clients.
+    bg = None
+    if actual_process:
+        from .config import load_shared_background, shared_background_patch
+
+        bg = load_shared_background()
+        w0 = bg.derived_waist_m()
+        lam = bg.wavelength_m
+    else:
+        w0 = _v("spot_radius_m")
+        lam = _v("wavelength_m")
 
     # 允许请求**覆盖**脉宽与重复频率（演示页要手动调参）。
     # ⚠️ 覆盖 ≠ 绕过门禁：τ 与 N_eff 正是 validate_run 要校验的量，下面的实际值照样
     #    写进 laser / reference_conditions —— 对就放行，错就以 CONDITION_MISMATCH 拒绝。
     _tau_req = float(body.get("pulseDurationFs") or 0.0)
     _freq_req = float(body.get("repetitionRateKHz") or 0.0)
-    tau = _tau_req * 1e-15 if _tau_req > 0 else _v("pulse_duration_s")
-    freq = _freq_req * 1e3 if _freq_req > 0 else _v("repetition_rate_Hz")
+    if _tau_req > 0:
+        tau = _tau_req * 1e-15
+    else:
+        try:
+            tau = _v("pulse_duration_s")
+        except UFDemoError:
+            # The shared background deliberately does not invent a pulse
+            # duration.  Keep the UI default explicit when a card has no
+            # duration entry; it is recorded in the effective configuration.
+            tau = 500.0e-15
+    if _freq_req > 0:
+        freq = _freq_req * 1e3
+    else:
+        freq = _v("repetition_rate_Hz")
 
     card_n_eff = (rp.get("required_history") or {}).get("effective_count")
     card_n_eff = (float(card_n_eff)
@@ -1272,22 +1317,50 @@ def demo_rect_payload(
         if isinstance(_sb_speed, (int, float)) and float(_sb_speed) > 0:
             speed_m_s = float(_sb_speed) * 1e-3
         else:
+            if actual_process:
+                raise UFDemoError(
+                    CONFIG_INVALID,
+                    "实际工艺模式缺少扫描速度",
+                    field_path="scanSpeedMmS",
+                    actual=None,
+                    requirement="请求给出正的 scanSpeedMmS，或材料 source_beam 声明 scan_speed_mm_s",
+                    suggestion="不使用 N_eff 反推实际扫描速度；补齐设备工艺输入。",
+                )
             speed_m_s = (math.pi / 4.0) * (2.0 * w0 * freq) / card_n_eff
     # N_eff 现在只是**由路径导出的参考量**（用于回显），不再是任何条件
     n_eff = (math.pi / 4.0) * (2.0 * w0 * freq) / speed_m_s
 
     # 峰值能流属**源文献装置条件**：ADR-0021 起随协议存放（装配后从 reference_protocol 读）
-    peak = rp.get("reference_peak_fluence_J_m2")
-    if not isinstance(peak, (int, float)) or peak <= 0:
-        raise UFDemoError(
-            CONFIG_INVALID, "参考协议未声明 reference_peak_fluence_J_m2，无法自动配置脉冲能量",
-            field_path="reference_protocol.reference_peak_fluence_J_m2",
-            requirement="正数（J/m²）",
-            suggestion="在 data/protocols/<protocol_id>.json 里补 reference_peak_fluence_J_m2，"
-                       "或走完整版界面手填脉冲能量。",
-        )
-    peak = float(peak)
-    energy = peak * math.pi * w0 * w0 / 2.0   # F0 = 2E/(πw₀²)
+    if actual_process:
+        assert bg is not None
+        actual_optics_patch = shared_background_patch(bg, repetition_rate_Hz=freq)
+        energy = float(actual_optics_patch["laser"]["pulse_energy_J"])
+        w0 = float(actual_optics_patch["laser"]["spot_radius_m"])
+        peak = 2.0 * energy / (math.pi * w0 * w0)
+        rayleigh_m = float(actual_optics_patch["laser"]["rayleigh_range_m"])
+        geometry_feedback = bg.geometry_feedback
+        m2_value = bg.m2
+        # Keep the physical reference-case gate active.  ``processMode`` only
+        # selects the instrument/path assembly; it must not bypass wavelength
+        # or pulse-duration applicability checks in the material card.
+        run_mode = "reference_case"
+    else:
+        peak = rp.get("reference_peak_fluence_J_m2")
+        if not isinstance(peak, (int, float)) or peak <= 0:
+            raise UFDemoError(
+                CONFIG_INVALID, "参考协议未声明 reference_peak_fluence_J_m2，无法自动配置脉冲能量",
+                field_path="reference_protocol.reference_peak_fluence_J_m2",
+                requirement="正数（J/m²）",
+                suggestion="在 data/protocols/<protocol_id>.json 里补 reference_peak_fluence_J_m2，"
+                           "或走完整版界面手填脉冲能量。",
+            )
+        peak = float(peak)
+        energy = peak * math.pi * w0 * w0 / 2.0   # F0 = 2E/(πw₀²)
+        actual_optics_patch = None
+        rayleigh_m = None
+        geometry_feedback = "fixed_geometry"
+        m2_value = None
+        run_mode = "reference_case"
 
     resp = spec.response or {}
     region = float(body.get("regionUm") or 100.0)
@@ -1307,7 +1380,7 @@ def demo_rect_payload(
     cfg: dict[str, Any] = {
         "schema_version": "1.0",   # 与 config.SCHEMA_VERSION 一致
         "label": str(body.get("label") or "demo_rect"),
-        "run_mode": "reference_case",
+        "run_mode": run_mode,
         "unit_system": "SI",
         "material_id": spec.id,
         "material_card_file": str(card_path),
@@ -1322,13 +1395,14 @@ def demo_rect_payload(
             "pulse_energy_J": energy, "repetition_rate_Hz": freq,
             "spot_radius_m": w0, "focus_xyz_m": [0.0, 0.0, 0.0],
             "direction_unit": [0.0, 0.0, 1.0],
-            "rayleigh_range_m": None, "m2": None,
+            "rayleigh_range_m": rayleigh_m, "m2": m2_value,
             "power_measurement_location": "sample_surface",
-            "parameter_sources": [f"reference_protocol:{rp.get('protocol_id')}"],
+            "parameter_sources": (["shared_experiment_background"] if actual_process
+                                   else [f"reference_protocol:{rp.get('protocol_id')}"]),
         },
         "path": {"t0_s": 0.0, "time_tolerance_s": 1e-12, "segments": segs},
         "solver": {
-            "mode": "reference", "geometry_feedback": "fixed_geometry",
+            "mode": "reference", "geometry_feedback": geometry_feedback,
             "history_enabled": False, "tail_epsilon": 1e-08,
             "memory_budget_bytes": 2147483648, "budget_safety_factor": 1.5,
             "cancel_check_interval": 256, "acceleration": "off",
@@ -1338,8 +1412,12 @@ def demo_rect_payload(
             "snapshot_policy": "passes", "snapshot_every_n_passes": 1,
             "max_snapshots": 8, "max_snapshot_bytes": 268435456,
             "cross_section": {"axis": "x", "offsets_m": [0.0, region * 1e-6 / 5.0]},
-            "roi": [{"name": "center", "radius_m": region * 1e-6 / 5.0,
-                     "center_xy_m": [0.0, 0.0]}],
+            "roi": ([{"name": "machining_region", "bounds_xy_m":
+                       [-0.5 * region * 1e-6, 0.5 * region * 1e-6,
+                        -0.5 * region * 1e-6, 0.5 * region * 1e-6]}]
+                    if actual_process else
+                    [{"name": "center", "radius_m": region * 1e-6 / 5.0,
+                      "center_xy_m": [0.0, 0.0]}]),
         },
         "reference_conditions": {
             "protocol_id": rp.get("protocol_id"),
@@ -1349,6 +1427,9 @@ def demo_rect_payload(
             "threshold_J_m2": resp.get("threshold_J_m2"),
             "spot_radius_m": w0, "repetition_rate_Hz": freq,
             "peak_fluence_J_m2": peak,
+            "focus_strategy": (bg.focus_strategy if actual_process and bg is not None else "reference_protocol"),
+            "geometry_feedback": geometry_feedback,
+            "power_rule": ("P_post_objective/f" if actual_process else "reference_peak_fluence"),
         },
     }
 
@@ -1371,6 +1452,7 @@ def demo_rect_payload(
         }
     out["demo"] = {
         "materialId": spec.id,
+        "processMode": "actual" if actual_process else "reference",
         "protocolId": rp.get("protocol_id"),
         "wavelengthNm": lam * 1e9,
         "pulseDurationFs": tau * 1e15,
@@ -1382,6 +1464,11 @@ def demo_rect_payload(
         "effectiveCount": n_eff,
         "regionUm": region, "hatchUm": hatch, "passes": passes, "dxUm": dx,
         "nSegments": len(segs),
+        "opticsSource": ("shared_experiment_background" if actual_process else "material_reference_protocol"),
+        "powerRule": ("P_post_objective/f" if actual_process else "reference_peak_fluence"),
+        "geometryFeedback": geometry_feedback,
+        "focusStrategy": (bg.focus_strategy if actual_process and bg is not None else "reference_protocol"),
+        "roiObservation": ("machining_region_full_rectangle" if actual_process else "center_circle"),
         # 阈值模型回显：界面用它说明「为什么工艺参数可以自由设」——
         # 阈值不是某个 N 处的常量，而是按 Fth(N)=Fth1·N^(S-1) 逐点算出来的。
         "incubation": incubation_info,

@@ -1,6 +1,6 @@
 # 高度场数据（氧化锆 pass 实验，从 `.cag` 提取）
 
-**来源**：`氧化锆/pass实验数据/60Pass组.cag`（2.27 GB，**不进 git**）
+**来源**：`E:/博士课题资料/光机所实验原始数据/氧化锆/60Pass组.cag`（2.27 GB，**不进 git**）
 **提取日期**：2026-09-19
 **提取工具**：`src/io_cag.py::CagHeightReader`（`physics-guided Mamba-2` 仓库）
 

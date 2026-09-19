@@ -379,6 +379,18 @@ def format_watermark(wm: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _roi_statistics_from_stats(stats: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """Rebuild saved ROI rows from the long-form statistics CSV."""
+    grouped: dict[str, dict[str, Any]] = {}
+    for key, value in dict(stats or {}).items():
+        if not str(key).startswith("roi[") or "]." not in str(key):
+            continue
+        head, field = str(key).split("].", 1)
+        name = head[4:]
+        grouped.setdefault(name, {"name": name})[field] = value
+    return list(grouped.values())
+
+
 @dataclass
 class FrozenRun:
     """一次**已提交**运行的结果快照。界面图表只读这里，不读当前表单值。"""
@@ -392,6 +404,8 @@ class FrozenRun:
     status: str
     material_watermark: dict[str, Any]
     statistics: dict[str, Any] = field(default_factory=dict)
+    # 加工观测 ROI（与全域 statistics 分开，避免把边带平均当槽平均）。
+    roi_statistics: list[dict[str, Any]] = field(default_factory=list)
     profiles: list[dict[str, Any]] = field(default_factory=list)
     snapshots: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -793,6 +807,7 @@ def submit(
         status=result.status,
         material_watermark=wm,
         statistics=dict(result.statistics or {}),
+        roi_statistics=list(result.rois or []),
         profiles=list(result.profiles or []),
         snapshots=list(result.snapshots or []),
         warnings=list(result.warnings),
@@ -939,6 +954,7 @@ def read_existing_run(state: SessionState, run_dir: str | Path) -> FrozenRun:
         status=loaded.status,
         material_watermark=wm,
         statistics=dict(loaded.statistics or {}),
+        roi_statistics=_roi_statistics_from_stats(loaded.statistics),
         profiles=list(loaded.profiles or []),
         snapshots=list(loaded.snapshots or []),
         warnings=list(loaded.warnings),

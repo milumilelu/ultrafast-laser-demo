@@ -26,6 +26,8 @@ runs/acceptance/_browser_check/
 runs/_browser_check/
 runs/_acc_final/
 runs/_audit_*/
+# Local acceptance output from the actual-process demo smoke run.
+runs/acceptance/actual_demo/
 
 # Streamlit 本地配置
 .streamlit/

@@ -173,9 +173,25 @@ def roi_statistics(surface: Any, rois: Any) -> list[RoiResult]:
     dA = surface.grid.dx_m * surface.grid.dy_m
     for roi in rois:
         m, rule = roi_mask(surface, roi)
-        n = int(np.count_nonzero(m))
-        area = n * dA
-        if n == 0:
+        if roi.bounds_xy_m is not None:
+            # Exact rectangle/cell intersection weights.  The solver field is
+            # still the original grid; only the observation operator changes,
+            # so display downsampling cannot alter the reported ROI metric.
+            x0, x1, y0, y1 = roi.bounds_xy_m
+            xlo = np.maximum(np.asarray(surface.x) - 0.5 * surface.grid.dx_m, x0)
+            xhi = np.minimum(np.asarray(surface.x) + 0.5 * surface.grid.dx_m, x1)
+            ylo = np.maximum(np.asarray(surface.y) - 0.5 * surface.grid.dy_m, y0)
+            yhi = np.minimum(np.asarray(surface.y) + 0.5 * surface.grid.dy_m, y1)
+            wx = np.maximum(xhi - xlo, 0.0)
+            wy = np.maximum(yhi - ylo, 0.0)
+            weights = wy[:, None] * wx[None, :]
+            weights = np.where(weights > 0.0, weights, 0.0)
+            rule = "cell_rectangle_intersection_area (exact axis-aligned overlap)"
+        else:
+            weights = np.where(m, dA, 0.0)
+        n = int(np.count_nonzero(weights > 0.0))
+        area = float(np.sum(weights))
+        if n == 0 or area <= 0.0:
             out.append(
                 RoiResult(
                     name=roi.name,
@@ -190,7 +206,8 @@ def roi_statistics(surface: Any, rois: Any) -> list[RoiResult]:
                 )
             )
             continue
-        vals = d[m]
+        vals = d[weights > 0.0]
+        wvals = weights[weights > 0.0]
         out.append(
             RoiResult(
                 name=roi.name,
@@ -198,9 +215,9 @@ def roi_statistics(surface: Any, rois: Any) -> list[RoiResult]:
                 rule=rule,
                 n_cells=n,
                 actual_area_internal=area,
-                mean_depth_internal=float(np.mean(vals)),
+                mean_depth_internal=float(np.sum(vals * wvals) / area),
                 max_depth_internal=float(np.max(vals)),
-                removal_volume_internal=float(np.sum(vals) * dA),
+                removal_volume_internal=float(np.sum(vals * wvals)),
             )
         )
     return out

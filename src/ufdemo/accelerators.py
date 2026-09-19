@@ -234,6 +234,8 @@ def accumulate_block(
     track_statistics: bool = True,
     max_cell_block: int = 1 << 22,
     threshold_protocol: Any = None,
+    geometry_feedback: str = "fixed_geometry",
+    patch_cache_store: dict[tuple[Any, ...], Any] | None = None,
 ) -> BlockAccumulation:
     """在**冻结几何**下累计一个事件块的候选去除量（不提交任何状态）。
 
@@ -254,7 +256,15 @@ def accumulate_block(
 
     thr = float(law.threshold_internal)
     delta = float(law.delta_internal)
-    opt = BeamOptions(geometry_feedback="fixed_geometry")
+    if geometry_feedback not in ("fixed_geometry", "axial_defocus"):
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "分组块核收到不支持的几何反馈模式",
+            field_path="solver.geometry_feedback",
+            actual=geometry_feedback,
+            requirement="fixed_geometry | axial_defocus",
+        )
+    opt = BeamOptions(geometry_feedback=geometry_feedback)
 
     cache_key: tuple[Any, ...] | None = None
     cached_patch: Any = None
@@ -264,9 +274,15 @@ def accumulate_block(
         if cache_key is not None and key == cache_key:
             patch = cached_patch
             acc.patch_cache_hits += 1
+        elif patch_cache_store is not None and geometry_feedback == "fixed_geometry" and key in patch_cache_store:
+            patch = patch_cache_store[key]
+            cache_key, cached_patch = key, patch
+            acc.patch_cache_hits += 1
         else:
             patch = beam_patch(ev, view, opt)
             cache_key, cached_patch = key, patch
+            if patch_cache_store is not None and geometry_feedback == "fixed_geometry":
+                patch_cache_store[key] = patch
             acc.n_patches += 1
 
         acc.emitted_energy_J += float(patch.emitted_energy_J)
@@ -411,6 +427,8 @@ def estimate_local_error(
     drift_limit: float = 0.25,
     threshold_protocol: Any = None,
     max_cell_block: int = 1 << 22,
+    geometry_feedback: str = "fixed_geometry",
+    patch_cache_store: dict[tuple[Any, ...], Any] | None = None,
 ) -> tuple[ErrorEstimate, BlockAccumulation]:
     """比较「整块一步」与「两个半步」的更新场，作为局部步长误差。
 
@@ -421,7 +439,9 @@ def estimate_local_error(
     n = len(events)
     if n <= 1:
         full = accumulate_block(
-            view, events, law, kernel=kernel, threshold_protocol=threshold_protocol, max_cell_block=max_cell_block
+            view, events, law, kernel=kernel, threshold_protocol=threshold_protocol,
+            max_cell_block=max_cell_block, geometry_feedback=geometry_feedback,
+            patch_cache_store=patch_cache_store,
         )
         est = ErrorEstimate(
             batch_size=n, half_size=n, max_abs_internal=0.0, rel_l2=0.0,
@@ -438,6 +458,8 @@ def estimate_local_error(
         full = accumulate_block(
             view, events, law, kernel=kernel, track_statistics=True,
             threshold_protocol=threshold_protocol, max_cell_block=max_cell_block,
+            geometry_feedback=geometry_feedback,
+            patch_cache_store=patch_cache_store,
         )
         est = ErrorEstimate(
             batch_size=n, half_size=(n + 1) // 2 if n % 2 else n // 2,
@@ -454,15 +476,21 @@ def estimate_local_error(
     full = accumulate_block(
         view, events, law, kernel=kernel, track_statistics=True,
         threshold_protocol=threshold_protocol, max_cell_block=max_cell_block,
+        geometry_feedback=geometry_feedback,
+        patch_cache_store=patch_cache_store,
     )
 
     half = (n + 1) // 2 if n % 2 else n // 2  # 奇数块：前半取较大的一半
     acc_a = accumulate_block(
-        view, events[:half], law, kernel=kernel, track_statistics=False, max_cell_block=max_cell_block
+        view, events[:half], law, kernel=kernel, track_statistics=False,
+        max_cell_block=max_cell_block, geometry_feedback=geometry_feedback,
+        patch_cache_store=patch_cache_store,
     )
     mid_view = view.with_height(view.height - acc_a.delta_h)
     acc_b = accumulate_block(
-        mid_view, events[half:], law, kernel=kernel, track_statistics=False, max_cell_block=max_cell_block
+        mid_view, events[half:], law, kernel=kernel, track_statistics=False,
+        max_cell_block=max_cell_block, geometry_feedback=geometry_feedback,
+        patch_cache_store=patch_cache_store,
     )
 
     two_half = acc_a.delta_h + acc_b.delta_h
@@ -526,6 +554,9 @@ def check_fallback_conditions(
     geometry_feedback: str,
     dynamic_angle: bool = False,
     oblique_incidence: bool = False,
+    response_kind: str = "log_fixed",
+    response_gain: float = 1.0,
+    subcell_order: int = 1,
 ) -> FallbackDecision:
     """判定当前工况是否**禁止**使用批量模式；触发即回退参考实现并保存原因。
 
@@ -539,6 +570,24 @@ def check_fallback_conditions(
             False,
             "分相结构（含相界面截断）不在批量第一版支持范围内：相标签会随去除更新，"
             "冻结几何无法表达跨相界面截断。已回退逐脉冲参考实现。",
+        )
+    if int(subcell_order) > 1:
+        return FallbackDecision(
+            False,
+            "G-02 子单元积分需要在逐事件路径中对每个脉冲积分非线性响应；"
+            "当前冻结几何批量核只支持单元中心规则，已回退逐脉冲参考实现。",
+        )
+    if response_kind not in ("log_fixed", "log_fixed_effective", "logarithmic_effective"):
+        return FallbackDecision(
+            False,
+            f"响应核 {response_kind!r} 没有经过分组局部核等价性验证；"
+            "已回退逐脉冲参考实现。",
+        )
+    if not math.isfinite(float(response_gain)) or abs(float(response_gain) - 1.0) > 1e-15:
+        return FallbackDecision(
+            False,
+            "非单位 response_gain 会改变每次提交后的递推状态；"
+            "当前分组局部核未实现该组合，已回退逐脉冲参考实现。",
         )
     if history_enabled:
         return FallbackDecision(
@@ -574,6 +623,9 @@ def grouped_solve(**kwargs: Any) -> FallbackDecision:
         geometry_feedback=str(kwargs.get("geometry_feedback", "fixed_geometry")),
         dynamic_angle=bool(kwargs.get("dynamic_angle", False)),
         oblique_incidence=bool(kwargs.get("oblique_incidence", False)),
+        response_kind=str(kwargs.get("response_kind", "log_fixed")),
+        response_gain=float(kwargs.get("response_gain", 1.0)),
+        subcell_order=int(kwargs.get("subcell_order", 1)),
     )
 
 
@@ -607,6 +659,8 @@ def solve_block(
     kernel: LocalKernel | None = None,
     drift_reference_internal: float | None = None,
     threshold_protocol: Any = None,
+    geometry_feedback: str = "fixed_geometry",
+    patch_cache_store: dict[tuple[Any, ...], Any] | None = None,
 ) -> BlockPlan:
     """对给定事件序列做「试算 → 接受/缩小 → 返回候选」。
 
@@ -624,6 +678,8 @@ def solve_block(
         acc = accumulate_block(
             view, chunk, law, kernel=kernel,
             threshold_protocol=threshold_protocol, max_cell_block=policy.max_cell_block,
+            geometry_feedback=geometry_feedback,
+            patch_cache_store=patch_cache_store,
         )
         est = ErrorEstimate(
             batch_size=len(chunk), half_size=len(chunk), max_abs_internal=0.0,
@@ -648,6 +704,8 @@ def solve_block(
             drift_limit=policy.geometry_drift_limit,
             threshold_protocol=threshold_protocol,
             max_cell_block=policy.max_cell_block,
+            geometry_feedback=geometry_feedback,
+            patch_cache_store=patch_cache_store,
         )
         if est.ok:
             return BlockPlan(chunk, acc, est, n_rejected, trials, fallback_reason)

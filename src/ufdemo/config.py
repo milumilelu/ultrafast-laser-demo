@@ -860,6 +860,10 @@ class SolverConfig:
     local_abs_tol_internal: float = 0.0
     geometry_drift_limit: float = 0.25
     max_cell_block: int = 1 << 22
+    #: G-02 explicit midpoint quadrature order for the nonlinear response.
+    #: ``1`` preserves the historical cell-centre rule; ``2``/``4`` are
+    #: opt-in reference-solver accuracy modes.
+    subcell_order: int = 1
     #: **响应曲线卡文件名**（U07）。非空时，逐事件核改由该实测曲线驱动
     #: （`TabulatedEventLaw`），而不是材料卡的解析对数律。
     #: 这是「真实数据 → 真实求解」的唯一入口；留空则维持原行为。
@@ -949,6 +953,15 @@ class SolverConfig:
             )
         drift_limit = _require_finite_positive(raw.get("geometry_drift_limit", 0.25), "solver.geometry_drift_limit")
         max_cell_block = _require_positive_int(raw.get("max_cell_block", 1 << 22), "solver.max_cell_block")
+        subcell_order = _require_positive_int(raw.get("subcell_order", 1), "solver.subcell_order")
+        if subcell_order not in (1, 2, 4):
+            raise UFDemoError(
+                CONFIG_INVALID,
+                "solver.subcell_order 只支持 1、2 或 4",
+                field_path="solver.subcell_order",
+                actual=subcell_order,
+                requirement="1 | 2 | 4",
+            )
         budget_factor = _require_finite_positive(raw.get("budget_safety_factor", 1.5), "solver.budget_safety_factor")
         cancel_interval = _require_positive_int(raw.get("cancel_check_interval", 256), "solver.cancel_check_interval")
         return SolverConfig(
@@ -972,6 +985,7 @@ class SolverConfig:
             local_abs_tol_internal=float(abs_tol),
             geometry_drift_limit=drift_limit,
             max_cell_block=max_cell_block,
+            subcell_order=subcell_order,
             response_curve=(str(raw["response_curve"]).strip()
                             if str(raw.get("response_curve") or "").strip() else None),
             response_gain=_require_positive_gain(raw.get("response_gain", 1.0)),
@@ -1000,6 +1014,7 @@ class SolverConfig:
             "local_abs_tol_internal": self.local_abs_tol_internal,
             "geometry_drift_limit": self.geometry_drift_limit,
             "max_cell_block": self.max_cell_block,
+            "subcell_order": self.subcell_order,
             "response_curve": self.response_curve,
             "response_gain": self.response_gain,
         }
@@ -1621,17 +1636,26 @@ def validate_run(config: RunConfig, material: Any) -> ValidationReport:
     def fail(err: UFDemoError) -> None:
         errors.append(err.to_dict())
 
-    # 当前响应核只实现无历史单脉冲语义；拒绝 history_enabled，避免
-    # 配置声明与实际计算静默不一致。
-    if config.solver.history_enabled:
+    # 显式历史只对材料卡声明的孵化响应开放。没有孵化模型时，
+    # 开启历史没有定义语义，仍应在配置层拒绝；有孵化模型时则允许
+    # 显式开启，并由求解器把实际生效状态写入 metadata。
+    _response_incubation = dict((getattr(material, "response", {}) or {}).get("incubation") or {})
+    _phase_incubation = any(
+        bool(dict((p.get("response") or {}).get("incubation") or {}).get("enabled"))
+        for p in (getattr(material, "phases", ()) or ())
+        if isinstance(p, Mapping)
+    )
+    if config.solver.history_enabled and not (
+        bool(_response_incubation.get("enabled")) or _phase_incubation
+    ):
         fail(
             UFDemoError(
                 NOT_IMPLEMENTED,
-                "solver.history_enabled 当前尚未实现",
+                "当前材料响应没有声明可用的逐点历史模型",
                 field_path="solver.history_enabled",
                 actual=True,
-                requirement="history_enabled=false（当前响应核仅支持无历史单脉冲）",
-                suggestion="关闭 history_enabled；启用历史耦合需提供经过验证的孵化响应核。",
+                requirement="材料 response/phase 声明 incubation 后才可开启",
+                suggestion="关闭 history_enabled，或先登记并验证孵化响应模型。",
             )
         )
 

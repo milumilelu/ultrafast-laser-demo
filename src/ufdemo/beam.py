@@ -157,6 +157,12 @@ class FluencePatch:
     window_cells: int = 0
     #: 若按既有 ε 尾部截断口径会计算的格数；仅 ``above_threshold`` 策略下给出
     tail_window_cells: int | None = None
+    #: Optional sub-cell samples for G-02.  Shape is ``(ny, nx, q*q)`` and
+    #: values are point samples of the incident fluence inside each cell.
+    #: The reference path leaves this ``None`` so the legacy cell-centre
+    #: result is bit-for-bit unchanged.
+    fluence_samples: Any = None
+    subcell_order: int = 1
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -202,6 +208,10 @@ class BeamOptions:
     #: ``above_threshold`` 必需的响应阈值（J/m²）。缺失/非法时**报错**，不静默退化。
     fluence_threshold: float | None = None
     window_threshold_margin: float = DEFAULT_WINDOW_THRESHOLD_MARGIN
+    #: G-02 tensor-product midpoint quadrature order per cell.  ``1`` is the
+    #: historical cell-centre rule; values 2 or 4 integrate the nonlinear
+    #: response on sub-cell fluence samples in the reference solver.
+    subcell_order: int = 1
 
 
 def is_axial_direction(direction_unit: Any) -> bool:
@@ -301,6 +311,16 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
 
     if isinstance(options, Mapping):
         options = BeamOptions(**{k: v for k, v in options.items() if k in BeamOptions.__dataclass_fields__})
+
+    subcell_order = int(getattr(options, "subcell_order", 1))
+    if subcell_order not in (1, 2, 4):
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "subcell_order 只支持 1、2 或 4",
+            field_path="solver.subcell_order",
+            actual=subcell_order,
+            requirement="1 | 2 | 4",
+        )
 
     laser = surface.laser
     cfg_dir = laser.direction_unit
@@ -500,6 +520,7 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
             window_radius_policy=_policy,
             window_cells=int(window_cells),
             tail_window_cells=tail_window_cells,
+            subcell_order=subcell_order,
         )
     xn = surface.x[ix0:ix1]
     yn = surface.y[iy0:iy1]
@@ -598,6 +619,52 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
                 "本事件窗口内存在背向单元（μ<=0），其直接照射记为 0；"
                 "这不代表材料内部无任何响应，而是几何上不直接受照。"
             )
+
+    # G-02: retain point samples instead of averaging fluence first.  The
+    # response layer consumes these samples and averages *response increments*
+    # afterwards, which is essential near the nonlinear threshold.  Surface
+    # height, incidence and visibility are held at the cell-start value; this
+    # is the declared 2.5-D sub-cell approximation and is only enabled by an
+    # explicit solver option.
+    fluence_samples = None
+    if subcell_order > 1:
+        q = int(subcell_order)
+        offsets = ((np.arange(q, dtype=float) + 0.5) / q - 0.5)
+        sx, sy = np.meshgrid(offsets * float(surface.grid.dx_m), offsets * float(surface.grid.dy_m))
+        sample_r2: list[np.ndarray] = []
+        sample_F: list[np.ndarray] = []
+        # ``s_field``/``w_field`` are cell-start values.  Re-evaluate only the
+        # transverse Gaussian at sub-cell coordinates; for oblique incidence
+        # the axial coordinate also gets its local transverse contribution.
+        for oy in range(q):
+            for ox in range(q):
+                if axial and not dynamic:
+                    r2_s = (XX + sx[oy, ox] - fx) ** 2 + (YY + sy[oy, ox] - fy) ** 2
+                else:
+                    s_s, r2_s = axial_and_lateral(
+                        kvec, XX + sx[oy, ox], YY + sy[oy, ox], HH, fx, fy, fz
+                    )
+                    if zR is not None:
+                        w_s = w0 * np.sqrt(1.0 + (s_s / zR) ** 2)
+                    else:
+                        w_s = w0
+                    sample_r2.append(r2_s)
+                    sample_F.append(gaussian_fluence_perp(r2_s, emitted, w_s))
+                    continue
+                sample_r2.append(r2_s)
+                sample_F.append(gaussian_fluence_perp(r2_s, emitted, w_field if zR is not None else w0))
+        fluence_samples = np.stack(sample_F, axis=-1)
+        # Cell mask is conservative: a cell is active if any midpoint sample
+        # is inside the optical tail and the existing projected mask permits it.
+        sample_geom = np.stack([r <= (local_w ** 2 * math.log(1.0 / options.tail_epsilon) / 2.0)
+                                for r in sample_r2], axis=-1)
+        if axial_flat_shortcut:
+            # At a cell edge the centre may be outside the optical tail while
+            # an in-cell midpoint is inside.  The explicit quadrature must be
+            # allowed to retain that cell; the default centre rule is unchanged.
+            mask = np.any(sample_geom, axis=-1)
+        else:
+            mask = np.asarray(mask, dtype=bool) & np.any(sample_geom, axis=-1)
     dA = surface.grid.dx_m * surface.grid.dy_m
     # F is defined per unit *surface* area after projection.  Convert the
     # horizontal cell area to surface area for sloped faces; the old
@@ -640,6 +707,8 @@ def beam_patch(event: Any, surface: Any, options: BeamOptions | Mapping[str, Any
         window_radius_policy=_policy,
         window_cells=int(window_cells),
         tail_window_cells=tail_window_cells,
+        fluence_samples=fluence_samples,
+        subcell_order=subcell_order,
     )
 
 

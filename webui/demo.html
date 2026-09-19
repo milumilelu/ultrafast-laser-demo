@@ -329,6 +329,9 @@ async function run(){
     const r = await fetch("/api/demo-rect", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
+        // 统一主线：页面默认调用本机实际工艺装配；文献演示仍可由 API
+        // 显式传 processMode="reference" 使用。
+        processMode: "actual",
         materialCardFile: $("card").value,
         regionUm: +$("s-region").value,
         hatchUm: +$("s-hatch").value,
@@ -361,9 +364,16 @@ async function run(){
     renderScale(cmax);
 
     const st = d.stats || {};
+    const roi = (d.roiStats || []).find(x => x && x.name === "machining_region") || {};
+    const observed = Object.assign({}, st, {
+      mean_depth_internal: (typeof roi.mean_depth_internal === "number")
+        ? roi.mean_depth_internal : st.mean_depth_internal,
+      max_depth_internal: (typeof roi.max_depth_internal === "number")
+        ? roi.max_depth_internal : st.max_depth_internal,
+    });
     const um = v => (typeof v === "number" ? (v*1e6) : NaN);
-    $("k-mean").innerHTML   = um(st.mean_depth_internal).toFixed(1)   + "<em>µm</em>";
-    $("k-max").innerHTML    = um(st.max_depth_internal).toFixed(1)    + "<em>µm</em>";
+    $("k-mean").innerHTML   = um(observed.mean_depth_internal).toFixed(1)   + "<em>µm</em>";
+    $("k-max").innerHTML    = um(observed.max_depth_internal).toFixed(1)    + "<em>µm</em>";
     $("k-center").innerHTML = um(st.center_depth_internal).toFixed(1) + "<em>µm</em>";
     $("k-events").textContent = (d.eventsProcessed || 0).toLocaleString();
 

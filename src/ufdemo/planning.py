@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import math
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -719,6 +720,10 @@ class TargetPlanResult:
     #: 本次枚举**实际生效**的窗口半径策略与余量（性能开关，见 ADR-0017）。
     window_radius_policy: str = "tail_epsilon"
     window_threshold_margin: float = 1.25
+    #: G-05 coarse-screen audit.  Fine rechecks remain the final decision;
+    #: this records how many candidates were close enough to a constraint that
+    #: the coarse grid was not trusted without a safety margin.
+    screening_diagnostics: Mapping[str, Any] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
 
     @property
@@ -747,6 +752,7 @@ class TargetPlanResult:
             "geometryBasis": dict(self.geometry_basis),
             "windowRadiusPolicy": self.window_radius_policy,
             "windowThresholdMargin": self.window_threshold_margin,
+            "screeningDiagnostics": dict(self.screening_diagnostics),
             "recommended": self.recommended.to_dict() if self.recommended else None,
             "infeasibleReason": self.infeasible_reason,
             "bestEffort": self.best_effort.to_dict() if self.best_effort else None,
@@ -784,6 +790,7 @@ def plan_for_target(
     #: 两级网格下**用最终精度复核**的候选个数上限（按粗筛排序取前几个）。
     #: 复核后**重新判可行**；第一个可行者即为推荐。见 ADR-0019。
     fine_top_k: int = 3,
+    screening_margin_um: float = 0.0,
 ) -> TargetPlanResult:
     """枚举 h/N，筛出可行方案，按**时间**与**均匀性**排序给推荐。
 
@@ -800,12 +807,21 @@ def plan_for_target(
     #   · 用粗网格把所有候选过一遍（快）
     #   · 只把**推荐/最接近**的那一个用细网格复核（准）
     # 任务书 §7.1 允许"内部自动选合理网格"，这里把两级都如实报出来。
+    if not math.isfinite(float(screening_margin_um)) or float(screening_margin_um) < 0.0:
+        raise UFDemoError(
+            CONFIG_INVALID,
+            "screening_margin_um 必须是非负有限数",
+            field_path="planning.screening_margin_um",
+            actual=screening_margin_um,
+            requirement=">= 0",
+        )
     screen_dx = float(dx_um)
     if auto_coarsen and float(region_um[0]) >= 100.0:
         screen_dx = max(screen_dx, 1.0)
     screening = screen_dx != float(dx_um)
 
     cands: list[CandidateResult] = []
+    screening_t0 = time.perf_counter()
     for h in spacings_um:
         for n in pass_counts:
             cands.append(evaluate_candidate(
@@ -822,6 +838,24 @@ def plan_for_target(
                 window_radius_policy=window_radius_policy,
                 window_threshold_margin=window_threshold_margin,
             ))
+    screening_elapsed_s = time.perf_counter() - screening_t0
+
+    # A coarse result inside a narrow band around either depth constraint is
+    # deliberately treated as uncertain.  It is still retained, but is
+    # promoted into the fine-recheck pool even when its coarse status is not
+    # fully feasible.  With the default margin=0 this is exactly the historic
+    # behavior.
+    lower_bound = float(target_depth_um) - float(tolerance_um)
+    upper_bound = float(target_depth_um) + float(tolerance_um)
+    margin = float(screening_margin_um)
+    screening_uncertain = [
+        c for c in cands
+        if c.mean_depth_um is not None
+        and (
+            abs(float(c.mean_depth_um) - lower_bound) <= margin
+            or abs(float(c.mean_depth_um) - upper_bound) <= margin
+        )
+    ]
 
     def _fine_recheck(c: CandidateResult, *, want_surface: bool) -> CandidateResult:
         """用**最终精度**（``dx_um``）复算一个候选，并把它**替换回列表**。
@@ -857,8 +891,12 @@ def plan_for_target(
     # ⚠️ 曾经只检查"细核有没有生成形貌"，**不重新判可行** ⇒ 会出现
     # 「粗网格可行 → 细网格不可行 → 仍然把它当推荐」。推荐必须依据**最终精度**的结果。
     # 反向同理：粗筛全否、细核通过时，也不能继续沿用「无可行方案」。
+    fine_t0 = time.perf_counter()
     if screening:
-        ranked = sorted((c for c in cands if c.feasible), key=_rank_key)
+        ranked = sorted(
+            {id(c): c for c in (*[x for x in cands if x.feasible], *screening_uncertain)}.values(),
+            key=_rank_key,
+        )
         if not ranked:
             # 粗筛全否：把"违规最小"的几个也用最终精度复核（有可能由否转可）
             ranked = [c for c, _v in sorted(
@@ -885,6 +923,7 @@ def plan_for_target(
             n_fine += 1
             if _fine.feasible:
                 rec = _fine
+    fine_elapsed_s = time.perf_counter() - fine_t0
 
     if rec is None and not reason:
         # 无可行组合 → 说清是"都太浅"还是"都太深"，而不是丢一句"无解"。
@@ -985,6 +1024,11 @@ def plan_for_target(
             "而不是粗筛留下的状态。表里未复核的候选标注为粗筛口径。"
             f"本次实际复核 {n_fine} 个。"
         )
+        if margin > 0.0:
+            notes.append(
+                f"G-05 约束安全带：深度约束边界 ±{margin:g} μm 内的 {len(screening_uncertain)} "
+                "个粗筛候选被视为不确定并优先送细网格复核；最终结论只采用细网格。"
+            )
     if rec is None:
         notes.append("**本次未给出推荐方案** —— 这是如实的结果，不是失败。")
 
@@ -1005,5 +1049,18 @@ def plan_for_target(
         geometry_basis=geom,
         window_radius_policy=str(window_radius_policy),
         window_threshold_margin=float(window_threshold_margin),
+        screening_diagnostics={
+            "enabled": bool(screening),
+            "screening_dx_um": float(screen_dx),
+            "final_dx_um": float(dx_um),
+            "candidate_count": len(cands),
+            "coarse_feasible_count": int(sum(c.feasible for c in cands)),
+            "uncertain_count": len(screening_uncertain),
+            "margin_um": margin,
+            "fine_rechecked": int(n_fine),
+            "screening_elapsed_s": float(screening_elapsed_s),
+            "fine_elapsed_s": float(fine_elapsed_s),
+            "reference_is_fine": True,
+        },
         notes=tuple(notes),
     )

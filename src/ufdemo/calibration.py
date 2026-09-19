@@ -118,13 +118,27 @@ class ExperimentRow:
     # -- 派生 ----------------------------------------------------------------
     @property
     def condition_key(self) -> tuple:
-        """工况指纹 —— 用于**把重复工况归到同一组**，避免跨训练/留出泄漏。"""
+        """单条终态工况指纹（包含遍数，保持旧 CSV 接口兼容）。"""
         return (
             round(self.pulse_duration_fs, 6),
             round(self.repetition_rate_kHz, 6),
             round(self.scan_speed_mm_s, 6),
             round(self.hatch_spacing_um, 6),
             int(self.pass_count),
+        )
+
+    @property
+    def trajectory_key(self) -> tuple:
+        """同一加工轨迹的分组键（刻意排除 pass_count）。
+
+        ``N=1..N`` 是同一工艺的终态轨迹，不应在按工艺外推的训练/留出
+        划分中被拆到两侧。旧的 ``condition_key`` 保留给单终态/历史接口。
+        """
+        return (
+            round(self.pulse_duration_fs, 6),
+            round(self.repetition_rate_kHz, 6),
+            round(self.scan_speed_mm_s, 6),
+            round(self.hatch_spacing_um, 6),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -272,14 +286,18 @@ def load_experiment_csv(path: str | Path) -> ExperimentTable:
 
 def group_split(
     rows: Sequence[ExperimentRow], *, holdout_groups: int = 5, seed: int = 20260913,
+    group_by_trajectory: bool = False,
 ) -> tuple[list[ExperimentRow], list[ExperimentRow], dict[str, Any]]:
-    """按**工况组**划分训练/留出：同一工况（重复测量）必须同侧。
+    """按工况或完整加工轨迹分组划分训练/留出。
 
-    任务书 §5.2：重复工况同组划分；有 ``use_for_fit`` 时尊重人工选择。
+    默认保留旧的单终态 ``condition_key`` 语义；真实多遍轨迹应传
+    ``group_by_trajectory=True``，此时同一工艺的所有 pass 必须同侧。
+    有 ``use_for_fit`` 时仍尊重人工选择。
     """
+    key_of = (lambda r: r.trajectory_key) if group_by_trajectory else (lambda r: r.condition_key)
     by_key: dict[tuple, list[ExperimentRow]] = {}
     for r in rows:
-        by_key.setdefault(r.condition_key, []).append(r)
+        by_key.setdefault(key_of(r), []).append(r)
 
     keys = sorted(by_key.keys(), key=lambda k: str(k))
     n_groups = len(keys)
@@ -287,6 +305,7 @@ def group_split(
         "n_rows": len(rows),
         "n_groups": n_groups,
         "n_groups_with_repeats": sum(1 for k in keys if len(by_key[k]) > 1),
+        "grouping": "trajectory" if group_by_trajectory else "condition",
     }
     if n_groups <= 1:
         return list(rows), [], {**info, "note": "只有一个工况组，无法划分留出；全部用于训练。"}
@@ -323,8 +342,8 @@ def group_split(
         "seed": seed,
     })
     # **断言不跨侧**：同一工况的行不得同时出现在训练与留出
-    train_keys = {r.condition_key for r in train}
-    hold_keys_set = {r.condition_key for r in hold}
+    train_keys = {key_of(r) for r in train}
+    hold_keys_set = {key_of(r) for r in hold}
     overlap = train_keys & hold_keys_set
     info["leakage_groups"] = sorted(str(k) for k in overlap)
     return train, hold, info
@@ -378,6 +397,11 @@ class PredictionSpec:
     #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
     #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
     response_override: Mapping[str, Any] | None = None
+    #: 运行准入模式。真实材料卡带有文献协议门禁时，
+    #: 与本机 pass 实验不一致的条件只能显式使用 ``synthetic_demo``
+    #: 做工程有效标定；默认 reference_case 保持既有行为。
+    #: 放在既有字段之后，保持旧的 positional PredictionSpec 调用兼容。
+    run_mode: str = "reference_case"
 
     def region_size_um(self) -> tuple[float, float]:
         """加工区尺寸 ``(wx, wy)``（μm）；标量按正方形处理。"""
@@ -479,7 +503,7 @@ def build_row_config(
 
     raw: dict[str, Any] = {
         "schema_version": "1.0",
-        "run_mode": "reference_case",
+        "run_mode": str(spec.run_mode),
         "unit": {"mode": "SI"},
         "material_id": material_id,
         "material_card_file": spec.material_card_file,

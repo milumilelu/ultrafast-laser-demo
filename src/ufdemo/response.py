@@ -296,10 +296,12 @@ class FixedThresholdLogLaw:
                     actual={"exposure_count": list(n.shape), "fluence": list(F.shape)},
                     requirement="两者一致",
                 )
-            # N 是**本事件响应前**的计数 ⇒ 首脉冲为 0；
-            # max(N,1) 保证首脉冲用 Fth1（细则 5.2：首脉冲不得用 N=0）
+            # exposure_count 是**本事件响应前**的有效曝光数；
+            # 因而当前事件的 1-based N 必须是 count + 1。
+            # 旧实现使用 max(count, 1)，导致连续事件实际采用 N=1,1,2,3…；
+            # 首脉冲的正确保护来自 +1，而不是重复使用 N=1。
             thr = float(self.incubation["Fth1_internal"]) * np.power(
-                np.maximum(n, 1.0), float(self.incubation["S"]) - 1.0)
+                n + 1.0, float(self.incubation["S"]) - 1.0)
             thr_arr = np.asarray(thr, dtype=np.float64)
         else:
             if history is not None and history.enabled:

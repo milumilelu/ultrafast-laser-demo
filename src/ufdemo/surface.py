@@ -92,6 +92,7 @@ class SurfaceState:
     #: 见 ADR-0022。
     height_min_m: float = 0.0
     height_max_m: float = 0.0
+    height_max_count: int = 0
     initial_height_min_m: float = 0.0
     initial_height_max_m: float = 0.0
     history_enabled: bool = False
@@ -107,6 +108,7 @@ class SurfaceState:
 
         self.height_min_m = float(self.height.min())
         self.height_max_m = float(self.height.max())
+        self.height_max_count = int(np.count_nonzero(self.height == self.height_max_m))
 
     # -- 构造 ---------------------------------------------------------------
     @staticmethod
@@ -142,6 +144,7 @@ class SurfaceState:
             # 全网格极值：增量维护（高度只减不增 ⇒ 逐位等价），beam_patch 不必再全网格 min/max
             height_min_m=float(h0.min()),
             height_max_m=float(h0.max()),
+            height_max_count=int(np.count_nonzero(h0 == float(h0.max()))),
             initial_height_min_m=float(h0.min()),
             initial_height_max_m=float(h0.max()),
             phase_id=np.zeros((grid.ny, grid.nx), dtype=np.uint16),
@@ -209,8 +212,14 @@ class SurfaceState:
         structure: Any = None,
         candidate_volume_internal: float | None = None,
         history: Mapping[str, Any] | None = None,
+        illumination_count: Any = None,
     ) -> UpdateDiagnostics:
-        """一次提交本事件的高度、历史和暴露相更新（细则 5.2 第 8 步）。"""
+        """一次提交本事件的高度、历史和照射/去除计数更新。
+
+        ``exposure_count`` 记录实际发生正去除的次数；``illumination_count``
+        记录光斑掩膜命中的次数，供材料卡声明的逐点孵化历史使用。两者
+        有意分开，不能用“是否去除”替代“是否照射”。
+        """
         import numpy as np
 
         iy0, iy1, ix0, ix1 = section
@@ -259,10 +268,18 @@ class SurfaceState:
                     "本事件有单元格被相界面截断：实际去除取候选与到界面距离的较小值；"
                     "被截断的候选量计入「未应用候选去除体积」。"
                 )
+        old_max = float(self.height_max_m)
+        old_window = self.height[iy0:iy1, ix0:ix1]
+        old_max_mask = old_window == old_max
         self.height[iy0:iy1, ix0:ix1] -= applied
-        # 全网格极值增量维护：高度只减不增 ⇒ 与全网格 min/max **逐位等价**（O(窗口)）
+        # 高度只减不增。min 可单调维护；max 需要知道全局最大值是否被
+        # 本窗口的实际去除耗尽，否则不能把未照射区域的旧最大高度误降。
         self.height_min_m = min(self.height_min_m, float(self.height[iy0:iy1, ix0:ix1].min()))
-        self.height_max_m = min(self.height_max_m, float(self.height[iy0:iy1, ix0:ix1].max()))
+        if np.any(old_max_mask & (applied > 0.0)):
+            self.height_max_count -= int(np.count_nonzero(old_max_mask & (applied > 0.0)))
+            if self.height_max_count <= 0:
+                self.height_max_m = float(self.height.max())
+                self.height_max_count = int(np.count_nonzero(self.height == self.height_max_m))
 
         # 第 8 步：达到界面后更新相标签（下一真实脉冲才对新相响应）
         if structure is not None and not getattr(structure, "is_uniform", True):
@@ -300,6 +317,34 @@ class SurfaceState:
         self.counters_max = max(self.counters_max, after)
 
         applied_vol = float(np.sum(applied) * dA)
+
+        # 照射历史必须在当前事件提交时更新，且允许候选去除为零；
+        # 这样阈值以下的有效照射不会被悄悄从孵化历史删除。
+        if illumination_count is not None:
+            ic = np.asarray(illumination_count, dtype=np.uint32)
+            expected = (iy1 - iy0, ix1 - ix0)
+            if ic.shape == self.illumination_count.shape:
+                ic = ic[iy0:iy1, ix0:ix1]
+            if ic.shape != expected:
+                raise UFDemoError(
+                    NUMERIC_NONFINITE,
+                    "照射计数与事件窗口形状不匹配",
+                    field_path="surface.apply_increment.illumination_count",
+                    actual=list(ic.shape),
+                    requirement=f"窗口形状 {list(expected)}",
+                )
+            illum = self.illumination_count[iy0:iy1, ix0:ix1]
+            if ic.any():
+                if int(illum.max()) + int(ic.max()) >= UINT32_MAX:
+                    raise UFDemoError(
+                        RESOURCE_BUDGET_EXCEEDED,
+                        "照射计数溢出 uint32",
+                        field_path="surface.illumination_count",
+                        actual=int(illum.max()) + int(ic.max()),
+                        requirement="计数 < 2^32",
+                    )
+                illum += ic
+
         return UpdateDiagnostics(
             event_index=event_index,
             candidate_volume_internal=cand,
@@ -375,9 +420,16 @@ class SurfaceState:
                 requirement=f"[{iy1 - iy0}, {ix1 - ix0}]",
             )
 
+        old_max = float(self.height_max_m)
+        old_window = self.height[win]
+        old_max_mask = old_window == old_max
         self.height[win] -= d
         self.height_min_m = min(self.height_min_m, float(self.height[win].min()))
-        self.height_max_m = min(self.height_max_m, float(self.height[win].max()))
+        if np.any(old_max_mask & (d > 0.0)):
+            self.height_max_count -= int(np.count_nonzero(old_max_mask & (d > 0.0)))
+            if self.height_max_count <= 0:
+                self.height_max_m = float(self.height.max())
+                self.height_max_count = int(np.count_nonzero(self.height == self.height_max_m))
 
         n_touched_cells = 0
         counter_before = 0

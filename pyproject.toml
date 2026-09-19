@@ -25,6 +25,7 @@ build_batch = "L"
 [project.optional-dependencies]
 table = ["scipy>=1.10"]          # 批次 F（T10）查表与 PCHIP
 accel = ["numba>=0.58"]          # 批次 I（T16），可选；缺失时回退 NumPy
+ml = ["torch>=2.0"]               # 受限神经闭合；基线求解器不依赖 torch
 dev = ["pytest>=7", "openpyxl>=3.1"]
 
 [tool.setuptools.packages.find]

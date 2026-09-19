@@ -26,6 +26,7 @@ from .config import (
     SolverConfig,
     validate_run,
 )
+from .closures import EfficiencyClosure, apply_closure, build_features
 from .errors import (
     CONFIG_INVALID,
     NUMERIC_NONFINITE,
@@ -120,6 +121,44 @@ def _per_phase_candidate(
     return out
 
 
+def _closure_threshold_array(law: Any, history: HistoryState, shape: tuple[int, ...]) -> Any:
+    """Return the event-start threshold used by a response law.
+
+    ``FixedThresholdLogLaw`` exposes the incubation parameters explicitly.  A
+    tabulated law may not expose a threshold; in that case the closure receives
+    a neutral ratio reference (1.0) and the run metadata records that the
+    threshold feature is unavailable.  This keeps the learned correction from
+    silently inventing a material threshold.
+    """
+
+    import numpy as np
+
+    incubation = getattr(law, "incubation", None)
+    if isinstance(incubation, Mapping):
+        fth1 = float(incubation["Fth1_internal"])
+        exponent = float(incubation["S"]) - 1.0
+        counts = (
+            np.zeros(shape, dtype=float)
+            if history.exposure_count is None
+            else np.asarray(history.exposure_count, dtype=float)
+        )
+        return fth1 * np.power(np.maximum(counts, 1.0), exponent)
+    threshold = getattr(law, "threshold_internal", None)
+    if isinstance(threshold, (int, float)) and math.isfinite(float(threshold)) and float(threshold) > 0.0:
+        return np.full(shape, float(threshold), dtype=float)
+    return np.ones(shape, dtype=float)
+
+
+def _closure_metadata(closure: Any) -> dict[str, Any]:
+    """Serialize closure identity without requiring a concrete implementation."""
+
+    if closure is None:
+        return {"enabled": False, "kind": None}
+    method = getattr(closure, "metadata", None)
+    details = method() if callable(method) else {"kind": type(closure).__name__}
+    return {"enabled": True, **dict(details)}
+
+
 @dataclass
 class RunResult:
 
@@ -182,6 +221,8 @@ def solve(
     *,
     material_dir: str | None = None,
     curves_dir: str | None = None,
+    efficiency_closure: EfficiencyClosure | None = None,
+    efficiency_closure_path: str | None = None,
 ) -> RunResult:
     """执行一次求解。
 
@@ -195,8 +236,20 @@ def solve(
         取消令牌；支持 ``CancelToken``、``threading.Event`` 或返回 bool 的可调用对象。
     progress_callback:
         每个快照节点或进度节点调用一次，参数为状态字典。
+    efficiency_closure:
+        Optional callable returning a bounded positive net-removal efficiency
+        for each local event cell. It is applied after the mechanistic response
+        and before ``SurfaceState.apply_increment``. When omitted, the baseline
+        solver is unchanged.
     """
     import numpy as np
+
+    if efficiency_closure is not None and efficiency_closure_path:
+        raise UFDemoError(CONFIG_INVALID, "不能同时提供 efficiency_closure 与 efficiency_closure_path", field_path="efficiency_closure")
+    if efficiency_closure is None and efficiency_closure_path:
+        from .closures import load_efficiency_closure
+
+        efficiency_closure = load_efficiency_closure(str(efficiency_closure_path))
 
     t_start = time.perf_counter()
 
@@ -216,6 +269,7 @@ def solve(
     warnings: list[str] = list(report.warnings)
     threshold_only = config.run_mode == "threshold_only"
 
+    closure_info = _closure_metadata(efficiency_closure)
     metadata = {
         "schema_version": config.schema_version,
         "run_id": None,  # 由 io.new_run_dir 填
@@ -232,6 +286,7 @@ def solve(
             "structured_interface": False,
             "acceleration": config.solver.acceleration,
             "snapshot_policy": config.output.snapshot_policy,
+            "efficiency_closure": efficiency_closure is not None,
         },
         "evidence_status": material.evidence_status,
         "source_type": material.source_type,
@@ -247,11 +302,13 @@ def solve(
             "power_measurement_location": config.laser.power_measurement_location,
         },
         "validation": report.to_dict(),
+        "efficiency_closure": closure_info,
         "warnings": warnings,
         "approximations": [],
         "status": "running",
     }
 
+    metadata["watermark"]["efficiency_closure"] = closure_info
     material_snapshot = {
         "schema_version": material.schema_version,
         "card": material.to_dict(),
@@ -259,8 +316,20 @@ def solve(
         "watermark": _watermark(material, config),
         "capabilities": {k: v.to_dict() for k, v in material.capabilities.items()},
     }
+    material_snapshot["watermark"]["efficiency_closure"] = closure_info
 
     config_snapshot = config.to_dict()
+    # 单一生效配置回显：调用方/导出不必从日志和多个模块拼接实际设置。
+    # 运行期间会继续补充 effective_history_enabled、窗口策略与加速回退原因。
+    metadata["effective_configuration"] = {
+        "config": config_snapshot,
+        "derived": {
+            "history_enabled_effective": None,
+            "window_radius_policy_effective": None,
+            "acceleration_effective_mode": None,
+            "response_closure": closure_info,
+        },
+    }
 
     result = RunResult(
         status="running",
@@ -365,6 +434,18 @@ def solve(
                 },
             )
 
+    # A material card can request incubation even when the legacy config flag
+    # is false; the reference loop then enables the required local history and
+    # emits a warning. Record the effective state so exported metadata cannot
+    # claim that history was disabled when it was actually used.
+    _incubation_laws = ([law] if law is not None else []) + list(phase_laws.values())
+    effective_history_enabled = bool(config.solver.history_enabled) or any(
+        getattr(_law_obj, "incubation", None) is not None for _law_obj in _incubation_laws
+    )
+    result.metadata["enabled_features"]["history_enabled_effective"] = effective_history_enabled
+    result.metadata["effective_configuration"]["derived"]["history_enabled_effective"] = effective_history_enabled
+    result.metadata["history_definition"] = dict(getattr(material, "history_definition", {}) or {})
+
     rois = [RoiSpec.from_dict(r, i, config.unit) for i, r in enumerate(config.output.roi or ())]
     cs_cfg = dict(config.output.cross_section or {}) if config.output.cross_section else None
 
@@ -378,13 +459,23 @@ def solve(
     window_threshold: float | None = None
     if window_policy == "above_threshold":
         _thr_candidates: list[float] = []
-        for _law_obj in ([law] if law is not None else []) + list(phase_laws.values()):
+        _window_laws = ([law] if law is not None else []) + list(phase_laws.values())
+        # 对幂律孵化，历史增长会继续降低阈值；在没有有限历史上界时，
+        # 用初始阈值开窗会漏掉后来变成可烧蚀的环带。安全做法是回退到
+        # tail_epsilon 全尾窗，而不是把“未计算”误报成零去除。
+        if any(getattr(_law_obj, "incubation", None) is not None for _law_obj in _window_laws):
+            window_policy = "tail_epsilon"
+            warnings.append(
+                "请求了 above_threshold 窗口，但响应核含动态孵化阈值且未声明有限历史上界；"
+                "为避免阈值下降后漏算可烧蚀区域，已回退到 tail_epsilon 全尾窗。"
+            )
+        for _law_obj in _window_laws:
             _v = getattr(_law_obj, "threshold_internal", None)
             if isinstance(_v, (int, float)) and math.isfinite(float(_v)) and float(_v) > 0.0:
                 _thr_candidates.append(float(_v))
-        if _thr_candidates:
+        if window_policy == "above_threshold" and _thr_candidates:
             window_threshold = min(_thr_candidates)
-        else:
+        elif window_policy == "above_threshold":
             window_policy = "tail_epsilon"
             warnings.append(
                 "请求了 window_radius_policy=above_threshold，但当前响应核**没有声明**可用阈值"
@@ -455,6 +546,7 @@ def solve(
             "不得解释为热损失或被吸收能量；这只检查光学输入账本。"
         ),
     }
+    result.metadata["effective_configuration"]["derived"]["window_radius_policy_effective"] = window_policy
     result.diagnostics["threshold"] = {        "n_above_threshold_cells": 0,
         "n_exceeded_cell_events": 0,
         "exceeded_cells_final": 0,
@@ -480,6 +572,7 @@ def solve(
     }
 
     last_event: PulseEvent | None = None
+    previous_event_time_s: float | None = None
     n_events = 0
     events_limit = int(config.output.events_csv_max_rows or 0)
 
@@ -530,7 +623,7 @@ def solve(
     # 分组只在工况允许时启用；否则**回退**到逐脉冲参考实现并保存原因（不静默降级）。
     grouped_stats: dict[str, Any] | None = None
     batch_policy: Any = None
-    if config.solver.mode == "grouped":
+    if config.solver.mode == "grouped" and efficiency_closure is None:
         from .accelerators import (
             BatchPolicy,
             LocalKernel,
@@ -540,10 +633,13 @@ def solve(
 
         decision = check_fallback_conditions(
             structured=structured,
-            history_enabled=bool(config.solver.history_enabled),
+                history_enabled=bool(config.solver.history_enabled) or effective_history_enabled,
             geometry_feedback=config.solver.geometry_feedback,
             dynamic_angle=bool(config.solver.dynamic_angle),
             oblique_incidence=not _axial_dir,
+            response_kind=str(getattr(law, "KIND", "log_fixed")),
+            response_gain=float(getattr(config.solver, "response_gain", 1.0)),
+            subcell_order=int(getattr(config.solver, "subcell_order", 1)),
         )
         accel_requested = config.solver.acceleration
         numba_ok = False
@@ -560,6 +656,7 @@ def solve(
         if not decision.use_batch:
             warnings.append(f"批量模式未启用，已回退逐脉冲参考实现：{decision.reason}")
             result.metadata["enabled_features"]["acceleration"] = "off"
+            result.metadata["effective_configuration"]["derived"]["acceleration_effective_mode"] = "reference"
             result.metadata["acceleration"] = {
                 "requested_mode": "grouped",
                 "effective_mode": "reference",
@@ -572,6 +669,7 @@ def solve(
             # 分相路径不会走到这里（上面已回退），但 threshold_only 时 law 为 None
             warnings.append("批量模式需要响应核；当前无响应核，已回退逐脉冲参考实现。")
             result.metadata["enabled_features"]["acceleration"] = "off"
+            result.metadata["effective_configuration"]["derived"]["acceleration_effective_mode"] = "reference"
             result.metadata["acceleration"] = {
                 "requested_mode": "grouped",
                 "effective_mode": "reference",
@@ -595,6 +693,7 @@ def solve(
             result.metadata["enabled_features"]["acceleration"] = (
                 "numba" if kernel.kind == "numba" else "off"
             )
+            result.metadata["effective_configuration"]["derived"]["acceleration_effective_mode"] = "grouped"
             result.metadata["acceleration"] = {
                 "requested_mode": "grouped",
                 "effective_mode": "grouped",
@@ -642,10 +741,26 @@ def solve(
             if grouped_stats["cancelled"]:
                 result.status = "cancelled"
                 result.diagnostics["stage"] = "event_loop"
+    elif config.solver.mode == "grouped" and efficiency_closure is not None:
+        warnings.append(
+            "已提供逐事件效率闭合，分组加速被禁用并回退 reference："
+            "闭合依赖事件开始状态，冻结几何/块级提交会破坏递推语义。"
+        )
+        result.metadata["enabled_features"]["acceleration"] = "off"
+        result.metadata["effective_configuration"]["derived"]["acceleration_effective_mode"] = "reference"
+        result.metadata["acceleration"] = {
+            "requested_mode": "grouped",
+            "effective_mode": "reference",
+            "requested_backend": config.solver.acceleration,
+            "effective_backend": "off",
+            "fallback_reason": "efficiency_closure_requires_event_start_state",
+            "local_kernel": "off",
+        }
 
     # 参考（逐脉冲）模式：同样记录 acceleration 元数据，避免界面/导出读到空字段。
     if config.solver.mode != "grouped":
         result.metadata["enabled_features"]["acceleration"] = "off"
+        result.metadata["effective_configuration"]["derived"]["acceleration_effective_mode"] = "reference"
         result.metadata["acceleration"] = {
             "requested_mode": "reference",
             "effective_mode": "reference",
@@ -679,6 +794,7 @@ def solve(
             window_radius_policy=window_policy,
             fluence_threshold=window_threshold,
             window_threshold_margin=float(config.solver.window_threshold_margin),
+            subcell_order=int(getattr(config.solver, "subcell_order", 1)),
         )
         patch = beam_patch(event, surface, opt)
 
@@ -718,7 +834,15 @@ def solve(
                     warnings.append(note)
 
         section = (patch.iy0, patch.iy1, patch.ix0, patch.ix1)
+        illumination_history_window = None
         if not patch.empty:
+            # Snapshot the event-start history before recording this pulse's
+            # illumination.  The response law consumes the pre-event count;
+            # the cumulative dose ledger is updated immediately afterwards.
+            illumination_history_window = np.asarray(
+                surface.illumination_count[patch.iy0:patch.iy1, patch.ix0:patch.ix1],
+                dtype=np.uint32,
+            ).copy()
             # 第 4 步：累计入射剂量与照射诊断
             surface.accumulate_illumination(section, patch.fluence, patch.mask)
 
@@ -749,6 +873,7 @@ def solve(
             ):
                 result.diagnostics["threshold"]["n_above_threshold_cells"] += int(np.count_nonzero(thr.exceed_mask & patch.mask))
             result.events_processed = n_events
+            previous_event_time_s = float(event.time_s)
             continue
 
         # 非 threshold_only 必须有响应核：单相走 law，分相走 phase_laws。
@@ -756,26 +881,36 @@ def solve(
         assert law is not None or phase_laws, "非 threshold_only 模式必须存在响应核"
         if patch.empty:
             result.events_processed = n_events
+            previous_event_time_s = float(event.time_s)
             continue
 
         # 第 3、5 步：读取本事件开始时的状态 → 能流 → 候选去除量
-        # 逐点曝光历史：**本事件响应前**的局部计数（首脉冲为 0，核内用 max(N,1)）。
+        # 逐点曝光历史：**本事件响应前**的局部有效曝光计数；核内以 count+1
+        # 转成材料模型的 1-based N。未达到去除阈值但确实被光斑照射的单元，
+        # 仍可按材料卡的历史定义参与孵化，因此历史使用 illumination_count，
+        # 与 exposure_count（实际去除次数）明确分离。
         # 卡声明了孵化模型就必须有它 —— 缺了核会拒绝执行（不静默退回固定阈值）。
         # 这里**自动开启**并记 warning：开历史是更完整的物理（不是近似），
         # 且全程可追溯，故不属于"静默降级"。
-        _needs_history = getattr(law, "incubation", None) is not None
+        # In a structured run ``law`` is None and each exposed phase owns its
+        # response law.  Inspect all active laws so a phase-specific incubation
+        # declaration cannot silently run with a missing local history array.
+        _history_laws = ([law] if law is not None else []) + list(phase_laws.values())
+        _needs_history = any(getattr(_law_obj, "incubation", None) is not None for _law_obj in _history_laws)
         if _needs_history and not config.solver.history_enabled:
-            warnings.append(
+            _history_note = (
                 "材料卡声明了累积孵化模型（Fth(N)=Fth1·N^(S-1)）："
                 "已自动开启逐点曝光历史（solver.history_enabled false→true），"
                 "阈值将随各点累积照射次数变化。"
             )
+            if _history_note not in warnings:
+                warnings.append(_history_note)
         history = HistoryState(
             exposure_count=(
                 # ⚠️ 必须**切成当前窗口**：exposure_count 是全网格 (ny,nx)，
                 # 而 patch.fluence 只是窗口 (ny_win,nx_win)；
                 # 不切就会与能流形状不匹配（核里会直接报错，不静默错算）。
-                surface.exposure_count[patch.iy0:patch.iy1, patch.ix0:patch.ix1]
+                illumination_history_window
                 if (config.solver.history_enabled or _needs_history) else None),
             definition=dict(getattr(material, "history_definition", {}) or {}),
         )
@@ -785,8 +920,28 @@ def solve(
             incr_direction = "vertical_height"
         else:
             assert law is not None
-            incr = law.increment(patch.fluence, history, material)
-            cand_arr = np.where(patch.mask, incr.values, 0.0)
+            # G-02: integrate the nonlinear response at explicit sub-cell
+            # fluence samples, then average the increments.  Averaging F first
+            # would bias the logarithmic threshold law near the ablation edge.
+            sample_fluence = getattr(patch, "fluence_samples", None)
+            if sample_fluence is not None:
+                sample_hist = history
+                if history is not None and history.exposure_count is not None:
+                    q = int(np.asarray(sample_fluence).shape[-1])
+                    sample_hist = HistoryState(
+                        exposure_count=np.repeat(
+                            np.asarray(history.exposure_count, dtype=np.uint32)[..., None],
+                            q,
+                            axis=-1,
+                        ),
+                        definition=history.definition,
+                    )
+                incr = law.increment(np.asarray(sample_fluence), sample_hist, material)
+                cand_arr = np.mean(np.asarray(incr.values, dtype=np.float64), axis=-1)
+                cand_arr = np.where(patch.mask, cand_arr, 0.0)
+            else:
+                incr = law.increment(patch.fluence, history, material)
+                cand_arr = np.where(patch.mask, incr.values, 0.0)
             incr_direction = incr.depth_direction
 
         # 批次 J（T18）：法向厚度 → 高度（细则 6.6 / 9.2）
@@ -804,6 +959,57 @@ def solve(
                 cand_arr = normal_thickness_to_vertical_depth(cand_arr, nz_win)
                 normal_converted = True
                 geom_diag["normal_thickness_conversions"] += 1
+
+        # Optional causal learned closure.  It is applied after the response
+        # semantics gate and geometry conversion, immediately before the one
+        # surface commit.  Therefore later beam geometry and history see the
+        # corrected surface rather than a post-hoc scaled final depth.
+        if efficiency_closure is not None:
+            import numpy as np
+
+            local_shape = tuple(np.asarray(cand_arr).shape)
+            if phase_laws:
+                pid_window = surface.phase_id[patch.iy0:patch.iy1, patch.ix0:patch.ix1]
+                threshold_arr = np.ones(local_shape, dtype=np.float64)
+                for _pid_value, _law_obj in phase_laws.items():
+                    _sel = pid_window == int(_pid_value)
+                    if np.any(_sel):
+                        threshold_arr = np.where(
+                            _sel, _closure_threshold_array(_law_obj, history, local_shape), threshold_arr
+                        )
+            else:
+                assert law is not None
+                threshold_arr = _closure_threshold_array(law, history, local_shape)
+            rayleigh_m = getattr(config.laser, "rayleigh_range_m", None)
+            features = build_features(
+                fluence=patch.fluence,
+                threshold=threshold_arr,
+                depth_m=np.asarray(
+                    surface.initial_height[patch.iy0:patch.iy1, patch.ix0:patch.ix1]
+                    - surface.height[patch.iy0:patch.iy1, patch.ix0:patch.ix1],
+                    dtype=np.float64,
+                ),
+                exposure_count=np.asarray(surface.exposure_count[patch.iy0:patch.iy1, patch.ix0:patch.ix1], dtype=np.float64),
+                illumination_count=np.asarray(illumination_history_window, dtype=np.float64),
+                r2_m2=patch.r2,
+                spot_radius_m=float(patch.spot_radius),
+                rayleigh_range_m=(None if rayleigh_m is None else float(rayleigh_m)),
+                pulse_duration_s=config.laser.pulse_duration_s,
+                pass_index=int(event.pass_id),
+                event_dt_s=(
+                    None
+                    if previous_event_time_s is None
+                    else max(float(event.time_s) - float(previous_event_time_s), 0.0)
+                ),
+            )
+            cand_arr, eta = apply_closure(cand_arr, features, efficiency_closure)
+            closure_diag = result.diagnostics.setdefault("efficiency_closure", {})
+            closure_diag["events"] = int(closure_diag.get("events", 0)) + 1
+            closure_diag["eta_min"] = min(float(np.min(eta)), float(closure_diag.get("eta_min", np.inf)))
+            closure_diag["eta_max"] = max(float(np.max(eta)), float(closure_diag.get("eta_max", -np.inf)))
+            closure_diag["eta_mean_sum"] = float(closure_diag.get("eta_mean_sum", 0.0)) + float(np.mean(eta))
+            closure_diag["feature_count"] = int(features.shape[1])
+            closure_diag["rayleigh_feature_available"] = rayleigh_m is not None
 
         # --- C4：标定增益 a 作用于**几何更新之前** ---------------------------
         # Δd_cal = a·Δd_base。位置很关键：
@@ -850,6 +1056,7 @@ def solve(
                 warnings.append(note)
 
         result.events_processed = n_events
+        previous_event_time_s = float(event.time_s)
 
         # 第 9 步：快照节点与进度
         if _should_snapshot(config, event, snapshot_targets, result):
@@ -954,8 +1161,8 @@ def solve(
         }
         if grouped_stats["snapshots_on_block_boundary"]:
             result.metadata["approximations"].append(
-                "分组模式下快照在块边界记录：其索引标注为该块内最后一个命中事件，"
-                "实际对应块结束时的表面状态（与逐脉冲的瞬时快照有差别，仅影响回放粒度）。"
+                "分组模式为保证快照时刻真实，主动在快照事件处切分块边界；"
+                "快照表面对应所标事件提交后的状态，代价是块数可能增加。"
             )
         if grouped_stats["n_rejected"]:
             warnings.append(
@@ -995,6 +1202,15 @@ def solve(
         )
         result.metadata["approximations"].append("threshold_only：不产生去除量。")
 
+    if "efficiency_closure" in result.diagnostics:
+        _closure_diag = result.diagnostics["efficiency_closure"]
+        _n_closure_events = int(_closure_diag.get("events", 0))
+        _closure_diag["eta_mean"] = (
+            float(_closure_diag.get("eta_mean_sum", 0.0)) / _n_closure_events
+            if _n_closure_events
+            else None
+        )
+        _closure_diag.pop("eta_mean_sum", None)
     result.metadata["status"] = result.status
     result.metadata["events_processed"] = n_events
     result.metadata["warnings"] = warnings
@@ -1079,95 +1295,119 @@ def _grouped_event_loop(
     ledger = result.diagnostics["fluence_ledger"]
     thr_diag = result.diagnostics["threshold"]
     snapshots_on_block_boundary = False
+    # Fixed-geometry patches are immutable across exact snapshot splits; keep
+    # one run-level cache so observation boundaries do not reduce reuse.
+    patch_cache_store: dict[tuple[Any, ...], Any] = {}
 
     for batch in _event_batches(iterator, batch_size):
-        if _is_cancelled(cancel_token):
-            cancelled = True
-            warnings.append(f"运行被取消：已完成 {n_events} 个事件，只保留部分结果。")
-            break
+        # ``solve_block`` may accept only a prefix after local-error rejection.
+        # Consume that prefix and feed the remaining events back through the same
+        # loop; never advance counters for events that were not committed.
+        pending = list(batch)
+        while pending:
+            if _is_cancelled(cancel_token):
+                cancelled = True
+                warnings.append(f"运行被取消：已完成 {n_events} 个事件，只保留部分结果。")
+                pending = []
+                break
 
-        # 事件记录与进度（与逐脉冲同口径）
-        for event in batch:
-            n_events += 1
-            last_event = event
-            if events_limit and len(result.events_rows) < events_limit:
-                result.events_rows.append(event.to_dict())
+            # Snapshots are exact state observations. Split before the first
+            # requested event so a block never crosses a snapshot boundary.
+            if snapshot_targets and len(result.snapshots) < config.output.max_snapshots:
+                for idx, event in enumerate(pending):
+                    if event.index in snapshot_targets:
+                        pending_for_block = pending[: idx + 1]
+                        break
+                else:
+                    pending_for_block = pending
+            else:
+                pending_for_block = pending
 
-        view = GeometryView.of(surface)
-        plan = solve_block(
-            view, batch, law,
-            policy=policy, kernel=kernel,
-            drift_reference_internal=drift_reference_internal,
-            threshold_protocol=threshold_protocol if threshold_active else None,
-        )
-        acc = plan.accumulation
-        n_blocks += 1
-        n_rejected += plan.n_rejected
-        n_trials += plan.total_trials
-        patch_cache_hits += acc.patch_cache_hits
-        n_patches += acc.n_patches
-        max_local_error = max(max_local_error, float(plan.estimate.max_abs_internal))
-        max_rel_l2 = max(max_rel_l2, float(plan.estimate.rel_l2))
-        if "跳过半步试算" not in (plan.estimate.reason or ""):
-            local_error_estimated = True
+            view = GeometryView.of(surface)
+            plan = solve_block(
+                view, pending_for_block, law,
+                policy=policy, kernel=kernel,
+                drift_reference_internal=drift_reference_internal,
+                threshold_protocol=threshold_protocol if threshold_active else None,
+                geometry_feedback=config.solver.geometry_feedback,
+                patch_cache_store=patch_cache_store,
+            )
+            accepted = list(plan.events)
+            if not accepted:
+                raise UFDemoError(
+                    CONFIG_INVALID,
+                    "分组块核没有消费任何事件",
+                    field_path="solver.batch_size",
+                    actual=len(pending_for_block),
+                    requirement="每次 solve_block 至少接受 1 个事件",
+                )
+            acc = plan.accumulation
+            n_events += len(accepted)
+            last_event = accepted[-1]
+            for event in accepted:
+                if events_limit and len(result.events_rows) < events_limit:
+                    result.events_rows.append(event.to_dict())
+            n_blocks += 1
+            n_rejected += plan.n_rejected
+            n_trials += plan.total_trials
+            patch_cache_hits += acc.patch_cache_hits
+            n_patches += acc.n_patches
+            max_local_error = max(max_local_error, float(plan.estimate.max_abs_internal))
+            max_rel_l2 = max(max_rel_l2, float(plan.estimate.rel_l2))
+            if "跳过半步试算" not in (plan.estimate.reason or ""):
+                local_error_estimated = True
 
-        # 提交窗口 = 本块**被照射**的包围盒（而不是"被去除"的包围盒）。
-        # 关键：照射域（mask，含 F<Fth 的外围）严格大于去除域；若只按 delta_h>0
-        # 取窗口，外围单元的 illumination_count / cumulative_fluence 会被丢掉。
-        section = None
-        if acc.illum_counts is not None and acc.illum_counts.size and int(np.max(acc.illum_counts)) > 0:
-            ys = np.nonzero(np.any(acc.illum_counts > 0, axis=1))[0]
-            xs = np.nonzero(np.any(acc.illum_counts > 0, axis=0))[0]
-            section = (int(ys[0]), int(ys[-1]) + 1, int(xs[0]), int(xs[-1]) + 1)
-        elif acc.delta_h.size and float(np.max(acc.delta_h)) > 0.0:
-            ys = np.nonzero(np.any(acc.delta_h > 0.0, axis=1))[0]
-            xs = np.nonzero(np.any(acc.delta_h > 0.0, axis=0))[0]
-            section = (int(ys[0]), int(ys[-1]) + 1, int(xs[0]), int(xs[-1]) + 1)
+            # 提交窗口 = 本块被照射的包围盒；不能只按去除域截取。
+            section = None
+            if acc.illum_counts is not None and acc.illum_counts.size and int(np.max(acc.illum_counts)) > 0:
+                ys = np.nonzero(np.any(acc.illum_counts > 0, axis=1))[0]
+                xs = np.nonzero(np.any(acc.illum_counts > 0, axis=0))[0]
+                section = (int(ys[0]), int(ys[-1]) + 1, int(xs[0]), int(xs[-1]) + 1)
+            elif acc.delta_h.size and float(np.max(acc.delta_h)) > 0.0:
+                ys = np.nonzero(np.any(acc.delta_h > 0.0, axis=1))[0]
+                xs = np.nonzero(np.any(acc.delta_h > 0.0, axis=0))[0]
+                section = (int(ys[0]), int(ys[-1]) + 1, int(xs[0]), int(xs[-1]) + 1)
 
-        commit = surface.apply_block_increment(
-            acc.delta_h,
-            touch_counts=acc.touch_counts,
-            fluence_sum=acc.fluence_sum,
-            illum_counts=acc.illum_counts,
-            exceed_counts=acc.exceed_counts if threshold_active else None,
-            exceed_or=acc.exceed_or if threshold_active else None,
-            section=section,
-        )
+            commit = surface.apply_block_increment(
+                acc.delta_h,
+                touch_counts=acc.touch_counts,
+                fluence_sum=acc.fluence_sum,
+                illum_counts=acc.illum_counts,
+                exceed_counts=acc.exceed_counts if threshold_active else None,
+                exceed_or=acc.exceed_or if threshold_active else None,
+                section=section,
+            )
 
-        # 账本与诊断
-        ledger["emitted_energy_internal"] += acc.emitted_energy_J
-        ledger["estimated_intercepted_energy_internal"] += acc.estimated_intercepted_energy_J
-        ledger["max_domain_truncated_fraction"] = max(
-            ledger["max_domain_truncated_fraction"], acc.max_domain_truncated_fraction
-        )
-        for note in acc.notes:
-            if note not in warnings:
-                warnings.append(note)
+            ledger["emitted_energy_internal"] += acc.emitted_energy_J
+            ledger["estimated_intercepted_energy_internal"] += acc.estimated_intercepted_energy_J
+            ledger["max_domain_truncated_fraction"] = max(
+                ledger["max_domain_truncated_fraction"], acc.max_domain_truncated_fraction
+            )
+            for note in acc.notes:
+                if note not in warnings:
+                    warnings.append(note)
+            if acc.n_ablating_events > 0:
+                events_diag["n_ablating_events"] += acc.n_ablating_events
+            cand_vol = acc.candidate_volume_internal(surface.grid.dx_m, surface.grid.dy_m)
+            rem["candidate_volume_internal"] += cand_vol
+            rem["applied_volume_internal"] += commit["applied_volume_internal"]
+            rem["unapplied_candidate_removal_volume_internal"] += max(
+                0.0, cand_vol - commit["applied_volume_internal"]
+            )
+            if threshold_active and acc.exceed_counts is not None:
+                n_exceed = int(np.sum(acc.exceed_counts))
+                thr_diag["n_above_threshold_cells"] += n_exceed
+                thr_diag["n_exceeded_cell_events"] += n_exceed
 
-        if acc.n_ablating_events > 0:
-            events_diag["n_ablating_events"] += acc.n_ablating_events
-        cand_vol = acc.candidate_volume_internal(surface.grid.dx_m, surface.grid.dy_m)
-        rem["candidate_volume_internal"] += cand_vol
-        rem["applied_volume_internal"] += commit["applied_volume_internal"]
-        # 批量第一版仅同相路径：不存在相界面截断（红线已在配置层拦截）
-        rem["unapplied_candidate_removal_volume_internal"] += max(
-            0.0, cand_vol - commit["applied_volume_internal"]
-        )
+            for event in accepted:
+                if _should_snapshot(config, event, snapshot_targets, result):
+                    _record_snapshot(result, surface, config, event)
+                    snapshots_on_block_boundary = True
 
-        if threshold_active and acc.exceed_counts is not None:
-            n_exceed = int(np.sum(acc.exceed_counts))
-            thr_diag["n_above_threshold_cells"] += n_exceed
-            thr_diag["n_exceeded_cell_events"] += n_exceed
-
-        # 快照：块边界触发（分组模式的既有近似，已在诊断中标注）
-        for event in batch:
-            if _should_snapshot(config, event, snapshot_targets, result):
-                _record_snapshot(result, surface, config, event)
-                snapshots_on_block_boundary = True
-
-        result.events_processed = n_events
-        if progress_callback and (n_blocks % max(1, config.solver.cancel_check_interval // max(1, batch_size)) == 0):
-            progress_callback({"stage": "solving_grouped", "events_done": n_events, "events_total": result.events_total})
+            result.events_processed = n_events
+            pending = pending[len(accepted):]
+            if progress_callback and (n_blocks % max(1, config.solver.cancel_check_interval // max(1, batch_size)) == 0):
+                progress_callback({"stage": "solving_grouped", "events_done": n_events, "events_total": result.events_total})
 
     return {
         "n_events": n_events,
