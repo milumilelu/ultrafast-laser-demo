@@ -59,7 +59,7 @@ def _key(tau: float, freq: float, hatch_mm: float, speed: float) -> tuple[float,
     return (round(float(tau), 6), round(float(freq), 6), round(float(hatch_mm), 9), round(float(speed), 6))
 
 
-def load_rows(summary_path: Path, design_path: Path, *, monotonic_only: bool = True,
+def load_rows(summary_path: Path, design_path: Path, *, monotonic_only: bool = False,
               min_n1_um: float = 0.0) -> tuple[list[ExperimentRow], list[dict[str, Any]]]:
     """Join 15 summary curves to their four design rows without positional guessing."""
     with summary_path.open("r", encoding="utf-8-sig", newline="") as f:
@@ -105,14 +105,16 @@ def load_rows(summary_path: Path, design_path: Path, *, monotonic_only: bool = T
                 pass_count=n,
                 mean_depth_um=_float(s[f"N{n}"]),
                 source_row=int(_float(d["加工顺序"])) + 1,
-                extras={"center_x": d.get("中心X"), "center_y": d.get("中心Y"), "summary_monotonic": monotonic},
+                extras={"center_x": d.get("中心X"), "center_y": d.get("中心Y"),
+                        "summary_monotonic": monotonic, "source_file": str(summary_path),
+                        "observation_definition": "audited_depth_vs_passes_mean_um"},
             ))
     return rows, audit
 
 
 def write_long(rows: list[ExperimentRow], audit: list[dict[str, Any]], path: Path, *, summary_path: Path, design_path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["sample_id", "pulse_duration_fs", "repetition_rate_kHz", "hatch_spacing_um", "pass_count", "scan_speed_mm_s", "mean_depth_um", "center_x", "center_y", "source_row"]
+    fields = ["sample_id", "pulse_duration_fs", "repetition_rate_kHz", "hatch_spacing_um", "pass_count", "scan_speed_mm_s", "mean_depth_um", "center_x", "center_y", "summary_monotonic", "source_file", "observation_definition", "source_row"]
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -127,6 +129,9 @@ def write_long(rows: list[ExperimentRow], audit: list[dict[str, Any]], path: Pat
                 "mean_depth_um": r.mean_depth_um,
                 "center_x": r.extras.get("center_x"),
                 "center_y": r.extras.get("center_y"),
+                "summary_monotonic": r.extras.get("summary_monotonic"),
+                "source_file": r.extras.get("source_file"),
+                "observation_definition": r.extras.get("observation_definition"),
                 "source_row": r.source_row,
             })
     audit_path = path.with_suffix(".audit.json")
@@ -179,10 +184,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--observation-window-um", type=float, default=None)
     ap.add_argument("--observation-statistic", choices=("mean", "median"), default="mean")
     ap.add_argument("--min-n1-um", type=float, default=0.0)
-    ap.add_argument("--include-nonmonotonic", action="store_true")
+    ap.add_argument("--monotonic-only", action="store_true",
+                    help="仅拟合单调曲线；默认保留全部已审计条件并记录非单调标记")
+    ap.add_argument("--include-nonmonotonic", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
-    rows, audit = load_rows(args.summary, args.design, monotonic_only=not args.include_nonmonotonic, min_n1_um=args.min_n1_um)
+    rows, audit = load_rows(args.summary, args.design, monotonic_only=args.monotonic_only, min_n1_um=args.min_n1_um)
     # Keep a deterministic prefix by process condition for the runnable subset.
     groups = sorted({_process_key(r) for r in rows})
     if args.max_groups > 0:
@@ -190,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         rows = [r for r in rows if _process_key(r) in keep]
     if args.write_long or args.run:
         write_long(rows, audit, args.out_long, summary_path=args.summary, design_path=args.design)
-    report: dict[str, Any] = {"rows": len(rows), "process_groups": len({_process_key(r) for r in rows}), "long_csv": str(args.out_long), "audit_json": str(args.out_long.with_suffix('.audit.json')), "notes": ["depth labels come from audited depth_vs_passes.csv; design joined by four process variables; N=1..4 remain terminal endpoints", "nonmonotonic curves are excluded by default", "this batch is outside the card's 208 fs literature protocol; run_mode=synthetic_demo is explicit and the result is engineering-effective"]}
+    report: dict[str, Any] = {"rows": len(rows), "process_groups": len({_process_key(r) for r in rows}), "long_csv": str(args.out_long), "audit_json": str(args.out_long.with_suffix('.audit.json')), "notes": ["depth labels come from audited depth_vs_passes.csv; design joined by four process variables; N=1..4 remain terminal endpoints", "all audited curves are retained by default; nonmonotonic is a reported observation flag", "this batch is outside the card's 208 fs literature protocol; run_mode=synthetic_demo is explicit and the result is engineering-effective"]}
     if not args.run:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0

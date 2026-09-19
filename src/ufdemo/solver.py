@@ -401,6 +401,15 @@ def solve(
             # 这是「真实数据 → 真实求解」的唯一入口。
             response_curve_obj = None
             curve_name = getattr(config.solver, "response_curve", None)
+            response_model_id = getattr(config.solver, "response_model", None)
+            if curve_name and response_model_id:
+                raise UFDemoError(
+                    CONFIG_INVALID,
+                    "response_curve 与 response_model 不能同时驱动逐事件响应核",
+                    field_path="solver.response_model",
+                    actual={"response_curve": curve_name, "response_model": response_model_id},
+                    requirement="二选一；曲线卡与脉宽条件化材料模型是不同响应来源",
+                )
             if curve_name:
                 if not curves_dir:
                     raise UFDemoError(
@@ -432,7 +441,13 @@ def solve(
                     "pulse_duration_s": config.laser.pulse_duration_s,
                     "repetition_rate_Hz": config.laser.repetition_rate_Hz,
                 },
+                response_model_id=getattr(config.solver, "response_model", None),
             )
+            if getattr(law, "response_model", None):
+                result.metadata["response_model"] = dict(law.response_model)
+                result.metadata["effective_configuration"]["derived"]["response_model"] = dict(law.response_model)
+                result.metadata.setdefault("watermark", {})["response_model"] = dict(law.response_model)
+                result.material_snapshot.setdefault("watermark", {})["response_model"] = dict(law.response_model)
 
     # A material card can request incubation even when the legacy config flag
     # is false; the reference loop then enables the required local history and
@@ -463,11 +478,12 @@ def solve(
         # 对幂律孵化，历史增长会继续降低阈值；在没有有限历史上界时，
         # 用初始阈值开窗会漏掉后来变成可烧蚀的环带。安全做法是回退到
         # tail_epsilon 全尾窗，而不是把“未计算”误报成零去除。
-        if any(getattr(_law_obj, "incubation", None) is not None for _law_obj in _window_laws):
+        if any(getattr(_law_obj, "incubation", None) is not None for _law_obj in _window_laws) \
+                or getattr(config.solver, "response_model", None):
             window_policy = "tail_epsilon"
             warnings.append(
-                "请求了 above_threshold 窗口，但响应核含动态孵化阈值且未声明有限历史上界；"
-                "为避免阈值下降后漏算可烧蚀区域，已回退到 tail_epsilon 全尾窗。"
+                "请求了 above_threshold 窗口，但响应核含动态孵化阈值或脉宽条件化参数；"
+                "为避免历史/模型参数变化后漏算可烧蚀区域，已回退到 tail_epsilon 全尾窗。"
             )
         for _law_obj in _window_laws:
             _v = getattr(_law_obj, "threshold_internal", None)

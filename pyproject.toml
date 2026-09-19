@@ -41,6 +41,7 @@ where = ["src"]
 # 同时进 wheel，运行时由 ufdemo.resource_root() 解析 <prefix>/share/ufdemo。
 [tool.setuptools.data-files]
 "share/ufdemo/data/materials" = ["data/materials/*.json"]
+"share/ufdemo/data/calibrations" = ["data/calibrations/*.json"]
 "share/ufdemo/data/curves" = ["data/curves/*.json", "data/curves/*.csv"]
 "share/ufdemo/data/references" = ["data/references/*"]
 "share/ufdemo/webui" = ["webui/demo.html", "webui/README.md"]

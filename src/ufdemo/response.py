@@ -627,7 +627,8 @@ class TabulatedEventLaw:
 
 
 def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None,
-                    laser: Mapping[str, Any] | None = None):
+                    laser: Mapping[str, Any] | None = None,
+                    response_model_id: str | None = None):
     """由材料卡（或曲线）构造脉冲律。
 
     **按曲线类型分派**（U07 / F05）：
@@ -654,7 +655,27 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
                    else (dict(getattr(material, "laser_conditions", {}) or {}) or None)),
         )
 
+    # C01/C02: a pulse-duration calibration is a separate response source.
+    # Resolve it at the point where the event law is built so every subsequent
+    # event uses the same, explicitly recorded effective parameters.
+    response_meta: dict[str, Any] = {
+        "model_id": None,
+        "source": "literature_card",
+        "trust_state": "literature_reference",
+    }
     r = dict(getattr(material, "response", {}) or {})
+    # A sidecar card may contain one or more models, but selecting the card
+    # alone still means the original literature response.  Activation is
+    # explicit through ``solver.response_model``.
+    if response_model_id:
+        from .materials import resolve_pulse_duration_response
+
+        r, response_meta = resolve_pulse_duration_response(
+            material,
+            (laser or {}).get("pulse_duration_s"),
+            model_id=response_model_id,
+            wavelength_m=(laser or {}).get("wavelength_m"),
+        )
     thr = r.get("threshold_internal")
     delta = r.get("delta_internal")
     if delta is None:
@@ -699,7 +720,7 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
             "S": float(s0) + float(s1) * (float(f_hz) / 1e3),
         }
 
-    return FixedThresholdLogLaw(
+    law = FixedThresholdLogLaw(
         threshold_internal=float(thr),
         delta_internal=float(delta),
         depth_direction=str(r.get("depth_direction", "surface_normal")),
@@ -709,3 +730,7 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
         kind=str(r.get("kind", FixedThresholdLogLaw.KIND)),
         incubation=incubation,
     )
+    # Keep provenance on the law itself; solver metadata copies this into the
+    # run archive and the web UI can display the trust state without guessing.
+    law.response_model = response_meta
+    return law

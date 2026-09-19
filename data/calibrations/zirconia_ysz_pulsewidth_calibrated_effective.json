@@ -1,0 +1,106 @@
+{
+  "id": "zirconia_ysz_pulsewidth_calibrated_effective",
+  "branch_id": "ysz_machining_effective",
+  "card_version": "1.0.0-calibrated-pulsewidth",
+  "identity": {
+    "family": "氧化锆",
+    "grade": "YSZ 论文相应加工卡（1030 nm/208 fs，33.3 kHz）",
+    "material_identity_confirmed_by_user": false
+  },
+  "structure_type": "homogeneous",
+  "evidence_status": "unverified",
+  "source_type": "user_supplied_table",
+  "allowed_run_modes": [
+    "reference_case",
+    "threshold_only",
+    "synthetic_demo"
+  ],
+  "response": {
+    "kind": "log_fixed_with_incubation",
+    "output_semantics": "event_depth_increment",
+    "fluence_basis": "incident_peak_fluence",
+    "depth_direction": "surface_normal",
+    "threshold_J_m2": 14830.0,
+    "threshold_kind": "single_pulse_with_incubation",
+    "delta_m": 3.9e-07,
+    "incubation": {
+      "enabled": true,
+      "model": "Fth(N) = Fth1 * N^(S-1)",
+      "S_f_kHz": {
+        "intercept": 0.969,
+        "slope": -0.0029
+      },
+      "source": "F01 P01/P02/P03（S01）；与静态卡同一条文献关系式",
+      "note": "S(f)=0.969-0.0029·f_kHz 由文献给出；N=3、f=33.3 kHz 时 Fth=12890.65 J/m²，与原「加工有效阈值」12890 相差 0.005% —— 即原值正是本模型的一个采样点。"
+    }
+  },
+  "history_definition": {
+    "mode": "per_event_counting",
+    "exposure_count_meaning": "per_event",
+    "note": "阈值随**该点**累积照射次数下降（Fth(N)=Fth1·N^(S-1)），由求解器逐事件追踪；首脉冲用 N=1（不得用 N=0）。"
+  },
+  "reference_protocol": {
+    "protocol_id": "ysz_crown_machining_effective_n3",
+    "protocol_file": "data/protocols/ysz_crown_machining_effective_n3.json"
+  },
+  "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
+  "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
+  "validity_domain": {
+    "scope": "calibrated_experiment_range",
+    "pulse_duration_fs": [
+      223.0,
+      4000.0
+    ],
+    "note": "实验条件化有效模型；不覆盖原始 208 fs 文献卡。"
+  },
+  "applicability": {
+    "physical_material_prediction_allowed": true,
+    "condition": "实验脉宽 223–4000 fs 域内、1030 nm 条件下可用；频率与速度仍由本次路径显式给出"
+  },
+  "enabled_by_default": true,
+  "limitations": [
+    "Fth1 与 S(f) 标定于 1030 nm / 208 fs；换波长或脉宽需重新标定。",
+    "仅适用于 APS 8 wt% YSZ；任意氧化锆牌号不适用。",
+    "δ 沿用原有效核的拟合值，其他 N 下未重新拟合 —— 属待标定项，报告中标明。",
+    "脉宽条件化参数来自同批实验终态递推拟合，属于工程有效闭合，不是独立单脉冲材料常数。",
+    "当前域为实验覆盖的 223–4000 fs（或本次数据实际范围），域外不自动外推。"
+  ],
+  "provenance": {
+    "source_ids": [
+      "S01"
+    ],
+    "from": "F01 P04-P07；F02 zirconia_ysz_reference 的加工分支",
+    "migration_note": "保留有效脉冲数与阈值类型；补充 required_laser 后才允许参考执行。",
+    "calibration_result": "runs\\calibration\\zirconia_pulsewidth_response正式.json"
+  },
+  "pulse_duration_models": [
+    {
+      "id": "ysz_pulsewidth_effective_v1",
+      "kind": "power_law_response",
+      "source": "experiment_calibration",
+      "evidence_status": "engineering_effective_from_experiment",
+      "trust_state": "calibrated_interpolation",
+      "reference_pulse_duration_fs": 208.0,
+      "reference_response": {
+        "threshold_J_m2": 64295.18359121891,
+        "delta_m": 1.5366620917086734e-07
+      },
+      "exponents": {
+        "threshold": 0.9057478198429849,
+        "delta": -0.21600221076653547
+      },
+      "validity_domain": {
+        "scope": "calibrated_experiment_range",
+        "pulse_duration_fs": [
+          223.0,
+          4000.0
+        ]
+      },
+      "source_files": [
+        "C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\data\\materials\\zirconia_ysz_machining_effective_n3.json"
+      ]
+    }
+  ]
+}
+
+

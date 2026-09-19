@@ -868,6 +868,9 @@ class SolverConfig:
     #: （`TabulatedEventLaw`），而不是材料卡的解析对数律。
     #: 这是「真实数据 → 真实求解」的唯一入口；留空则维持原行为。
     response_curve: str | None = None
+    #: Named pulse-duration-conditioned response model.  ``None`` keeps the
+    #: material card's original literature response exactly as-is.
+    response_model: str | None = None
     #: **标定正增益 a**（C4）。逐事件增量的全局比例：``Δd_cal = a·Δd_base``。
     #: ⚠️ 它作用在**每个脉冲的几何更新之前**，后续脉冲会按新表面重算被动离焦 ——
     #: 因此 ``D(a) ≠ a·D(1)``。**不得**改成只在结果页乘系数。
@@ -988,6 +991,8 @@ class SolverConfig:
             subcell_order=subcell_order,
             response_curve=(str(raw["response_curve"]).strip()
                             if str(raw.get("response_curve") or "").strip() else None),
+            response_model=(str(raw["response_model"]).strip()
+                            if str(raw.get("response_model") or "").strip() else None),
             response_gain=_require_positive_gain(raw.get("response_gain", 1.0)),
             extra=dict(raw.get("extra", {}) or {}),
         )
@@ -1016,6 +1021,7 @@ class SolverConfig:
             "max_cell_block": self.max_cell_block,
             "subcell_order": self.subcell_order,
             "response_curve": self.response_curve,
+            "response_model": self.response_model,
             "response_gain": self.response_gain,
         }
 
@@ -1563,6 +1569,26 @@ def check_reference_conditions(config: RunConfig, material: Any) -> list[UFDemoE
         "wavelength_m": ("波长", config.laser.wavelength_m),
         "pulse_duration_s": ("脉宽", config.laser.pulse_duration_s),
     }
+    # C05: a named experiment-calibrated model owns its own pulse-duration
+    # validity domain.  Validate it before the literature protocol check and
+    # do not force the calibrated run back onto the 208 fs reference point.
+    selected_response_model = getattr(getattr(config, "solver", None), "response_model", None)
+    if selected_response_model:
+        try:
+            from .materials import resolve_pulse_duration_response
+
+            _r, _m = resolve_pulse_duration_response(
+                material,
+                config.laser.pulse_duration_s,
+                model_id=selected_response_model,
+                wavelength_m=config.laser.wavelength_m,
+            )
+        except UFDemoError as err:
+            errs.append(err)
+        # The model's pulse-duration domain has just been checked above.  Keep
+        # the literature wavelength gate (unless the model provides its own
+        # range, which the resolver also checks) but skip its fixed tau value.
+        cond_map.pop("pulse_duration_s", None)
     for key, (zh_name, actual) in cond_map.items():
         spec = (proto.get("required_laser", {}) or {}).get(key)
         if spec is None:

@@ -1,0 +1,100 @@
+{
+  "schema": "ufdemo.pulse_duration_grid_validation/1",
+  "card": "C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\data\\materials\\zirconia_ysz_pulsewidth_calibrated_effective.json",
+  "modelId": "ysz_pulsewidth_effective_v1",
+  "representatives": [
+    {
+      "sample_id": "zr-pass-014",
+      "pulse_duration_fs": 223.0,
+      "measured_depth_um": 13.35,
+      "predictions": [
+        {
+          "dx_um": 2.0,
+          "predicted_depth_um": 1.441145825356871,
+          "ok": true
+        },
+        {
+          "dx_um": 1.0,
+          "predicted_depth_um": 1.3542405853788368,
+          "ok": true
+        }
+      ],
+      "relative_grid_change": 0.06417267427687019
+    },
+    {
+      "sample_id": "zr-pass-021",
+      "pulse_duration_fs": 500.0,
+      "measured_depth_um": 7.38,
+      "predictions": [
+        {
+          "dx_um": 2.0,
+          "predicted_depth_um": 2.4776470449989647,
+          "ok": true
+        },
+        {
+          "dx_um": 1.0,
+          "predicted_depth_um": 2.014847921345384,
+          "ok": true
+        }
+      ],
+      "relative_grid_change": 0.22969432022668668
+    },
+    {
+      "sample_id": "zr-pass-050",
+      "pulse_duration_fs": 1000.0,
+      "measured_depth_um": 6.49,
+      "predictions": [
+        {
+          "dx_um": 2.0,
+          "predicted_depth_um": 0.61501513668949,
+          "ok": true
+        },
+        {
+          "dx_um": 1.0,
+          "predicted_depth_um": 0.5576187997391444,
+          "ok": true
+        }
+      ],
+      "relative_grid_change": 0.10293113678591144
+    },
+    {
+      "sample_id": "zr-pass-020",
+      "pulse_duration_fs": 2000.0,
+      "measured_depth_um": 6.58,
+      "predictions": [
+        {
+          "dx_um": 2.0,
+          "predicted_depth_um": 0.8267397999206526,
+          "ok": true
+        },
+        {
+          "dx_um": 1.0,
+          "predicted_depth_um": 0.7792216315949609,
+          "ok": true
+        }
+      ],
+      "relative_grid_change": 0.060981582644758496
+    },
+    {
+      "sample_id": "zr-pass-027",
+      "pulse_duration_fs": 4000.0,
+      "measured_depth_um": 6.03,
+      "predictions": [
+        {
+          "dx_um": 2.0,
+          "predicted_depth_um": 0.06031788764548144,
+          "ok": true
+        },
+        {
+          "dx_um": 1.0,
+          "predicted_depth_um": 0.0774487075586155,
+          "ok": true
+        }
+      ],
+      "relative_grid_change": 0.22118922901546095
+    }
+  ],
+  "maxRelativeGridChange": 0.22969432022668668,
+  "meanRelativeGridChange": 0.13579378858993757,
+  "note": "dx/2 对照只验证当前窗口与代表工况的数值收敛，不是实验精度结论。"
+}

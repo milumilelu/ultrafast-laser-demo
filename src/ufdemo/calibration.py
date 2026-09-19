@@ -49,6 +49,8 @@ HEADER_MAP_ZH: Mapping[str, str] = {
     "use_for_fit": "use_for_fit",
     "session_id": "session_id",
     "measurement_id": "measurement_id",
+    "观测口径": "observation_definition",
+    "observation_definition": "observation_definition",
 }
 
 #: 编码探测顺序。实验表常见 GB18030（中文表头），不能假定 UTF-8。
@@ -154,6 +156,7 @@ class ExperimentRow:
             "SqUm": self.Sq_um,
             "SzUm": self.Sz_um,
             "sourceRow": self.source_row,
+            "extras": dict(self.extras),
         }
 
 
@@ -260,6 +263,12 @@ def load_experiment_csv(path: str | Path) -> ExperimentTable:
             max_depth_um=_to_float(rec.get("max_depth_um")),
             use_for_fit=use_for_fit,
             source_row=i,
+            extras={
+                "session_id": rec.get("session_id"),
+                "measurement_id": rec.get("measurement_id"),
+                "source_file": str(p),
+                "observation_definition": rec.get("observation_definition") or "unspecified_depth_summary",
+            },
         ))
 
     notes = [
@@ -397,6 +406,12 @@ class PredictionSpec:
     #: 覆盖材料卡 ``response`` 的部分字段（C3 反推基线用）。
     #: **不写盘**：在内存构造 MaterialSpec，原始材料卡文件保持不变。
     response_override: Mapping[str, Any] | None = None
+    #: Optional named pulse-duration response model.  It is resolved inside
+    #: the event law; the original material card is never modified.
+    response_model_id: str | None = None
+    #: In-memory model used by fitting/validation tools.  It is never written
+    #: to the source material card.
+    response_model_override: Mapping[str, Any] | None = None
     #: 运行准入模式。真实材料卡带有文献协议门禁时，
     #: 与本机 pass 实验不一致的条件只能显式使用 ``synthetic_demo``
     #: 做工程有效标定；默认 reference_case 保持既有行为。
@@ -524,6 +539,7 @@ def build_row_config(
             "mode": "reference",
             **patch["solver"],
             "response_gain": float(gain),      # ← 标定增益进入每次几何更新
+            "response_model": spec.response_model_id,
             "history_enabled": False,
         },
         "output": {},
@@ -556,12 +572,15 @@ def predict_mean_depth(
 
     cfg = build_row_config(row, spec=spec, gain=gain, bg=bg)
     card_path = Path(cfg.material_card_file)
-    if spec.response_override:
+    if spec.response_override or spec.response_model_override:
         # C3 反推：参数化材料卡在**内存**里生效，磁盘上的原始卡一个字节都不改。
         from .materials import MaterialSpec
 
         raw = json.loads(card_path.read_text(encoding="utf-8"))
-        raw["response"] = {**(raw.get("response") or {}), **dict(spec.response_override)}
+        if spec.response_override:
+            raw["response"] = {**(raw.get("response") or {}), **dict(spec.response_override)}
+        if spec.response_model_override:
+            raw["pulse_duration_models"] = [dict(spec.response_model_override)]
         material = MaterialSpec.from_dict(raw)
     else:
         material = load_material_card(card_path)
@@ -1222,3 +1241,241 @@ def baseline_to_card_patch(est: BaselineEstimate) -> dict[str, Any]:
                     "不可直接当作材料卡已标定，需人工确认后才可升级证据状态。",
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# C03/C08: pulse-duration-conditioned material response
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PulseDurationCalibrationResult:
+    """Low-dimensional, experiment-conditioned response calibration.
+
+    The result is a sidecar artifact.  It is intentionally not a replacement
+    for the literature card: ``evidence_status`` remains engineering
+    effective, and the declared pulse-duration domain is part of the artifact.
+    """
+
+    material_id: str
+    model_id: str
+    reference_pulse_duration_fs: float
+    reference_threshold_J_m2: float
+    reference_delta_m: float
+    threshold_ratio: float
+    delta_ratio: float
+    threshold_exponent: float
+    delta_exponent: float
+    pulse_duration_range_fs: tuple[float, float]
+    n_train: int
+    n_holdout: int
+    train_mae_um: float | None
+    holdout_mae_um: float | None
+    train_median_rel: float | None
+    holdout_median_rel: float | None
+    train_rows: tuple[str, ...] = ()
+    holdout_rows: tuple[str, ...] = ()
+    source_files: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+    grid_validation: Mapping[str, Any] = field(default_factory=dict)
+    evidence_status: str = "engineering_effective_from_experiment"
+
+    def model_definition(self) -> dict[str, Any]:
+        return {
+            "id": self.model_id,
+            "kind": "power_law_response",
+            "source": "experiment_calibration",
+            "evidence_status": self.evidence_status,
+            "trust_state": "calibrated_interpolation",
+            "reference_pulse_duration_fs": self.reference_pulse_duration_fs,
+            "reference_response": {
+                "threshold_J_m2": self.reference_threshold_J_m2 * self.threshold_ratio,
+                "delta_m": self.reference_delta_m * self.delta_ratio,
+            },
+            "exponents": {
+                "threshold": self.threshold_exponent,
+                "delta": self.delta_exponent,
+            },
+            "validity_domain": {
+                "scope": "calibrated_experiment_range",
+                "pulse_duration_fs": list(self.pulse_duration_range_fs),
+            },
+            "source_files": list(self.source_files),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "ufdemo.pulse_duration_calibration/1",
+            "materialId": self.material_id,
+            "model": self.model_definition(),
+            "nTrain": self.n_train,
+            "nHoldout": self.n_holdout,
+            "trainRows": list(self.train_rows),
+            "holdoutRows": list(self.holdout_rows),
+            "metrics": {
+                "trainMaeUm": self.train_mae_um,
+                "holdoutMaeUm": self.holdout_mae_um,
+                "trainMedianRelErr": self.train_median_rel,
+                "holdoutMedianRelErr": self.holdout_median_rel,
+            },
+            "gridValidation": dict(self.grid_validation),
+            "sourceFiles": list(self.source_files),
+            "notes": list(self.notes),
+            "evidenceStatus": self.evidence_status,
+        }
+
+
+def _calibration_metrics(rows: Sequence[ExperimentRow], preds: Mapping[str, float | None]) -> tuple[float | None, float | None]:
+    pairs = [(float(preds[r.sample_id]), float(r.mean_depth_um)) for r in rows
+             if preds.get(r.sample_id) is not None and float(r.mean_depth_um) > 0]
+    if not pairs:
+        return None, None
+    mae = sum(abs(p - y) for p, y in pairs) / len(pairs)
+    rel = sorted(abs(p - y) / max(abs(y), 1e-12) for p, y in pairs)
+    mid = len(rel) // 2
+    med = rel[mid] if len(rel) % 2 else 0.5 * (rel[mid - 1] + rel[mid])
+    return float(mae), float(med)
+
+
+def calibrate_pulse_duration_response(
+    train_rows: Sequence[ExperimentRow],
+    *,
+    spec: PredictionSpec,
+    holdout_rows: Sequence[ExperimentRow] = (),
+    material_id: str = "",
+    model_id: str = "pulsewidth_calibrated_v1",
+    reference_pulse_duration_fs: float | None = None,
+    bounds_log_ratio: tuple[float, float] = (-2.0, 2.0),
+    bounds_exponent: tuple[float, float] = (-2.0, 2.0),
+    residual_scale_um: float = 5.0,
+    max_nfev: int = 18,
+    bg: Any | None = None,
+    progress: Callable[[int, Sequence[float]], None] | None = None,
+) -> PulseDurationCalibrationResult:
+    """Fit a bounded four-parameter pulse-duration response law.
+
+    Parameters are log multipliers for the reference threshold and removal
+    scale plus two pulse-duration exponents.  Every objective evaluation runs
+    the real recursive solver, so the fit cannot collapse into a terminal
+    depth multiplier.  ``calibrate_gain`` remains the separate scalar
+    baseline and is never fitted simultaneously here.
+    """
+    try:
+        import numpy as np
+        from scipy.optimize import least_squares
+    except ImportError as exc:  # pragma: no cover
+        raise UFDemoError(CONFIG_INVALID, "脉宽响应标定需要 SciPy", field_path="calibration") from exc
+    if not train_rows:
+        raise UFDemoError(CONFIG_INVALID, "没有训练行，无法标定脉宽响应",
+                          field_path="calibration.train_rows", actual=0, requirement="≥ 1 行")
+    from .materials import load_material_card
+
+    card = load_material_card(spec.material_card_file)
+    base = dict(card.response or {})
+    fth0 = float(base.get("threshold_J_m2", base.get("threshold_internal")))
+    delta0 = float(base.get("delta_m", base.get("delta_internal")))
+    if reference_pulse_duration_fs is None:
+        rp = dict(card.reference_protocol or {})
+        reference_pulse_duration_fs = float(
+            ((rp.get("required_laser") or {}).get("pulse_duration_s") or {}).get("value", 208e-15)
+        ) * 1e15
+    tau_values = [float(r.pulse_duration_fs) for r in list(train_rows) + list(holdout_rows)]
+    tau_range = (min(tau_values), max(tau_values))
+    fitting_spec = PredictionSpec(
+        material_card_file=spec.material_card_file,
+        window_um=spec.window_um, dx_um=spec.dx_um,
+        machining_region_um=spec.machining_region_um,
+        initial_height_m=spec.initial_height_m,
+        observation=spec.observation,
+        run_mode="synthetic_demo",
+    )
+
+    def model_from_x(x: Sequence[float]) -> dict[str, Any]:
+        return {
+            "id": model_id,
+            "kind": "power_law_response",
+            "reference_pulse_duration_fs": float(reference_pulse_duration_fs),
+            "reference_response": {
+                "threshold_J_m2": fth0 * math.exp(float(x[0])),
+                "delta_m": delta0 * math.exp(float(x[1])),
+            },
+            "exponents": {"threshold": float(x[2]), "delta": float(x[3])},
+            "validity_domain": {"scope": "calibration_fit", "pulse_duration_fs": list(tau_range)},
+            "source": "experiment_calibration",
+            "evidence_status": "engineering_effective_from_experiment",
+            "trust_state": "calibrated_interpolation",
+        }
+
+    calls = {"n": 0}
+
+    def predict(x: Sequence[float], rows: Sequence[ExperimentRow]) -> dict[str, float | None]:
+        local = PredictionSpec(**{**fitting_spec.__dict__, "response_model_id": model_id,
+                                 "response_model_override": model_from_x(x)})
+        out: dict[str, float | None] = {}
+        for row in rows:
+            value = predict_mean_depth(row, spec=local, gain=1.0, bg=bg)
+            out[row.sample_id] = value.get("predicted_depth_um") if value.get("ok") else None
+        return out
+
+    def residual(x: Any) -> Any:
+        calls["n"] += 1
+        if progress:
+            progress(calls["n"], list(map(float, x)))
+        pred = predict(x, train_rows)
+        values: list[float] = []
+        for row in train_rows:
+            p = pred.get(row.sample_id)
+            if p is None or p <= 0 or row.mean_depth_um <= 0:
+                values.append(1e6 / max(residual_scale_um, 1e-9))
+            else:
+                values.append((float(p) - float(row.mean_depth_um)) / max(residual_scale_um, 1e-9))
+        return np.asarray(values, dtype=float)
+
+    lo_ratio, hi_ratio = bounds_log_ratio
+    lo_exp, hi_exp = bounds_exponent
+    sol = least_squares(
+        residual, x0=np.zeros(4, dtype=float),
+        bounds=(np.asarray([lo_ratio, lo_ratio, lo_exp, lo_exp]),
+                np.asarray([hi_ratio, hi_ratio, hi_exp, hi_exp])),
+        loss="soft_l1", max_nfev=max(1, int(max_nfev)),
+    )
+    x = [float(v) for v in sol.x]
+    train_pred = predict(x, train_rows)
+    hold_pred = predict(x, holdout_rows) if holdout_rows else {}
+    tr_mae, tr_rel = _calibration_metrics(train_rows, train_pred)
+    ho_mae, ho_rel = _calibration_metrics(holdout_rows, hold_pred) if holdout_rows else (None, None)
+    notes = [
+        "四参数低维闭合：参考阈值倍率、参考 δ 倍率、阈值脉宽指数、δ 脉宽指数。",
+        "每次目标函数求值均调用真实逐脉冲递推；没有把终态深度乘一个脉宽系数。",
+        "标定产物是 engineering_effective_from_experiment，不升级原始文献卡证据状态。",
+        "仅在声明的脉宽范围内插值；域外运行由准入检查拒绝。",
+        "未同时放开 response_gain，避免 δ 与全局增益互相补偿。",
+    ]
+    if not holdout_rows:
+        notes.append("没有留出行：当前结果只说明拟合优度，不构成泛化证据。")
+    from . import __version__
+
+    return PulseDurationCalibrationResult(
+        material_id=material_id or card.id,
+        model_id=model_id,
+        reference_pulse_duration_fs=float(reference_pulse_duration_fs),
+        reference_threshold_J_m2=fth0,
+        reference_delta_m=delta0,
+        threshold_ratio=math.exp(x[0]), delta_ratio=math.exp(x[1]),
+        threshold_exponent=x[2], delta_exponent=x[3],
+        pulse_duration_range_fs=tau_range,
+        n_train=len(train_rows), n_holdout=len(holdout_rows),
+        train_mae_um=tr_mae, holdout_mae_um=ho_mae,
+        train_median_rel=tr_rel, holdout_median_rel=ho_rel,
+        train_rows=tuple(r.sample_id for r in train_rows),
+        holdout_rows=tuple(r.sample_id for r in holdout_rows),
+        source_files=(spec.material_card_file,), notes=tuple(notes),
+        grid_validation={"status": "pending", "dx_um": spec.dx_um},
+    )
+
+
+def save_pulse_duration_calibration(result: PulseDurationCalibrationResult, path: str | Path) -> Path:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return p

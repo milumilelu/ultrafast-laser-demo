@@ -1,0 +1,229 @@
+{
+  "schema": "ufdemo.pulse_duration_audit/1",
+  "sourceSummary": "docs/experiments/laser_proc_2026-09-18/depth_vs_passes.csv",
+  "sourceDesign": "docs/experiments/design_tables_pulse_fs/氧化锆/氧化锆_pass_design.csv",
+  "nRows": 60,
+  "nConditions": 15,
+  "pulseDurationsFs": [
+    223.0,
+    500.0,
+    1000.0,
+    2000.0,
+    4000.0
+  ],
+  "nonMonotonicConditions": 5,
+  "observationDefinition": "audited depth_vs_passes mean depth, endpoint pass N=1..4; design joined by pulse duration/frequency/hatch/speed/pass",
+  "fit": {
+    "schema": "ufdemo.pulse_duration_calibration/1",
+    "materialId": "zirconia_ysz_pulsewidth_calibrated_effective",
+    "model": {
+      "id": "ysz_pulsewidth_effective_v1",
+      "kind": "power_law_response",
+      "source": "experiment_calibration",
+      "evidence_status": "engineering_effective_from_experiment",
+      "trust_state": "calibrated_interpolation",
+      "reference_pulse_duration_fs": 208.0,
+      "reference_response": {
+        "threshold_J_m2": 64295.18359121891,
+        "delta_m": 1.5366620917086734e-07
+      },
+      "exponents": {
+        "threshold": 0.9057478198429849,
+        "delta": -0.21600221076653547
+      },
+      "validity_domain": {
+        "scope": "calibrated_experiment_range",
+        "pulse_duration_fs": [
+          223.0,
+          4000.0
+        ]
+      },
+      "source_files": [
+        "C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\data\\materials\\zirconia_ysz_machining_effective_n3.json"
+      ]
+    },
+    "nTrain": 48,
+    "nHoldout": 12,
+    "trainRows": [
+      "zr-pass-050",
+      "zr-pass-051",
+      "zr-pass-052",
+      "zr-pass-049",
+      "zr-pass-010",
+      "zr-pass-009",
+      "zr-pass-011",
+      "zr-pass-012",
+      "zr-pass-043",
+      "zr-pass-044",
+      "zr-pass-041",
+      "zr-pass-042",
+      "zr-pass-020",
+      "zr-pass-018",
+      "zr-pass-019",
+      "zr-pass-017",
+      "zr-pass-031",
+      "zr-pass-029",
+      "zr-pass-030",
+      "zr-pass-032",
+      "zr-pass-047",
+      "zr-pass-048",
+      "zr-pass-045",
+      "zr-pass-046",
+      "zr-pass-014",
+      "zr-pass-015",
+      "zr-pass-016",
+      "zr-pass-013",
+      "zr-pass-001",
+      "zr-pass-002",
+      "zr-pass-003",
+      "zr-pass-004",
+      "zr-pass-035",
+      "zr-pass-033",
+      "zr-pass-034",
+      "zr-pass-036",
+      "zr-pass-021",
+      "zr-pass-022",
+      "zr-pass-024",
+      "zr-pass-023",
+      "zr-pass-037",
+      "zr-pass-038",
+      "zr-pass-039",
+      "zr-pass-040",
+      "zr-pass-058",
+      "zr-pass-060",
+      "zr-pass-059",
+      "zr-pass-057"
+    ],
+    "holdoutRows": [
+      "zr-pass-027",
+      "zr-pass-026",
+      "zr-pass-025",
+      "zr-pass-028",
+      "zr-pass-008",
+      "zr-pass-006",
+      "zr-pass-007",
+      "zr-pass-005",
+      "zr-pass-054",
+      "zr-pass-055",
+      "zr-pass-056",
+      "zr-pass-053"
+    ],
+    "metrics": {
+      "trainMaeUm": 13.412546181022327,
+      "holdoutMaeUm": 11.288550080582569,
+      "trainMedianRelErr": 0.8287761585127895,
+      "holdoutMedianRelErr": 0.9430160616227807
+    },
+    "gridValidation": {
+      "schema": "ufdemo.pulse_duration_grid_validation/1",
+      "card": "C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\data\\materials\\zirconia_ysz_pulsewidth_calibrated_effective.json",
+      "modelId": "ysz_pulsewidth_effective_v1",
+      "representatives": [
+        {
+          "sample_id": "zr-pass-014",
+          "pulse_duration_fs": 223.0,
+          "measured_depth_um": 13.35,
+          "predictions": [
+            {
+              "dx_um": 2.0,
+              "predicted_depth_um": 1.441145825356871,
+              "ok": true
+            },
+            {
+              "dx_um": 1.0,
+              "predicted_depth_um": 1.3542405853788368,
+              "ok": true
+            }
+          ],
+          "relative_grid_change": 0.06417267427687019
+        },
+        {
+          "sample_id": "zr-pass-021",
+          "pulse_duration_fs": 500.0,
+          "measured_depth_um": 7.38,
+          "predictions": [
+            {
+              "dx_um": 2.0,
+              "predicted_depth_um": 2.4776470449989647,
+              "ok": true
+            },
+            {
+              "dx_um": 1.0,
+              "predicted_depth_um": 2.014847921345384,
+              "ok": true
+            }
+          ],
+          "relative_grid_change": 0.22969432022668668
+        },
+        {
+          "sample_id": "zr-pass-050",
+          "pulse_duration_fs": 1000.0,
+          "measured_depth_um": 6.49,
+          "predictions": [
+            {
+              "dx_um": 2.0,
+              "predicted_depth_um": 0.61501513668949,
+              "ok": true
+            },
+            {
+              "dx_um": 1.0,
+              "predicted_depth_um": 0.5576187997391444,
+              "ok": true
+            }
+          ],
+          "relative_grid_change": 0.10293113678591144
+        },
+        {
+          "sample_id": "zr-pass-020",
+          "pulse_duration_fs": 2000.0,
+          "measured_depth_um": 6.58,
+          "predictions": [
+            {
+              "dx_um": 2.0,
+              "predicted_depth_um": 0.8267397999206526,
+              "ok": true
+            },
+            {
+              "dx_um": 1.0,
+              "predicted_depth_um": 0.7792216315949609,
+              "ok": true
+            }
+          ],
+          "relative_grid_change": 0.060981582644758496
+        },
+        {
+          "sample_id": "zr-pass-027",
+          "pulse_duration_fs": 4000.0,
+          "measured_depth_um": 6.03,
+          "predictions": [
+            {
+              "dx_um": 2.0,
+              "predicted_depth_um": 0.06031788764548144,
+              "ok": true
+            },
+            {
+              "dx_um": 1.0,
+              "predicted_depth_um": 0.0774487075586155,
+              "ok": true
+            }
+          ],
+          "relative_grid_change": 0.22118922901546095
+        }
+      ],
+      "maxRelativeGridChange": 0.22969432022668668,
+      "meanRelativeGridChange": 0.13579378858993757,
+      "note": "dx/2 对照只验证当前窗口与代表工况的数值收敛，不是实验精度结论。"
+    },
+    "sourceFiles": [
+      "C:\\Users\\RZF\\Desktop\\博士课题资料\\工艺仿真软件\\ultrafast-demo\\data\\materials\\zirconia_ysz_machining_effective_n3.json"
+    ],
+    "notes": [
+      "四参数低维闭合：参考阈值倍率、参考 δ 倍率、阈值脉宽指数、δ 脉宽指数。",
+      "每次目标函数求值均调用真实逐脉冲递推；没有把终态深度乘一个脉宽系数。",
+      "标定产物是 engineering_effective_from_experiment，不升级原始文献卡证据状态。",
+      "仅在声明的脉宽范围内插值；域外运行由准入检查拒绝。",
+      "未同时放开 response_gain，避免 δ 与全局增益互相补偿。"
+    ],
+    "evidenceStatus": "engineering_effective_from_experiment"
+  }
+}

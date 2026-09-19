@@ -204,6 +204,8 @@ def run_to_payload(
         "inputHash": frozen.input_hash,
         "runDir": frozen.run_dir,
         "watermark": jsonable(frozen.material_watermark),
+        "effectiveConfiguration": jsonable((getattr(frozen.result, "metadata", {}) or {}).get("effective_configuration")),
+        "responseModel": jsonable((getattr(frozen.result, "metadata", {}) or {}).get("response_model")),
         "eventsProcessed": int(frozen.events_processed),
         "eventsTotal": int(frozen.events_total),
         "removalAvailable": bool(frozen.removal_available),
@@ -386,7 +388,15 @@ def preview_payload(
 def catalog_payload(material_dir: str | Path) -> list[dict[str, Any]]:
     """材料卡目录：身份 + 能力 + 逐模式门控（复用 ``ui_service.capability_gate``）。"""
     out: list[dict[str, Any]] = []
-    for card_file in sorted(Path(material_dir).glob("*.json")):
+    material_root = Path(material_dir)
+    card_files = list(material_root.glob("*.json"))
+    # Calibration sidecars intentionally live outside data/materials so the
+    # literature-card immutability ledger remains stable.  They are exposed in
+    # the web catalog as selectable, explicitly experiment-conditioned cards.
+    sidecar_dir = material_root.parent / "calibrations"
+    if sidecar_dir.is_dir():
+        card_files.extend(sidecar_dir.glob("*.json"))
+    for card_file in sorted(card_files):
         try:
             m = load_material_card(card_file)
         except Exception:  # noqa: BLE001 - 坏卡跳过，不阻断整个目录
@@ -423,6 +433,17 @@ def catalog_payload(material_dir: str | Path) -> list[dict[str, Any]]:
                 "physicalPredictionAllowed": "reference_case" in modes,
                 "responseKind": (m.response or {}).get("kind"),
                 "response": jsonable(m.response),
+                "pulseDurationModels": jsonable(list(getattr(m, "pulse_duration_models", ()) or ())),
+                "responseTrust": [
+                    {
+                        "id": str(model.get("id")),
+                        "source": str(model.get("source", "experiment_calibration")),
+                        "trustState": str(model.get("trust_state", "calibrated_interpolation")),
+                        "validityDomain": jsonable(model.get("validity_domain") or {}),
+                        "evidenceStatus": str(model.get("evidence_status", "engineering_effective_from_experiment")),
+                    }
+                    for model in (getattr(m, "pulse_duration_models", ()) or ())
+                ],
                 "thresholdCandidates": jsonable(list(m.threshold_candidates or ())),
                 "multiResponse": jsonable(m.multi_response),
                 "phases": jsonable(list(m.phases or ())),
@@ -1251,6 +1272,7 @@ def demo_rect_payload(
     rl = rp.get("required_laser") or {}
     process_mode = str(body.get("processMode") or "reference").strip().lower()
     actual_process = process_mode in {"actual", "machine", "local", "calibrated"}
+    response_model_id = str(body.get("responseModelId") or body.get("calibrationModelId") or "").strip() or None
     # 「源文献装置描述」（w0/f 等）—— ADR-0021 补记后不再参与门禁，
     # 但 demo 仍从这里取 w0/f 来装配能流场与扫描速度（保持既有演示行为不变）。
     sb = rp.get("source_beam") or {}
@@ -1407,6 +1429,7 @@ def demo_rect_payload(
             "memory_budget_bytes": 2147483648, "budget_safety_factor": 1.5,
             "cancel_check_interval": 256, "acceleration": "off",
             "multiline_incubation": False, "structured_interface": False,
+            "response_model": response_model_id,
         },
         "output": {
             "snapshot_policy": "passes", "snapshot_every_n_passes": 1,
@@ -1472,6 +1495,8 @@ def demo_rect_payload(
         # 阈值模型回显：界面用它说明「为什么工艺参数可以自由设」——
         # 阈值不是某个 N 处的常量，而是按 Fth(N)=Fth1·N^(S-1) 逐点算出来的。
         "incubation": incubation_info,
+        "responseModel": (out.get("watermark") or {}).get("response_model"),
+        "responseModelId": response_model_id,
         # 协议基准（**不受本次覆盖影响**）：前端用它做容差提示，
         # 否则用户改一次参数就把基准污染了，后面再也判断不出"偏离了多少"。
         "baseline": {

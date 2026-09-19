@@ -270,7 +270,11 @@ def accumulate_block(
     cached_patch: Any = None
 
     for ev in events:
-        key = (ev.focus_xyz_m, float(ev.energy_J))
+        # C07: cache identity includes the active response model.  A changed
+        # pulse-duration calibration may change the threshold/window even when
+        # the optical event has the same focus and energy.
+        _model_key = repr(getattr(law, "response_model", None))
+        key = (ev.focus_xyz_m, float(ev.energy_J), _model_key)
         if cache_key is not None and key == cache_key:
             patch = cached_patch
             acc.patch_cache_hits += 1

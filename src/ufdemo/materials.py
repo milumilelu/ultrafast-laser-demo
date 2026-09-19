@@ -160,6 +160,10 @@ class MaterialSpec:
     threshold_candidates: tuple[Mapping[str, Any], ...] = ()
     reference_protocol: Mapping[str, Any] = field(default_factory=dict)
     multi_response: Mapping[str, Any] = field(default_factory=dict)
+    #: Independent, pulse-duration-conditioned calibration models.  These are
+    #: deliberately separate from ``response`` so the literature card remains
+    #: byte-for-byte reproducible and can still be selected as the baseline.
+    pulse_duration_models: tuple[Mapping[str, Any], ...] = ()
     phases: tuple[Mapping[str, Any], ...] = ()
     fixture_only: bool = False
     enabled_by_default: bool = True
@@ -212,6 +216,9 @@ class MaterialSpec:
             threshold_candidates=tuple(raw.get("threshold_candidates", ()) or ()),
             reference_protocol=resolve_reference_protocol(raw, base=protocol_base),
             multi_response=_normalize_multi_response(raw.get("multi_response", {}) or {}),
+            pulse_duration_models=tuple(
+                raw.get("pulse_duration_models", raw.get("calibration_models", ())) or ()
+            ),
             phases=tuple(raw.get("phases", ()) or ()),
             fixture_only=bool(raw.get("fixture_only", False)),
             enabled_by_default=bool(raw.get("enabled_by_default", True)),
@@ -246,6 +253,15 @@ class MaterialSpec:
             "card_sha256": self.card_sha256,
             "physical_prediction_allowed": self.is_physical(),
             "identity_confirmed_by_user": bool(self.identity.get("material_identity_confirmed_by_user", False)),
+            "pulse_duration_models": [
+                {
+                    "id": str(model.get("id")),
+                    "source": str(model.get("source", "experiment_calibration")),
+                    "trust_state": str(model.get("trust_state", "calibrated_interpolation")),
+                    "validity_domain": dict(model.get("validity_domain") or {}),
+                }
+                for model in (self.pulse_duration_models or ())
+            ],
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -263,6 +279,141 @@ class MaterialSpec:
     @property
     def threshold_internal(self) -> float | None:
         return self.response.get("threshold_internal")
+
+    def pulse_duration_model(self, model_id: str | None = None) -> Mapping[str, Any] | None:
+        """Return a named pulse-duration model, or the sole model if omitted."""
+        models = tuple(self.pulse_duration_models or ())
+        if model_id:
+            for model in models:
+                if str(model.get("id", "")) == str(model_id):
+                    return model
+            return None
+        if len(models) == 1:
+            return models[0]
+        return None
+
+
+def _range_contains(value: float, spec: Any) -> bool:
+    """Check a scalar against either ``[lo, hi]`` or ``{value, rel_tol}``."""
+    if isinstance(spec, Mapping):
+        if spec.get("value") is None:
+            return True
+        ref = float(spec["value"])
+        tol = float(spec.get("rel_tol", 1e-6))
+        return abs(float(value) - ref) / max(abs(ref), 1e-30) <= tol
+    if isinstance(spec, (list, tuple)) and len(spec) == 2:
+        return float(spec[0]) <= float(value) <= float(spec[1])
+    return True
+
+
+def resolve_pulse_duration_response(
+    material: MaterialSpec,
+    pulse_duration_s: float | None,
+    *,
+    model_id: str | None = None,
+    wavelength_m: float | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve a response at the current pulse duration.
+
+    The base literature response is returned unchanged when no model is
+    selected.  A calibration model applies a bounded power-law interpolation
+    to threshold and removal scale and returns provenance alongside the
+    effective response.  It never silently extrapolates outside its declared
+    domain.
+    """
+    base = dict(material.response or {})
+    requested = str(model_id or "").strip() or None
+    model = material.pulse_duration_model(requested)
+    if requested and model is None:
+        raise UFDemoError(
+            CONDITION_MISMATCH,
+            f"材料卡没有脉宽响应模型 {requested!r}",
+            field_path="solver.response_model",
+            actual=requested,
+            requirement="model id 必须登记在材料卡 pulse_duration_models 中",
+        )
+    if model is None:
+        return base, {
+            "model_id": None,
+            "source": "literature_card",
+            "trust_state": "literature_reference",
+            "pulse_duration_s": pulse_duration_s,
+            "extrapolated": False,
+        }
+
+    if pulse_duration_s is None or not math.isfinite(float(pulse_duration_s)) or float(pulse_duration_s) <= 0:
+        raise UFDemoError(
+            CONDITION_MISMATCH,
+            "脉宽响应模型需要本次运行的 pulse_duration_s",
+            field_path="laser.pulse_duration_s",
+            actual=pulse_duration_s,
+            requirement="有限正数",
+        )
+    tau_fs = float(pulse_duration_s) * 1e15
+    domain = dict(model.get("validity_domain") or {})
+    tau_domain = domain.get("pulse_duration_fs", domain.get("pulse_duration_range_fs"))
+    if tau_domain is not None and not _range_contains(tau_fs, tau_domain):
+        raise UFDemoError(
+            CONDITION_MISMATCH,
+            f"脉宽 {tau_fs:g} fs 超出校准模型有效域",
+            field_path="laser.pulse_duration_s",
+            actual=tau_fs,
+            requirement=f"model={model.get('id')} domain={tau_domain}",
+            suggestion="换用文献基线或在该脉宽补充实验标定；不自动外推。",
+        )
+    laser_domain = dict(domain.get("laser") or {})
+    if wavelength_m is not None and laser_domain.get("wavelength_m") is not None \
+            and not _range_contains(float(wavelength_m), laser_domain["wavelength_m"]):
+        raise UFDemoError(
+            CONDITION_MISMATCH,
+            "校准模型的波长有效域不匹配",
+            field_path="laser.wavelength_m",
+            actual=wavelength_m,
+            requirement=str(laser_domain["wavelength_m"]),
+        )
+
+    ref_tau = float(model.get("reference_pulse_duration_fs", tau_fs))
+    if ref_tau <= 0:
+        raise UFDemoError(CONFIG_INVALID, "校准模型 reference_pulse_duration_fs 必须为正数",
+                          field_path="pulse_duration_models.reference_pulse_duration_fs",
+                          actual=ref_tau)
+    ratio = tau_fs / ref_tau
+    ref = dict(model.get("reference_response") or {})
+    fth0 = float(ref.get("threshold_J_m2", base.get("threshold_J_m2", base.get("threshold_internal"))))
+    delta0 = float(ref.get("delta_m", base.get("delta_m", base.get("delta_internal"))))
+    exponents = dict(model.get("exponents") or {})
+    fth = fth0 * ratio ** float(exponents.get("threshold", 0.0))
+    delta = delta0 * ratio ** float(exponents.get("delta", 0.0))
+    bounds = dict(model.get("bounds") or {})
+    for key, value in (("threshold_J_m2", fth), ("delta_m", delta)):
+        b = bounds.get(key)
+        if isinstance(b, (list, tuple)) and len(b) == 2:
+            value = min(max(float(value), float(b[0])), float(b[1]))
+        if key == "threshold_J_m2":
+            fth = value
+        else:
+            delta = value
+    out = dict(base)
+    out.update({"threshold_J_m2": fth, "threshold_internal": fth,
+                "delta_m": delta, "delta_internal": delta})
+    meta = {
+        "model_id": str(model.get("id")),
+        "source": str(model.get("source", "experiment_calibration")),
+        "trust_state": str(model.get("trust_state", "calibrated_interpolation")),
+        "pulse_duration_s": float(pulse_duration_s),
+        "pulse_duration_fs": tau_fs,
+        "reference_pulse_duration_fs": ref_tau,
+        "tau_ratio": ratio,
+        "effective_threshold_J_m2": fth,
+        "effective_delta_m": delta,
+        "exponents": {"threshold": float(exponents.get("threshold", 0.0)),
+                       "delta": float(exponents.get("delta", 0.0))},
+        "validity_domain": domain,
+        "evidence_status": str(model.get("evidence_status", "engineering_effective_from_experiment")),
+        "source_files": list(model.get("source_files", ())),
+        "extrapolated": False,
+    }
+    return out, meta
 
 
 def build_watermark(material: MaterialSpec, unit: Any, *, run_mode: str) -> dict[str, Any]:
@@ -302,7 +453,7 @@ def watermark_rows(wm: Mapping[str, Any]) -> list[dict[str, Any]]:
         "material_id", "family", "grade", "evidence_status", "source_type",
         "card_version", "card_sha256", "physical_prediction_allowed",
         "identity_confirmed_by_user", "run_mode", "unit_mode",
-        "physical_depth_export_allowed",
+        "physical_depth_export_allowed", "response_model",
     )
     rows: list[dict[str, Any]] = []
     for k in keys:
