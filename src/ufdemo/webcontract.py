@@ -1363,10 +1363,10 @@ def demo_rect_payload(
         run_mode = "reference_case"
 
     resp = spec.response or {}
-    region = float(body.get("regionUm") or 100.0)
-    hatch = float(body.get("hatchUm") or 4.0)
-    passes = int(body.get("passes") or 2)
-    dx = float(body.get("dxUm") or 1.0)
+    region = float(body.get("regionUm") or 200.0)
+    hatch = float(body.get("hatchUm") or 2.0)
+    passes = int(body.get("passes") or 4)
+    dx = float(body.get("dxUm") or 0.25)
     margin = float(body.get("marginUm") or 10.0)
     domain = region + 2.0 * margin
 
