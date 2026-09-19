@@ -138,6 +138,8 @@ def _progress_update(job_id: str, info: dict[str, Any]) -> None:
         if job is None:
             return
         stage = str(info.get("stage") or job.get("stage") or "solving")
+        if stage not in {"queued", "finished"} and job.get("status") == "queued":
+            job["status"] = "running"
         if "events_done" in info:
             job["eventsDone"] = max(0, int(info.get("events_done") or 0))
         if "events_total" in info:
