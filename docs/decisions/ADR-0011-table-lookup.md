@@ -86,6 +86,10 @@
 全程 `solve_count` 保持为 0（由 `tools/ui_probe.py` 的查表检查与
 `tests/test_app_smoke.py` 端到端复核）。
 
+> **2026-09-19 附注**：本段提到的 `app.py` / `tools/ui_probe.py` / `tests/test_app_smoke.py`
+> 已随界面收敛删除（ADR-0023）。`ui_service.table_lookup()` / `table_grid()` 内的
+> `solve_count` 不变断言仍在实现里保留，并由 `tests/test_ui_service.py`、`tests/test_webcontract.py` 复核。
+
 ## 后果
 
 * 好消息：越界、缺依赖、语义不符、条件不符四类问题各有唯一错误码，可被外部复核；

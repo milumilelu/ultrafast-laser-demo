@@ -5,19 +5,16 @@
 执行环境、命令和结果目录。
 
 已实施批次：A–C（M0 最小闭环，G01–G04）+ D（T07 参考评估器，G05）+
-E（T09 界面，G09-UI）+ F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）
-+ 端到端演示可用性（G09-demo）+ **U03 浏览器级验收（U03-browser，真实系统浏览器）**。
+F（T10 查表，G09-table）+ G（T11–T13 分相结构，G06）。
 未运行的项目（G07–G08、逐事件核查表接入、M1/M2/M3 相关）明确标记为「未运行」，
 不得用预期数值代替通过记录。
 
-浏览器级验收走 `tools/browser_check.py`（`puppeteer-core` + 本机系统 Chrome/Edge，
-**不下载 Chromium**），逐条覆盖 U03 的 9 条主路径。它**不是**「本机无浏览器」的替代品——
-本机有 Chrome/Edge，只是不在 PATH（误诊复盘见 `docs/reports/browser_test_capability.md`）。
-无浏览器环境可用 `--no-browser` 跳过（届时如实记「未运行」）。
+**界面/浏览器级检查组（G09-UI、G09-demo、U03-browser）已于 2026-09-19 删除** ——
+当时界面收敛为唯一界面 `webui/demo.html`，旧 V2 前端与其探针一并移除（ADR-0023）。
 
 用法::
 
-    python tools/run_acceptance.py [--out runs/acceptance] [--skip-tests] [--no-browser]
+    python tools/run_acceptance.py [--out runs/acceptance] [--skip-tests]
 """
 
 from __future__ import annotations
@@ -116,8 +113,6 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "runs" / "acceptance"))
     ap.add_argument("--skip-tests", action="store_true")
-    ap.add_argument("--no-browser", action="store_true",
-                    help="跳过 U03 浏览器级验收（默认跑；仅用于无浏览器的环境）")
     args = ap.parse_args()
 
     D.mkdir(parents=True, exist_ok=True)
@@ -418,59 +413,6 @@ def main() -> int:
     n_g06_fail = sum(1 for r in g06_rows if r["status"] == "失败")
     if n_g06_fail:
         print(f"!! G06 检查未全通过：失败 {n_g06_fail}", file=sys.stderr)
-
-    # ---------------- G09 / 界面操作检查（批次 E：T09）----------------
-    from ui_probe import run_ui_checks  # noqa: E402
-
-    ui_probe_dir = out_root / "_ui_probe"
-    ui_rows = run_ui_checks(ui_probe_dir, reference_run_dir=dir_g05y)
-    for r in ui_rows:
-        if r["status"] == "未运行":
-            not_run("G09-UI", "app.py（Streamlit）", r["check"], r["expected"], r["note"], "数值实现验证")
-        else:
-            add("G09-UI", "app.py（Streamlit）", "", r["check"], r["expected"], r["measured"], "", "",
-                r["status"] == "通过", str(ui_probe_dir), "数值实现验证", r["note"])
-
-    # ---------------- G09 / 端到端演示可用性（批次 G 增补）----------------
-    from ui_demo_probe import run_demo_checks, write_reports as write_demo_reports  # noqa: E402
-
-    demo_probe_dir = out_root / "_ui_demo_probe"
-    demo_rows = run_demo_checks(demo_probe_dir)
-    demo_csv, demo_md = write_demo_reports(demo_rows, demo_probe_dir)
-    for r in demo_rows:
-        if r["status"] == "未运行":
-            not_run("G09-demo", "app.py（端到端链路）", r["check"], r["expected"], r["note"], "数值实现验证")
-        else:
-            add("G09-demo", "app.py（端到端链路）", "", r["check"], r["expected"], r["measured"], "", "",
-                r["status"] == "通过", str(demo_probe_dir), "数值实现验证", r["note"])
-
-    # ---------------- U03 / 浏览器级验收（真实系统浏览器）----------------
-    # 本机**有**系统浏览器（Chrome/Edge，绝对路径），此前记「未运行」是误诊。
-    # 详见 docs/reports/browser_test_capability.md 与 tools/browser_check.py 模块 docstring。
-    #
-    # 注意：**不**与 --skip-tests 耦合。--skip-tests 的语义是「不跑 pytest」，
-    # 与「浏览器要不要真实求解」无关；且浏览器组用隔离端口 + 隔离 UFDEMO_RUNS_DIR，
-    # 真实求解不会污染工作区 runs/。
-    from browser_check import run_browser_checks, write_reports as write_browser_reports  # noqa: E402
-
-    browser_probe_dir = out_root / "_browser_check"
-    if args.no_browser:
-        browser_rows = [{
-            "u03": "U03-浏览器级", "check": "U03 浏览器级",
-            "expected": "驱动系统浏览器跑 9 条主路径",
-            "measured": "未运行", "status": "未运行", "note": "--no-browser 已跳过",
-        }]
-    else:
-        browser_rows = run_browser_checks(browser_probe_dir)
-    browser_csv, browser_md = write_browser_reports(browser_rows, browser_probe_dir)
-    for r in browser_rows:
-        if r["status"] in ("未运行", "未实现"):
-            not_run("U03-browser", "webui（真实浏览器）", r["check"], r["expected"], r["note"],
-                    "数值实现验证")
-        else:
-            add("U03-browser", "webui（真实浏览器）", "", r["check"], r["expected"],
-                r["measured"], "", "", r["status"] == "通过", str(browser_probe_dir),
-                "数值实现验证", r["note"])
 
     # ---------------- G09 / 查表（批次 F：T10）----------------
     from table_report import (  # noqa: E402
@@ -919,11 +861,8 @@ def main() -> int:
         "python tools/structure_report.py",
         "python tools/material_report.py",
         "python tools/migrate_materials.py",
-        "python tools/ui_probe.py",
-        "python tools/ui_demo_probe.py",
         "python tools/run_acceptance.py",
         "python -m pytest -q",
-        "streamlit run app.py",
     ]
     md += ["```", ""]
     (D / "acceptance_report.md").write_text("\n".join(md), encoding="utf-8")
@@ -967,66 +906,6 @@ def main() -> int:
         "",
     ]
     (D / "g05_reference_semantics.md").write_text("\n".join(g05_md), encoding="utf-8")
-
-    # ---------------- 界面操作检查专项报告（批次 E 交付物）----------------
-    ui_csv = D / "ui_operation_check.csv"
-    with open(ui_csv, "w", newline="", encoding="utf-8-sig") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(ui_rows[0].keys()))
-        w.writeheader()
-        w.writerows(ui_rows)
-
-    n_ui_pass = sum(1 for r in ui_rows if r["status"] == "通过")
-    n_ui_fail = sum(1 for r in ui_rows if r["status"] == "失败")
-    n_ui_nr = sum(1 for r in ui_rows if r["status"] == "未运行")
-    ui_md = [
-        "# 界面操作检查（批次 E / T09，G09；批次 F / T10 增补查表检查）",
-        "",
-        f"- 生成时间（UTC）：{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}",
-        f"- 代码版本：commit={code.get('commit')}｜工作区有改动={code.get('working_tree_dirty')}",
-        f"- 驱动方式：`streamlit.testing.v1.AppTest` 真实执行 `app.py`",
-        f"- 汇总：通过 {n_ui_pass}｜失败 {n_ui_fail}｜未运行 {n_ui_nr}",
-        f"- 探针输出目录：`{ui_probe_dir}`（由 `UFDEMO_RUNS_DIR` 隔离，不污染工作区 `runs/`）",
-        "",
-        "## 检查项",
-        "",
-        "| 检查 | 预期 | 实测 | 状态 | 说明 |",
-        "|---|---|---|---|---|",
-    ]
-    for r in ui_rows:
-        ui_md.append(
-            f"| {r['check']} | {r['expected']} | {r['measured']} | {r['status']} | {r['note']} |"
-        )
-    ui_md += [
-        "",
-        "## 判定依据",
-        "",
-        "- **提交才求解**：只有「提交计算」按钮调用 `ufdemo.solver.solve`；"
-        "`ui_service.submit` 是唯一入口，成功一次 `solve_count += 1`。",
-        "- **参数编辑态与结果态分离**：可编辑参数在 `SessionState.params`，"
-        "已提交结果在 `FrozenRun`；图表一律读冻结结果，不读当前表单值。",
-        "- **改参数即过期**：提交后再改参数 → `is_stale()` 为真，结果区标为"
-        "「上一次运行」（执行细则 11.3、任务书 13 节）。",
-        "- **回放/视图不求解**：拖时间轴、切图层、旋转/翻转视图、取截面只读已有数组，"
-        "`layer_view` / `snapshot_arrays` 内有 `assert solve_count 不变` 的硬断言。",
-        "- **读取历史不求解**：`read_existing_run` 只增加 `read_count`。",
-        "- **参考评估器不求解网格**：批次 D 语义，只复现文献公式与协议量。",
-        "- **查表不求解（批次 F）**：读曲线卡、线性/PCHIP 插值、换曲线/换算法，"
-        "`solve_count` 始终为 0（`ui_service.table_lookup` / `table_grid` 内有硬断言）。",
-        "- **措辞守卫**：图层标签严格避免「热影响区 / HAZ / 温度」等被禁词（执行细则 11.3）。",
-        "- **不自动降级**：缺能力模式在配置层拦截并给出准确原因，合成示例须用户显式选择。",
-        "",
-        "## 复现命令",
-        "",
-        "```bash",
-        "python tools/ui_probe.py",
-        "python tools/table_report.py",
-        "python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q",
-        "streamlit run app.py",
-        "```",
-        "",
-    ]
-    ui_md_path = D / "ui_operation_check.md"
-    ui_md_path.write_text("\n".join(ui_md), encoding="utf-8")
 
     # ---------------- pytest ----------------
     if not args.skip_tests:
@@ -1076,12 +955,6 @@ def main() -> int:
     print(f"报告：{D / 'acceptance_report.md'}")
     print(f"报告：{g05_csv}")
     print(f"报告：{D / 'g05_reference_semantics.md'}")
-    print(f"报告：{ui_csv}")
-    print(f"报告：{ui_md_path}")
-    print(f"报告：{demo_csv}")
-    print(f"报告：{demo_md}")
-    print(f"报告：{browser_csv}")
-    print(f"报告：{browser_md}")
     print(f"报告：{struct_csv}")
     print(f"报告：{g06_csv}")
     print(f"报告：{g06_md_path}")
@@ -1090,25 +963,8 @@ def main() -> int:
     print(f"报告：{table_interp_csv}")
     print(f"插图：{table_fig}")
     print(f"通过 {n_pass}｜失败 {n_fail}｜未运行 {n_nr}")
-    print(f"界面检查：通过 {n_ui_pass}｜失败 {n_ui_fail}｜未运行 {n_ui_nr}")
-    n_demo_pass = sum(1 for r in demo_rows if r["status"] == "通过")
-    n_demo_fail = sum(1 for r in demo_rows if r["status"] == "失败")
-    n_demo_nr = sum(1 for r in demo_rows if r["status"] == "未运行")
-    print(f"端到端演示检查：通过 {n_demo_pass}｜失败 {n_demo_fail}｜未运行 {n_demo_nr}")
-    n_br_pass = sum(1 for r in browser_rows if r["status"] == "通过")
-    n_br_fail = sum(1 for r in browser_rows if r["status"] == "失败")
-    n_br_nr = sum(1 for r in browser_rows if r["status"] == "未运行")
-    n_br_ni = sum(1 for r in browser_rows if r["status"] == "未实现")
-    print(f"U03 浏览器级检查：通过 {n_br_pass}｜失败 {n_br_fail}｜未运行 {n_br_nr}｜未实现 {n_br_ni}")
-    if n_br_fail:
-        # 说明：这些失败**计入**整体退出码（所以现在跑验收会返回 1）。
-        # 这是刻意的——U03 的实施步骤第 1 条就要求「先在当前代码上跑出失败，固化 F04」，
-        # 工程当前确实有 4 条 U03 检查不通过。不得为了让验收变绿而把它们降级或跳过；
-        # 修完 api.js 的 toCurve 与 renderResultPanel 的水印读取后应自然转绿。
-        print("!! U03 浏览器级存在失败项（见 docs/reports/browser_check.md 的「已知待修」）",
-              file=sys.stderr)
     print(f"G06 检查：通过 {len(g06_rows) - n_g06_fail}｜失败 {n_g06_fail}｜结构实例 {len(structure_rows)}")
-    return 0 if (n_fail == 0 and n_g06_fail == 0 and n_demo_fail == 0) else 1
+    return 0 if (n_fail == 0 and n_g06_fail == 0) else 1
 
 
 if __name__ == "__main__":

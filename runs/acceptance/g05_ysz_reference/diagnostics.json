@@ -23,7 +23,7 @@
       "evidence_status": "literature_reported",
       "kernel_refusal_note": "平均率/累计深度不得进入逐事件增量主循环（任务书 3.2）。",
       "labels": {
-        "card_sha256": "42cd061acfe195b79e99beda9e014666aef222eb8f9df17168bc01842c9f2481",
+        "card_sha256": "9eb25eebc0a75168a27f1adacb9747f0543b201a99c589d4dfa38bfe732e1022",
         "card_version": "1.0.0",
         "evidence_status": "literature_reported",
         "material_id": "zirconia_ysz_machining_effective_n3",

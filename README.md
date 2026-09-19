@@ -15,6 +15,10 @@
 > + 本地 Web 界面（K，替代 Streamlit）+ 发布与接口加固（L：统一错误序列化 / 合法版本号 /
 > wheel 资源定位 / 绑定提交的发布证据 / 浏览器级回归）。
 > **A–L 全部批次已交付**，详见 `docs/reports/progress.md`。
+>
+> **2026-09-19 更新**：界面收敛为**唯一单文件 `webui/demo.html`**；旧多工作区前端与
+> Legacy Streamlit（`app.py`）已删除，对应验收组退役
+> （`docs/decisions/ADR-0023-demo-html-only-ui.md`）。
 
 ---
 
@@ -31,7 +35,7 @@
 | 材料卡迁移（F01/F02 → 执行卡）与能力推导 | ✅ |
 | 取消 / 失败 / 完成三态与部分结果 | ✅ |
 | **YSZ/SiC 文献参考评估器**（有效 N、阈值函数、平均率、协议累计深度） | ✅ 批次 D（T07），`python -m ufdemo reference` |
-| **Streamlit 界面**（参数表单、形貌/截面/时间轴回放、参考评估器、查表、历史运行） | ✅ 批次 E（T09）+ F，`streamlit run app.py` |
+| **本地 Web 界面**（单文件 `webui/demo.html`：材料卡 / 工艺参数 / 形貌与剖面 / 指标） | ✅ 批次 K 起；2026-09-19 收敛为唯一界面（ADR-0023） |
 | **查表**（曲线 schema、分段线性 / 保形 PCHIP、越界处理、语义路由） | ✅ 批次 F（T10），`python -m ufdemo table` |
 | **分相结构**（`phase_at` / `next_different_interface`、颗粒 / 铺层、跨相界面截断） | ✅ 批次 G（T11–T13），`examples/alsic_particle_composite.json`、`examples/cfrp_laminated_ply.json` |
 | **受限阈值协议 + 七材料能力入口 + 水印同源**（只按本事件入射能流判超阈、红线/缺口逐条实跑核验、导出与回放共用一个水印） | ✅ 批次 H（T14），`python -m ufdemo materials` / `tools/material_report.py` |
@@ -59,9 +63,6 @@ python -m venv .venv
 # 方式一：可编辑安装（推荐，之后可直接用 python -m ufdemo）
 pip install -e ".[dev]"
 
-# 含界面依赖（批次 E：streamlit + plotly）
-pip install -e ".[dev,ui]"
-
 # 含查表依赖（批次 F：scipy，用于可选 PCHIP；缺它时 PCHIP 报 NOT_IMPLEMENTED）
 pip install -e ".[dev,table]"
 
@@ -71,11 +72,11 @@ export PYTHONPATH=src           # Windows: set PYTHONPATH=src
 ```
 
 `requirements.lock` 是本机实际安装并验证通过的版本组合（numpy 2.3.5、
-pytest 9.1.1、openpyxl 3.1.5；批次 E 追加 streamlit 1.63.0、plotly 7.0.0
-及传递依赖；批次 F 追加 scipy 1.18.1），不是“全部最新版”。
+pytest 9.1.1、openpyxl 3.1.5；批次 F 追加 scipy 1.18.1），不是“全部最新版”。
+（其中批次 E 的 streamlit / plotly 段落保留为当时环境的留档：界面已于 2026-09-19
+收敛为 `webui/demo.html`，无需界面依赖。）
 
-可选依赖：`scipy`（批次 F 查表，**已安装**）、`streamlit` + `plotly`（批次 E 界面）、
-`numba`（批次 I 可选加速，缺失时回退 NumPy）。
+可选依赖：`scipy`（批次 F 查表，**已安装**）、`numba`（批次 I 可选加速，缺失时回退 NumPy）。
 
 ---
 
@@ -116,51 +117,18 @@ python -m pytest -q
 
 ---
 
-## 3b. 界面（批次 E / T09）
+## 3b. 界面（2026-09-19 起：唯一界面 `webui/demo.html`）
 
 ```bash
-streamlit run app.py
+PYTHONPATH=src python -m ufdemo.webapp     # 浏览器打开 http://127.0.0.1:8787/demo.html
 ```
 
-（未安装可编辑包时用 `PYTHONPATH=src streamlit run app.py`。界面依赖见
-`pyproject.toml` 的 `ui` extra。）
+单文件（内联 CSS/JS，无构建、无框架），只调 `POST /api/demo-rect` 一个求解端点；
+详见 §3h 与 `webui/README.md`。
 
-界面分六个标签页：
-
-| 标签页 | 内容 |
-|---|---|
-| 参数与运行 | 模板选择、网格/光束/路径/输出表单、「提交计算」 |
-| 结果 | 形貌（热图/三维曲面）、截面、时间轴快照回放 |
-| 参考评估器 | 批次 D 的 YSZ/SiC 算例（只做公式核查，**不求解网格**） |
-| 查表 | 批次 F 的曲线卡：原始点、查值（线性/PCHIP、可勾选允许越界）、原始点与插值图（**不触发求解**） |
-| 七材料能力入口 | 批次 H：七族的开放内容 / 红线 / 缺口，逐条实跑探针并显示核验结论 |
-| 历史运行 | 列出 `runs/` 下可读目录并读取（**不重新求解**） |
-
-### 界面的三条硬规矩
-
-1. **只有「提交计算」会求解。** 侧边栏实时显示「提交求解次数」；换模板、拖时间轴、
-   切图层、旋转/翻转视图、切截面、读历史都只读已有数组，计数不变。
-   `ui_service.layer_view()` / `snapshot_arrays()` 内部有 `assert` 硬断言，
-   一旦被破坏立刻抛错而不是静默多算。
-2. **参数编辑态与结果态分离。** 提交后只要再改参数，结果区立刻把旧结果标为
-   「上一次运行（时间戳）」并给出警告；图表永远读冻结快照，不读当前表单值。
-3. **缺能力就说缺能力。** 材料卡未开放的运行模式在配置层被拦截，侧边栏显示
-   准确原因；合成示例必须用户**显式选择**，不自动降级、不静默填值。
-
-措辞上：阈值类图层不写「热影响区 / HAZ」，照射剂量不写「温度」——
-`assert_safe_wording()` 按**严格子串**口径复查（否定式同样拒绝），
-图层标签只描述「该图实际是什么量」。
-
-### 界面的验收记录
-
-```bash
-python tools/ui_probe.py                 # 20 项界面操作检查，输出到 runs/_ui_probe
-python -m pytest tests/test_ui_service.py tests/test_app_smoke.py -q
-```
-
-`tools/ui_probe.py` 用 `streamlit.testing.v1.AppTest` 真实执行 `app.py`，
-并把「提交/回放求解次数」等检查写入 `docs/reports/ui_operation_check.md` / `.csv`。
-探针通过环境变量 `UFDEMO_RUNS_DIR` 把产生的运行写到隔离目录，不污染工作区 `runs/`。
+> **旧界面已删除**（2026-09-19，ADR-0023）：Streamlit（批次 E，`app.py`）与多工作区
+> 前端（批次 K/L，`webui/index.html` + `js/*`）连同其探针与验收组（G09-UI、
+> G09-demo、U03-browser）一并退役；历史报告冻结于 `docs/reports/history/`。
 
 结果含义（G01 为例）：单脉冲、`Fth=1 J/cm²`、`δ=100 nm`、`w=10 μm`、
 `F0=e²Fth` → 中心去除 200 nm，去除体积 3.1411e-17 m³（解析值
@@ -264,14 +232,12 @@ docs/reports/
 
 > 结构几何是**合成**的：颗粒顺序放置（`seed` 固定）、铺层为解析条纹；
 > 目标体积分数与实际体积分数**分别报告**，不强制相等。
-> 本批**不含任何实验复现结论**。界面新增 `phase_id` 图层与结构诊断面板；
-> 未启用分相结构的运行时**如实报不可用**，不返回全 0 假数组。
+> 本批**不含任何实验复现结论**。分相结构的 `phase_id` 图层与结构诊断面板原在旧前端
+> （已删除，2026-09-19 / ADR-0023）；后端能力与「不可用如实报原因」的口径不变。
 
-**演示路径**（前端 ↔ 后端已打通）：侧边栏选材料 `cfrp_t700_yb01_800nm` →
-运行模式 `synthetic_demo` → 模板页选 `cfrp_laminated_ply.json` → 点「提交计算」→
-结果页可切 `phase_id` 图层、展开「相结构诊断」看各相摘要与跨相截断诊断。
-整条链路由 `tools/ui_demo_probe.py` 用 `AppTest` 真实驱动并留证
-（`docs/reports/ui_demo_probe.md`，13/0/0）。
+**演示路径**（历史）：原网页端（已删除）曾用「CFRP + `synthetic_demo` + 铺层模板 →
+提交计算 → 切 `phase_id` 图层看相结构诊断」走通全链路，由 `tools/ui_demo_probe.py`
+留证 **13/0/0**（现冻结于 `docs/reports/history/ui_demo_probe.md`）。
 
 ---
 
@@ -291,7 +257,7 @@ python tools/material_report.py      # 生成 G09 阈值协议 CSV/报告 + 七�
 1. **唯一注册基准 = 本事件入射能流**（`per_event_incident`）。累计/平均能流基准
    在配置层被拒（`CONFIG_INVALID`）——累计入射剂量与单脉冲能流量纲虽同、物理含义不同。
 2. **禁用不造假。** 未开启协议时 `threshold_mask` 报不可用（`available=False`），
-   **不返回全 0 假数组**；界面显示原因，不拿无关量凑数。
+   **不返回全 0 假数组**；接口层给出原因，不拿无关量凑数。
 3. **多候选须显式索引。** 材料卡给多个阈值候选时，未给 `candidate_index` 即不可用。
 4. **多脉冲口径不得当单脉冲阈值。** `multi_response` 口径下的材料（如高温合金）
    在多脉冲运行中不放行；单脉冲口径（如 CFRP `Fth(1)`）可用。
@@ -300,7 +266,7 @@ python tools/material_report.py      # 生成 G09 阈值协议 CSV/报告 + 七�
 
 ### 七材料能力入口
 
-`python -m ufdemo materials` 与界面「七材料能力入口」页展示七族的
+`python -m ufdemo materials`（原界面入口已随旧前端删除，2026-09-19）展示七族的
 **开放内容 / 红线 / 缺口**，每条都由探针**实跑**核验，而非只写文档：
 
 | 类别 | 含义 |
@@ -434,36 +400,33 @@ mu = max(0, k·n),      n = (-h_x, -h_y, 1)/sqrt(1+h_x^2+h_y^2)
 
 ---
 
-## 3h. 本地 Web 界面（批次 K，主界面）
+## 3h. 本地 Web 界面（唯一界面 `webui/demo.html`）
 
 ```bash
 PYTHONPATH=src python -m ufdemo.webapp              # 默认 127.0.0.1:8787
 PYTHONPATH=src python -m ufdemo.webapp --port 9000
-python -m pytest -q tests/test_webcontract.py       # 契约层与端到端（23 项）
-node webui/test/contract_test.mjs                   # 前端契约（27 项，需后端在跑）
+python -m pytest -q tests/test_webcontract.py       # 契约层与端到端（含真实 HTTP）
 ```
 
-**静态前端 + 真实求解 API**：浏览器端是纯 HTML/CSS/JS（无构建步骤、无框架依赖），
-后端是 `ufdemo/webapp.py` —— 只用 Python 标准库的 `http.server`，**不引入
-FastAPI/Flask**。`POST /api/solve` 是唯一会调用求解器的端点。
+**静态单文件 + 真实求解 API**：`webui/demo.html` 内联 CSS/JS（无构建步骤、无框架依赖、
+无外部请求），只调 `POST /api/demo-rect`；后端是 `ufdemo/webapp.py` —— 只用 Python
+标准库的 `http.server`，**不引入 FastAPI/Flask**。`/` 与 `/demo.html` 都返回该页。
 
 ```bash
 PYTHONPATH=src python -m ufdemo.webapp --runs-dir runs/_web   # 隔离输出
 ```
 
-六条界面规矩（与 Streamlit 侧同源，因为共用 `ui_service` 的纯逻辑层）：
+后端契约不变量（由 `tests/test_webcontract.py` 等守住）：
 
-1. **只有「提交计算」会求解**，且只有**真实调用成功**才递增「求解次数」
-   —— 准入失败时求解器没跑，因此不计数；计数可被外部核对。
-2. 「读取结果」只递增「读取次数」，读的是**盘上已有**结果，不重算。
-3. 切图层 / 旋转视图 / 切截面 / 时间轴回放 / 查表 **都不改变任何计数**。
-4. `threshold_only` 的深度是 `null`（不是数值 `0`），界面显示「不提供」。
-5. 图层不可用时给出**原因**，且不返回全 0 假数组。
-6. 越界查表唯一错误码 `TABLE_OUT_OF_RANGE`；允许越界时返回 `null`，不外推、不钳端点。
+1. **求解只经 `ui_service.submit()`**（`/api/solve`、`/api/demo-rect` 均复用），
+   `solve_count` 只在成功提交时 +1，可被外部核对。
+2. `threshold_only` 的深度是 `null`（不是数值 `0`），显示「不提供」。
+3. 图层不可用时给出**原因**，且不返回全 0 假数组。
+4. 越界查表唯一错误码 `TABLE_OUT_OF_RANGE`；允许越界时返回 `null`，不外推、不钳端点。
 
-> **不要用 `file://` 直接打开 `webui/index.html`**：后端不可用时页面会明确报错并禁用
-> 提交，不会给出「看起来能用」的假象。
-> 详见 `webui/README.md` 与 `docs/decisions/ADR-0016-web-ui-replaces-streamlit.md`。
+> **不要用 `file://` 直接打开 `webui/demo.html`**：后端不可用时页面会明确报错，
+> 不会给出「看起来能用」的假象。
+> 详见 `webui/README.md` 与 `docs/decisions/ADR-0023-demo-html-only-ui.md`。
 
 ---
 
@@ -546,8 +509,8 @@ PYTHONPATH=src python -m ufdemo.webapp --runs-dir runs/_web   # 隔离输出
   不同脉宽或纳秒数据“补齐”。
 * **不静默降级**：超预算、条件不匹配、模式不支持都在配置层拦截并报错，
   不做自动切换模式或变粗网格。
-* **界面分层**：`src/ufdemo/ui_service.py` 是纯逻辑且**不导入 Streamlit/Plotly**；
-  `app.py` 是唯一导入 Streamlit 的文件。求解只经 `ui_service.submit()`，
+* **界面分层**：`src/ufdemo/ui_service.py` 是纯逻辑且**不导入任何界面运行时**
+  （历史上即规定不导入 Streamlit/Plotly，该约束保留）。求解只经 `ui_service.submit()`，
   它同时是 `solve_count` 的唯一递增点（见 `docs/decisions/ADR-0010-ui-layer.md`）。
 * **界面措辞**：`FORBIDDEN_TERMS` 按严格子串口径复查界面与导出文案；
   `LAYER_LABELS` 只描述「该图实际是什么量」，澄清信息放在不可用原因文本里。
@@ -624,10 +587,10 @@ PYTHONPATH=src python -m ufdemo.webapp --runs-dir runs/_web   # 隔离输出
    工程外推，需另记 `engineering_extension` 并单独验证，本批**不做**该转换。
 6. **参考评估器不建实验回归用例**。YSZ 图 14、SiC 图 6 的原图/原表尚未数字化，
    G05 只做到公式核查；SiC 扫描次数列表存在重复项，本批只接受直接输入论文有效 N。
-7. **界面为单机 Streamlit，无并发会话与持久化状态**。会话状态在进程内；
-   历史结果通过运行目录读取，不建数据库。超阈值掩膜图层（`threshold_mask`）
-   由批次 H 的**受限阈值协议**给出，但**仅在协议开启且该卡提供可用阈值时**可用，
-   否则如实报不可用（协议只按本事件入射能流判超阈，不读作热学损伤标记）。
+7. **界面为单机本地服务（单用户、无鉴权、无持久化会话状态）**。任意时刻只应跑一个
+   `ufdemo.webapp` 实例；历史结果通过运行目录读取，不建数据库。超阈值掩膜
+   （`threshold_mask`）由批次 H 的**受限阈值协议**给出（协议只按本事件入射能流判超阈，
+   不读作热学损伤标记），接口层不可用时**如实报原因**。
 8. **无性能承诺**。批次 I 已交付 B01–B04 实测基准（`performance_baseline.md`）与
    冻结几何分组；但**定点/小段扫描有收益、大范围扫描收益有限**，
    **Numba 实测无收益**（故默认 NumPy），且**不承诺任何固定加速倍数**。
@@ -653,7 +616,7 @@ ultrafast-demo/
 ├── pyproject.toml
 ├── requirements.lock
 ├── README.md
-├── app.py                # Streamlit 界面（唯一导入 Streamlit 的文件，批次 E）
+├── webui/                # 唯一界面 demo.html（单文件；后端 ufdemo/webapp.py）
 ├── src/ufdemo/
 │   ├── errors.py         # 机器可读错误（细则 11.2）
 │   ├── config.py         # 配置、单位、跨字段校验、执行准入
@@ -680,8 +643,6 @@ ultrafast-demo/
 │   ├── table_report.py        # 查表报告：错误 CSV + 原始点/插值图（批次 F）
 │   ├── structure_report.py    # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 │   ├── material_report.py     # 受限阈值协议报告 + 七材料能力表（批次 H）
-│   ├── ui_probe.py            # 界面操作检查（AppTest；批次 E，批次 F/G/H 增补检查）
-│   ├── ui_demo_probe.py       # 端到端演示可用性检查（批次 G：前后端对接全链路）
 │   └── run_acceptance.py      # 实际执行并把实测值写入验收报告
 ├── data/materials/       # 执行卡（真实材料 + _synthetic_demo_isotropic）
 ├── data/protocols/       # 参考协议库：源文献的实验装置条件（ADR-0021）
@@ -690,7 +651,7 @@ ultrafast-demo/
 ├── data/references/      # 原始来源快照与输入指纹
 ├── examples/             # 可运行配置（含合成结构实例、查表算例与斜入射/斜平面示例）
 ├── tests/                # pytest（含 fixtures 人工解析卡、界面逻辑与冒烟测试、无效曲线夹具）
-├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0021）
+├── docs/decisions/       # 设计决定记录（ADR-0001 … ADR-0023）
 ├── docs/reports/         # 迁移、准入、验收、界面检查、进度报告
 └── runs/                 # 每次运行的独立目录（默认不删不覆盖）
 ```
@@ -715,8 +676,6 @@ python tools/table_report.py         # 查表报告：错误 CSV + 原始点/插
 python tools/structure_report.py     # 分相结构报告：实例 CSV + G06 检查 CSV/报告（批次 G）
 python tools/material_report.py      # 受限阈值协议报告 + 七材料能力表（批次 H）
 python tools/perf_report.py           # B01–B04 性能基准（批次 I）
-python tools/ui_probe.py             # 界面操作检查（AppTest 驱动 app.py）
-python tools/ui_demo_probe.py        # 端到端演示可用性（前后端对接全链路）
 python tools/run_acceptance.py       # 实际执行并生成验收报告（A–J）
 ```
 
@@ -726,8 +685,8 @@ python tools/run_acceptance.py       # 实际执行并生成验收报告（A–J
 * `docs/reports/acceptance_g01_g05.csv` —— 逐项机器可读结果；
 * `docs/reports/g05_reference_semantics.md` / `.csv` —— G05 专项报告；
 * `docs/reports/reference_equations.md` —— **源公式 ↔ 实现 ↔ 验收 对应表**；
-* `docs/reports/ui_operation_check.md` / `.csv` —— **界面操作检查（G09-UI）**；
-* `docs/reports/ui_demo_probe.md` / `.csv` —— **端到端演示可用性（前后端对接全链路）**；
+* `docs/reports/history/` —— **冻结的历史报告**（界面操作检查 / 端到端演示 / U03 浏览器级；
+  对应工具随旧前端删除，2026-09-19 / ADR-0023）；
 * `docs/reports/table_lookup.md` —— **查表汇总报告（G09-table）**；
 * `docs/reports/table_errors.csv` —— **错误 CSV**：每条违规输入与错误码；
 * `docs/reports/curve_interpolation.html` / `.csv` —— **原始点与插值图**；

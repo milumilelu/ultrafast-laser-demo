@@ -332,8 +332,10 @@ def test_http_health_and_static(live_server):
     with urllib.request.urlopen(live_server + "/", timeout=30) as r:
         html = r.read().decode("utf-8")
     assert r.status == 200
-    assert "js/api.js" in html and "js/main.js" in html
-    assert html.index("js/api.js") < html.index("js/main.js"), "api.js 必须先于 main.js"
+    # 唯一界面是 demo.html：根路径直接返回它（不再有 js 模块加载顺序之说）
+    assert "超快激光加工工艺仿真" in html
+    assert 'id="field"' in html
+    assert "js/api.js" not in html
 
 
 @pytest.mark.slow

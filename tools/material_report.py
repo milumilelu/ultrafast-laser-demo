@@ -378,7 +378,6 @@ def write_markdown(entry_rows: list[dict[str, Any]], checks: list[dict[str, Any]
         "```bash",
         "python tools/material_report.py",
         "python -m pytest -q -m g09",
-        "python tools/ui_probe.py",
         "```",
         "",
     ]

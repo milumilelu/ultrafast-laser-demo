@@ -25,6 +25,7 @@ openpyxl==3.1.5          # 材料参数台账 .xlsx 读写（tools/migrate_mater
 et_xmlfile==2.0.0
 
 # --- 界面（批次 E / T09：pip install -e ".[ui]"）---------------------------
+# 【2026-09-19 停用】Streamlit 界面已删除（ADR-0023）；以下两行保留为当时实际环境的记录。
 streamlit==1.63.0
 plotly==7.0.0
 

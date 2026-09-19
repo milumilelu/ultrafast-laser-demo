@@ -83,5 +83,4 @@
 ```bash
 python tools/material_report.py
 python -m pytest -q -m g09
-python tools/ui_probe.py
 ```

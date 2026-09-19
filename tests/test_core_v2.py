@@ -757,88 +757,8 @@ def test_plan_uses_same_solver_as_calibration(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# C6：三工作区前端与 V2 契约（防止简化被改回去）
+# C6：V2 契约（前端守门测试已随旧前端删除 —— 2026-09-19，唯一界面 = webui/demo.html）
 # ---------------------------------------------------------------------------
-
-WEBUI = ROOT / "webui"
-
-
-def test_frontend_has_exactly_three_workspaces_plus_dev():
-    """主流程**只有三个工作区**（+ 一个开发工具入口）。
-
-    这条是"简化"的守门员：任何把旧面板重新塞回主导航的改动都会让它变红。
-    """
-    import re
-
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    tabs = re.findall(r'<button data-tab="([a-z]+)"', html)
-    assert tabs == ["data", "calib", "plan", "dev"], (
-        f"主导航应恰好是 数据/对照标定/规划 三工作区 + 开发工具；实际 {tabs}"
-    )
-
-
-def _strip_js_comments(src: str) -> str:
-    """剥掉 JS 注释，只留**有效代码**。
-
-    为什么需要：我在删除处留了一段说明注释，里面提到了 `mockSolve` 这个名字
-    （"早期版本曾内置一个 mockSolve()，已删"）。若直接全文串匹配，
-    说明注释本身会触发误报 —— 检查必须针对**代码**，不是文档。
-    """
-    import re
-
-    src = re.sub(r"/\*[\s\S]*?\*/", "", src)      # 块注释
-    src = re.sub(r"(?m)^\s*//.*$", "", src)         # 整行注释
-    src = re.sub(r"\s//[^\n]*", "", src)            # 行尾注释（简化处理）
-    return src
-
-
-def test_frontend_has_no_mock_solver():
-    """前端**不得**再出现模拟求解器（任务书 §7.2 明确要删）。
-
-    检查的是**有效代码**：既不能有定义，也不能有调用。
-    """
-    for name in ("main.js", "v2.js", "api.js"):
-        code = _strip_js_comments((WEBUI / "js" / name).read_text(encoding="utf-8"))
-        assert "function mockSolve" not in code, f"{name} 里还定义了 mockSolve"
-        assert "mockSolve(" not in code, f"{name} 里还有 mockSolve 调用"
-
-
-def test_frontend_does_not_claim_mock_data():
-    """界面上不得再宣称"内置模拟数据、不接真实求解器"—— 那是过时且误导的。"""
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    assert "不接真实求解器" not in html
-    assert "内置模拟数据" not in html
-    # 反而应该明确写着走真实求解器
-    assert "真实求解器" in html
-
-
-def test_param_listener_scope_matches_actual_panel_id():
-    """参数监听器的作用域必须是**真实存在的面板 id**。
-
-    回归背景：面板从 `#tab-params` 改名 `#tab-data` 后，绑定的选择器没跟着改，
-    结果**所有参数字段静默失去监听器** —— 改参数不触发重渲染、
-    「尚未提交」的过期标记不再出现（浏览器探针 U03-6 抓到）。
-    这类"改名漏改选择器"的 bug 只能靠源码级检查拦住。
-    """
-    import re
-
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    main = (WEBUI / "js" / "main.js").read_text(encoding="utf-8")
-    panel_ids = set(re.findall(r'id="(tab-[a-z]+)"', html))
-    used = set(re.findall(r'#(tab-[a-z]+)\s', main)) | set(re.findall(r'"(tab-[a-z]+)"', main))
-    # 只检查"作为选择器作用域"出现的那种用法
-    missing = {i for i in used if i.startswith("tab-") and i not in panel_ids and i != "tab-dev"}
-    missing = {i for i in missing if i in main}
-    assert not missing, f"main.js 引用了不存在面板 id：{sorted(missing)}（现有 {sorted(panel_ids)}）"
-
-
-def test_dev_panel_holds_former_main_panels():
-    """原来的非核心面板必须**移到开发工具里**（不是删掉，也不是留在主流程）。"""
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    dev = html.split('id="tab-dev"', 1)[1]
-    for kw in ("数值与求解细节", "文献参考评估器", "曲线查表", "材料能力清单",
-               "真实实验案例", "金刚石过程响应", "历史运行"):
-        assert kw in dev, f"开发工具里缺少「{kw}」"
 
 
 def test_shared_background_payload_is_self_consistent():

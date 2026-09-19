@@ -5,7 +5,7 @@
     "synthetic_demo"
   ],
   "applicability": {
-    "condition": "仅限 reference_protocol 声明的条件匹配工况",
+    "condition": "λ/τ 落在协议容差内即可；任意 τ/f/v 组合都可求解",
     "physical_material_prediction_allowed": true
   },
   "branch_id": "ysz_machining_effective",
@@ -13,10 +13,9 @@
   "enabled_by_default": true,
   "evidence_status": "literature_reported",
   "history_definition": {
-    "effective_count": 3,
-    "exposure_count_meaning": "not_per_event",
-    "mode": "effective_count_embedded",
-    "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"
+    "exposure_count_meaning": "per_event",
+    "mode": "per_event_counting",
+    "note": "阈值随**该点**累积照射次数下降（Fth(N)=Fth1·N^(S-1)），由求解器逐事件追踪；首脉冲用 N=1（不得用 N=0）。"
   },
   "id": "zirconia_ysz_machining_effective_n3",
   "identity": {
@@ -25,8 +24,9 @@
     "material_identity_confirmed_by_user": false
   },
   "limitations": [
-    "有效加工阈值不是 Fth1；不得与静态分支拼接。",
-    "任意单脉冲条件、任意氧化锆牌号均不适用。"
+    "Fth1 与 S(f) 标定于 1030 nm / 208 fs；换波长或脉宽需重新标定。",
+    "仅适用于 APS 8 wt% YSZ；任意氧化锆牌号不适用。",
+    "δ 沿用原有效核的拟合值，其他 N 下未重新拟合 —— 属待标定项，报告中标明。"
   ],
   "provenance": {
     "from": "F01 P04-P07；F02 zirconia_ysz_reference 的加工分支",
@@ -42,20 +42,28 @@
   "response": {
     "delta_m": 3.9e-07,
     "depth_direction": "surface_normal",
-    "extra_incubation_prohibited_without_refit": true,
     "fluence_basis": "incident_peak_fluence",
-    "incubation_enabled": false,
-    "kind": "log_fixed_effective",
+    "incubation": {
+      "S_f_kHz": {
+        "intercept": 0.969,
+        "slope": -0.0029
+      },
+      "enabled": true,
+      "model": "Fth(N) = Fth1 * N^(S-1)",
+      "note": "S(f)=0.969-0.0029·f_kHz 由文献给出；N=3、f=33.3 kHz 时 Fth=12890.65 J/m²，与原「加工有效阈值」12890 相差 0.005% —— 即原值正是本模型的一个采样点。",
+      "source": "F01 P01/P02/P03（S01）；与静态卡同一条文献关系式"
+    },
+    "kind": "log_fixed_with_incubation",
     "output_semantics": "event_depth_increment",
-    "threshold_J_m2": 12890.0,
-    "threshold_kind": "machining_effective"
+    "threshold_J_m2": 14830.0,
+    "threshold_kind": "single_pulse_with_incubation"
   },
   "source_equation": "a = delta*[ln(F/Fth_eff)]_+ ；N_eff,YSZ = (pi/4)*(2*w0*f)/v",
   "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
   "source_type": "research_card_migration",
   "structure_type": "homogeneous",
   "validity_domain": {
-    "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。",
+    "note": "阈值由文献模型 Fth(N)=Fth1·N^(S-1) 逐点给出；τ/f/v 可按实际设置，但 λ、τ 须落在协议容差内（Fth1 与 S 是在该条件下标定的）。",
     "protocol_id": "ysz_crown_machining_effective_n3",
     "scope": "reference_protocol_only"
   }

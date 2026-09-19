@@ -43,7 +43,7 @@
 | `calibration.py` | 从实验行装配配置（`build_row_config`）、反推基线、规划的**唯一装配入口** |
 | `planning.py` | h/N 枚举规划、两级网格、矩形槽形貌 |
 | `webcontract.py` / `ui_service.py` / `webapp.py` | Web 接口层（`ui_service.submit()` 是**唯一求解入口**） |
-| `webui/` | 前端三工作区（原生 JS，无框架） |
+| `webui/` | **唯一界面 `demo.html`**（单文件、原生 JS，无框架） |
 
 ---
 
@@ -223,18 +223,17 @@ values = δ · ln(F / threshold_internal)  # 仅 mask 内
 
 ---
 
-## 9. Web 界面（`webui/` + `webapp.py`）
+## 9. Web 界面（`webui/demo.html` + `webapp.py`）
 
-三工作区 + 开发工具：**数据与工况 / 对照与标定 / 规划与结果 / 开发工具**。
+**唯一界面**为单文件 `webui/demo.html`（内联 CSS/JS，无构建）。2026-09-19 起旧多工作区
+前端与 Legacy Streamlit 已删除（`docs/decisions/ADR-0023-demo-html-only-ui.md`）。
 
-* **`ui_service.submit()` 是唯一求解入口**，`solve_count` 只在这里 +1；
-  切图层、回放历史、查表**都不动计数**；
-* **不得用 `st.form`**；前端为原生 JS（`api.js` / `main.js` / `data.js` / `v2.js`）；
+* **`ui_service.submit()` 是唯一求解入口**（`/api/solve`、`/api/demo-rect` 均复用），
+  `solve_count` 只在这里 +1；
+* `demo.html` 只调 `POST /api/demo-rect`（材料卡 + 间距/层数/区域 + τ/f/v → 矩形槽）；
 * 未提供图层如实报 `UNAVAILABLE_LAYERS`，不给全 0 假数组；
   `threshold_only` 的深度是「不提供」而**不是** `0`；
-* 规划页两张卡片别混：**「目标与规划」**里有 `pl-surface`（矩形槽形貌，
-  点「枚举 h / N」后才显示）；**「形貌与结果」**显示的是**上一次提交的求解**——
-  单点路径就是圆坑，那不是矩形槽。
+* 后端全量端点（材料/曲线/查表/规划/历史）保留，供脚本与契约测试使用。
 
 ---
 
@@ -267,8 +266,8 @@ values = δ · ln(F / threshold_internal)  # 仅 mask 内
 | 账本/口径 | `result.diagnostics["fluence_ledger"]`（含 `threshold_window`） |
 | 规划 | `planning.plan_for_target()` / `evaluate_candidate()` |
 | 标定装配 | `calibration.build_row_config()` |
-| 规划接口 | `webcontract.plan_payload()`；前端 `webui/js/v2.js` |
-| 界面开关 | `webui/index.html` 的 `#pl-window-policy` |
+| 规划接口 | `webcontract.plan_payload()`（端点 `/api/plan`） |
+| 唯一界面 | `webui/demo.html`（`POST /api/demo-rect`） |
 
 ---
 

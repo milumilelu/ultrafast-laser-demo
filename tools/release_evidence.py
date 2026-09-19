@@ -9,16 +9,15 @@
 且 **``not_run`` 必须带原因**（不允许用预期值冒充通过记录）：
 
 1. ``pytest``（含 junit XML，汇总数与 XML 交叉核对）
-2. ``node webui/test/contract_test.mjs``（DOM + 后端契约，需临时起服务）
-3. ``node tools/browser_probe.mjs``（真实浏览器，需 Chrome/Edge）
-4. ``tools/package_smoke.py``（wheel 干净环境安装冒烟）
-5. 数据 QA（``tools/measured_data_report.py``，U04 交付前为 ``not_run``）
+2. ``tools/package_smoke.py``（wheel 干净环境安装冒烟）
+3. 数据 QA（``tools/measured_data_report.py``，U04 交付前为 ``not_run``）
+> 2026-09-19：Node 契约测试与真实浏览器探针两步已随旧 V2 前端删除（ADR-0023）。
 
 用法::
 
     python tools/release_evidence.py                 # 全跑
-    python tools/release_evidence.py --fast          # 跳过 wheel 冒烟与浏览器
-    python tools/release_evidence.py --only pytest,node
+    python tools/release_evidence.py --fast          # 跳过 wheel 冒烟
+    python tools/release_evidence.py --only pytest,package
     python tools/release_evidence.py --sha <sha>     # 声明本次证据对应的提交
 
 产物：
@@ -36,13 +35,9 @@ import argparse
 import json
 import os
 import re
-import shutil
-import socket
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -51,7 +46,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "docs" / "reports"
 MIRROR = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-ALL_STEPS = ("pytest", "node", "browser", "package", "dataqa")
+ALL_STEPS = ("pytest", "package", "dataqa")
 
 
 # ---------------------------------------------------------------------------
@@ -77,66 +72,6 @@ def sh(cmd: list[str], *, cwd: Path | None = None, env: dict | None = None,
 def git(*args: str) -> str:
     out = sh(["git", *args])
     return out.stdout.strip() if out.returncode == 0 else ""
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
-def node_bin() -> str | None:
-    cand = shutil.which("node")
-    if cand:
-        return cand
-    for p in (
-        Path.home() / ".workbuddy/binaries/node/versions",
-    ):
-        if p.is_dir():
-            for v in sorted(p.iterdir(), reverse=True):
-                exe = v / "node.exe"
-                if exe.exists():
-                    return str(exe)
-    return None
-
-
-class Backend:
-    """临时起一个 ufdemo Web 服务，供 node/browser 测试使用。"""
-
-    def __init__(self, port: int | None = None) -> None:
-        self.port = port or free_port()
-        self.proc: subprocess.Popen | None = None
-
-    def __enter__(self) -> "Backend":
-        env = dict(os.environ)
-        env["PYTHONPATH"] = "src"
-        self.proc = subprocess.Popen(
-            [sys.executable, "-m", "ufdemo.webapp", "--port", str(self.port)],
-            cwd=str(ROOT), env=env,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(
-                    f"http://127.0.0.1:{self.port}/api/health", timeout=1
-                ) as r:
-                    if r.status == 200:
-                        return self
-            except (urllib.error.URLError, OSError):
-                time.sleep(0.5)
-        raise RuntimeError(f"后端未能在 30s 内就绪（端口 {self.port}）")
-
-    def __exit__(self, *exc: Any) -> None:
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-
-    @property
-    def base(self) -> str:
-        return f"http://127.0.0.1:{self.port}"
 
 
 # ---------------------------------------------------------------------------
@@ -177,34 +112,6 @@ def step_pytest(work: Path) -> dict[str, Any]:
     }
 
 
-def step_node(work: Path) -> dict[str, Any]:
-    node = node_bin()
-    if not node:
-        return {"status": "not_run", "reason": "未找到 node 可执行文件", "ok": False}
-    script = ROOT / "webui" / "test" / "contract_test.mjs"
-    if not script.exists():
-        return {"status": "not_run", "reason": f"缺少 {script.name}", "ok": False}
-    with Backend() as be:
-        proc = sh([node, str(script)], env={"BASE": be.base}, timeout=1800)
-    # ⚠️ 分隔符两家不同，抄错的表现极隐蔽：
-    #   contract_test.mjs  → "结果：32 通过，0 失败"           （**逗号**）
-    #   browser_probe.mjs  → "结果：29 通过 / 0 失败 / 1 跳过" （**斜杠**）
-    # 抄错的后果：正则不匹配 → n_fail=None → 被当成「异常退出」→
-    # 报告显示 FAIL，而同一行输出明明是「32 通过，0 失败」。（实测踩到过。）
-    m = re.findall(r"^结果：\s*(\d+)\s*通过[，,]\s*(\d+)\s*失败", proc.stdout, re.MULTILINE)
-    n_pass, n_fail = (int(m[-1][0]), int(m[-1][1])) if m else (None, None)
-    abnormal = n_fail is None
-    return {
-        "status": "run",
-        "argv": "node webui/test/contract_test.mjs",
-        "returncode": proc.returncode,
-        "passed": n_pass, "failed": n_fail,
-        "reason": _exit_note(proc) if abnormal else None,
-        "ok": proc.returncode == 0 and (n_fail or 0) == 0 and not abnormal,
-        "tail": "\n".join(proc.stdout.strip().splitlines()[-3:]),
-    }
-
-
 def _exit_note(proc: subprocess.CompletedProcess, tail_lines: int = 6) -> str:
     """给异常退出一个有信息量的说明。
 
@@ -223,44 +130,6 @@ def _exit_note(proc: subprocess.CompletedProcess, tail_lines: int = 6) -> str:
     if proc.returncode == 124:
         return "超时终止（可能是环境争用或真卡死）；" + "；".join(bits)
     return "异常退出，未产出汇总（进程被杀 / 崩溃 / 环境争用）；" + "；".join(bits)
-
-
-def step_browser(work: Path) -> dict[str, Any]:
-    node = node_bin()
-    if not node:
-        return {"status": "not_run", "reason": "未找到 node 可执行文件", "ok": False}
-    script = ROOT / "tools" / "browser_probe.mjs"
-    if not script.exists():
-        return {"status": "not_run", "reason": "缺少 tools/browser_probe.mjs", "ok": False}
-    out = work / "browser"
-    # ⚠️ **必须换一个全新的产物目录**。
-    # 踩过的坑：探针把 Chrome 的 `user-data-dir` 设在 `<out>/.profile`。
-    # 若上一次探针被中途杀掉，`.profile` 会留下 `SingletonLock` 等锁文件 →
-    # 下一次 Chrome **拒绝启动该 profile**，puppeteer 就卡在等 DevTools 端点，
-    # 表现为「探针跑十几分钟不返回」，而进程表里连一个 chrome 都没有
-    # （实测：卡 10 分钟，正常只需 45 秒）。换目录即可绕开残留锁。
-    if out.exists():
-        shutil.rmtree(out, ignore_errors=True)
-    with Backend() as be:
-        proc = sh([node, str(script), "--out", str(out)], env={"BASE": be.base}, timeout=1800)
-    # ⚠️ 必须锚定到**最终合计行**（以「结果：」开头）并取**最后一个**匹配。
-    # 探针会逐个路径打印小计，形如
-    #     U03-1 启动   通过  (5 通过 / 0 失败 / 0 跳过)
-    # 若无锚定，`re.search` 会先撞上这条小计 → 报告里把总分 29 写成 5。
-    # （本工程实测踩到过：报告显示 passed=5，与实际 29 不符。）
-    m = re.findall(r"^结果：\s*(\d+)\s*通过\s*[/｜|]\s*(\d+)\s*失败", proc.stdout, re.MULTILINE)
-    n_pass, n_fail = (int(m[-1][0]), int(m[-1][1])) if m else (None, None)
-    # 没解析到汇总 ⇒ 探针没跑完（被杀/崩溃），而不是断言失败 —— 必须区分
-    abnormal = n_fail is None
-    return {
-        "status": "run",
-        "argv": "node tools/browser_probe.mjs",
-        "returncode": proc.returncode,
-        "passed": n_pass, "failed": n_fail,
-        "reason": _exit_note(proc) if abnormal else None,
-        "ok": proc.returncode == 0 and (n_fail or 0) == 0 and not abnormal,
-        "tail": "\n".join(proc.stdout.strip().splitlines()[-3:]),
-    }
 
 
 def step_package(work: Path) -> dict[str, Any]:
@@ -306,14 +175,12 @@ def step_dataqa(work: Path) -> dict[str, Any]:
 
 STEPS = {
     "pytest": ("pytest（全量）", step_pytest),
-    "node": ("Node 契约测试", step_node),
-    "browser": ("真实浏览器探针", step_browser),
     "package": ("wheel 干净环境安装冒烟", step_package),
     "dataqa": ("实测数据 QA", step_dataqa),
 }
 
 # 这些步骤**不是**「跑失败」而是「环境/前置不具备」时的说明
-SLOW_STEPS = ("browser", "package")
+SLOW_STEPS = ("package",)
 
 
 # ---------------------------------------------------------------------------
@@ -553,7 +420,7 @@ def archive_stale_pytest_log() -> str | None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="U11 统一发布证据")
     ap.add_argument("--only", default=None, help=f"逗号分隔，可选：{','.join(ALL_STEPS)}")
-    ap.add_argument("--fast", action="store_true", help="跳过浏览器与 wheel 冒烟")
+    ap.add_argument("--fast", action="store_true", help="跳过 wheel 冒烟")
     ap.add_argument("--sha", default=None, help="声明证据对应的提交（默认当前 HEAD）")
     ap.add_argument("--verify", action="store_true", help="只校验已有报告是否对应 HEAD")
     ap.add_argument("--archive-stale", action="store_true", help="归档过时的 pytest_output.txt")

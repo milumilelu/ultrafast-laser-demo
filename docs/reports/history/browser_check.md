@@ -1,3 +1,6 @@
+> **历史报告（2026-09-19 冻结）**：该报告检验的界面（V2 前端 / Legacy Streamlit）已删除，
+> 检查项不再随验收重新生成；保留作历史证据（见 `docs/decisions/ADR-0023-demo-html-only-ui.md`）。
+
 # U03 浏览器级验收（真实系统浏览器）
 
 - 驱动方式：`puppeteer-core` + **本机已装**的 Chrome/Edge（**不下载 Chromium**）

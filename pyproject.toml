@@ -24,8 +24,6 @@ build_batch = "L"
 
 [project.optional-dependencies]
 table = ["scipy>=1.10"]          # 批次 F（T10）查表与 PCHIP
-# LEGACY：旧 Streamlit 界面（V2 起退出主流程，非必装）。当前入口是 ufdemo.webapp。
-ui = ["streamlit>=1.30", "plotly>=5.18"]
 accel = ["numba>=0.58"]          # 批次 I（T16），可选；缺失时回退 NumPy
 dev = ["pytest>=7", "openpyxl>=3.1"]
 
@@ -44,10 +42,7 @@ where = ["src"]
 "share/ufdemo/data/materials" = ["data/materials/*.json"]
 "share/ufdemo/data/curves" = ["data/curves/*.json", "data/curves/*.csv"]
 "share/ufdemo/data/references" = ["data/references/*"]
-"share/ufdemo/webui" = ["webui/index.html", "webui/README.md"]
-"share/ufdemo/webui/css" = ["webui/css/*.css"]
-"share/ufdemo/webui/js" = ["webui/js/*.js"]
-"share/ufdemo/webui/test" = ["webui/test/*.mjs"]
+"share/ufdemo/webui" = ["webui/demo.html", "webui/README.md"]
 "share/ufdemo/examples" = ["examples/*.json"]
 
 [tool.pytest.ini_options]

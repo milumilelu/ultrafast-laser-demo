@@ -6,8 +6,8 @@
   ``response`` / ``surface`` / ``solver`` / ``metrics`` / ``io``
 * D（T07 文献参考评估器）：``references``（YSZ/SiC 有效 N、阈值、平均率；
   **不求解网格，不进入逐事件主循环**）
-* E（T09 界面）：``ui_service``（纯逻辑，不导入 Streamlit）+ ``app.py``
-  （Streamlit 渲染层）
+* E（T09 界面 → K/L 演进）：``ui_service``（纯逻辑，不导入任何界面运行时）；
+  唯一界面为 ``webui/demo.html``（2026-09-19 收敛，见 ADR-0023）
 * F（T10 查表）：``tables``（曲线 schema、分段线性/保形 PCHIP 插值、越界处理、
   语义路由；**不接入逐事件主循环**）
 

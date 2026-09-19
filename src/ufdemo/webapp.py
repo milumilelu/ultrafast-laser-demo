@@ -504,7 +504,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def _serve_static(self, path: str) -> None:
         root = self.ctx.webui_dir
-        rel = path.lstrip("/") or "index.html"
+        rel = path.lstrip("/") or "demo.html"
         target = (root / rel).resolve()
         try:
             root_resolved = root.resolve()
@@ -515,10 +515,10 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self._send_error_json("FORBIDDEN", "路径越界", status=403)
             return
         if target.is_dir():
-            target = target / "index.html"
+            target = target / "demo.html"
         if not target.exists():
-            # SPA 回退：未知的非 API 路径回到首页
-            fallback = root / "index.html"
+            # SPA 回退：未知的非 API 路径回到首页（唯一界面 demo.html）
+            fallback = root / "demo.html"
             if fallback.exists() and "." not in rel.split("/")[-1]:
                 target = fallback
             else:
@@ -603,7 +603,7 @@ def serve(
         print(f"  前端目录 : {ctx.webui_dir}")
         print(f"  运行目录 : {ctx.runs_dir}")
         print(f"  曲线目录 : {ctx.curves_dir}")
-        print(f"  打开地址 : http://{host}:{port}")
+        print(f"  打开地址 : http://{host}:{port}/demo.html")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

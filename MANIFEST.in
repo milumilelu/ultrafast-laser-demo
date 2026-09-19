@@ -9,6 +9,6 @@ include requirements.lock
 recursive-include src/ufdemo *.py
 recursive-include data *.json *.csv *.sha256
 recursive-include examples *.json
-recursive-include webui *.html *.css *.js *.mjs *.md
+recursive-include webui *.html *.md
 recursive-include docs *.md *.csv
 recursive-include tools *.py *.mjs

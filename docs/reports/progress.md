@@ -658,3 +658,53 @@ A–C（`29cf6bb`）与 D（`61a2e4e`）**未改动**。
 4. **可见性算法扩展**：多次反射/衍射、悬垂与多值表面；当前限于 2.5D 首次交点。
 5. **光学吸收修正**：需要材料与波长的 `A(θ)` 依据后才可启用；当前明确只做几何。
 6. **实验回归用例**：YSZ 图 14、SiC 图 6 原图/原表数字化后建立；当前只做到公式核查。
+
+---
+
+## 2026-09-19 · 界面收敛为唯一单文件 `webui/demo.html`（ADR-0023）
+
+**决定**（用户指令）：`http://localhost:8787/demo.html` 作为唯一界面，其他前端全删。
+
+### 删除（13 文件）
+- `webui/index.html`、`webui/js/{api,data,main,v2}.js`、`webui/css/styles.css`、`webui/test/contract_test.mjs`
+- `app.py`（Legacy Streamlit，文件头早已自述「等主流程稳定后再归档」）
+- `tools/ui_probe.py`、`tools/ui_demo_probe.py`、`tools/browser_check.py`、`tools/browser_probe.mjs`
+- `tests/test_app_smoke.py`
+
+### 改动
+- **后端**：`webapp.py` 静态服务默认文档与 SPA 回退 → `demo.html`（`/` 与 `/demo.html` 等效）。
+- **测试**：`test_core_v2.py` −5（前端守门）、`test_cases_replay.py` −2（探针超时）、
+  `test_webcontract.py` 静态断言改指 demo.html（并反向断言旧 js 引用不再出现）。
+- **验收/工具**：`run_acceptance.py` 移除 G09-UI / G09-demo / U03-browser 三组与 `--no-browser`；
+  `release_evidence.py` 移除 node / browser 两步（ALL_STEPS 三档）；`package_smoke.py` 必备清单
+  改为 demo.html 并校验根路径返回含「开始仿真」的页；`material_report.py` 复现命令同步。
+- **打包**：`pyproject.toml` data-files 只带 demo.html + README、移除 `[ui]` extra；
+  `MANIFEST.in`、`requirements.lock`（加停用注）同步。
+- **文档**：新增 `docs/decisions/ADR-0023-demo-html-only-ui.md`；README / TECHNICAL_ROUTE /
+  webui/README 相关章节重写；ADR-0016、ADR-0011 加「被替代 / 已删除」附注。
+- **留证**：`browser_check.*`、`ui_demo_probe.*`、`ui_operation_check.*` 冻结至
+  `docs/reports/history/`（加历史标注）；`browser_test_capability.md` 加现状标注。
+
+### 验证（本机实测）
+- **pytest：726 passed, 1 xfailed**（改造前基线 751；差 25 = 删除的界面测试数）。
+- **run_acceptance：通过 101｜失败 1｜未运行 1**。
+  - 唯一失败 = **既有项（非本次引入）**：G08「曝光/照射计数逐位一致」的照射计数
+    （`illumination_count`：ref=34810 vs grp=115610，8080 单元不同；曝光计数逐位一致）。
+    溯源：09-15 的绿色运行（71e7b54 树，181/0/2）→ **09-17 12:40 的运行（f8524bc 树）首次变红**
+    （180/1/2），之后各次提交未再重跑该检查、以红色状态入库。
+    机制提示：疑与「开窗口径影响剂量观测量」有关（`solver.py`：「取窗口，外围单元的
+    illumination_count / cumulative_fluence 会被丢掉」；f8524bc「默认安全开窗」）。
+    **本次不修**（求解器语义/口径问题，需单独排查与决策）。
+- **package_smoke**：wheel 构建成功、**实测 wheel 内含 `share/ufdemo/webui/demo.html`**、
+  全新 venv 创建成功；「干净 venv 安装」一步因**镜像不可达**（`from versions: none`）
+  退出码 2（= 环境不具备，非产品失败；两次尝试一致）。
+- **静态**：`py_compile` 全过；全域残留扫描干净（仅历史性提及）；pyflakes 对照 HEAD
+  **无新增**告警。
+
+### 备注 / 待办
+- U03 九条浏览器级路径（删除时 42 通过 / 0 失败 / 1 未实现）随 V2 前端退役；若要在
+  demo.html 上重建浏览器级验证，另立任务（可用 `system-browser-e2e-testing` 方式）。
+- **待办（承接下一次会话优先）**：G08 照射计数口径排查 —— 建议先比较 reference 与
+  grouped 的开窗口径（`solver.py` 窗口注释处 + f8524bc 变更），再决定是修 grouped、
+  修 reference 窗口，还是调整该检查的口径（需 ADR 记录）。
+- `frontend-showcase/` 按约定未触碰。

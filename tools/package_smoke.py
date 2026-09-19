@@ -46,8 +46,7 @@ MIRROR = "https://pypi.tuna.tsinghua.edu.cn/simple"
 REQUIRED_WHEEL_ENTRIES: tuple[str, ...] = (
     "share/ufdemo/data/materials",
     "share/ufdemo/data/curves",
-    "share/ufdemo/webui/index.html",
-    "share/ufdemo/webui/js/api.js",
+    "share/ufdemo/webui/demo.html",
     "share/ufdemo/examples",
 )
 
@@ -212,8 +211,9 @@ PROBE = textwrap.dedent(
         rec("materials_catalog_len", len(json.loads(body2).get("catalog", [])))
     except Exception:
         rec("materials_catalog_len", None)
-    st3, _ = get("/")
-    rec("index_status", st3)
+    st3, body3 = get("/")
+    rec("root_status", st3)
+    rec("root_is_demo_page", "开始仿真" in (body3 or ""))
     srv.shutdown()
     print("@@" + json.dumps(out, ensure_ascii=False) + "@@")
     """
@@ -277,8 +277,10 @@ def run_probe(py: Path, work: Path, report: Report) -> dict | None:
         "/api/materials == 200", str(checks["materials_status"]))
     (report.ok if (checks["materials_catalog_len"] or 0) >= 8 else report.fail)(
         "/api/materials 清单非空", str(checks["materials_catalog_len"]))
-    (report.ok if checks["index_status"] == 200 else report.fail)(
-        "前端 index.html 可服务", str(checks["index_status"]))
+    (report.ok if checks["root_status"] == 200 else report.fail)(
+        "前端 demo.html 可服务（根路径）", str(checks["root_status"]))
+    (report.ok if checks["root_is_demo_page"] else report.fail)(
+        "根路径返回 demo.html（含「开始仿真」）", str(checks["root_is_demo_page"]))
     return data
 
 
