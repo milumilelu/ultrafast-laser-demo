@@ -759,7 +759,26 @@ def solve(
             continue
 
         # 第 3、5 步：读取本事件开始时的状态 → 能流 → 候选去除量
-        history = HistoryState(exposure_count=None)
+        # 逐点曝光历史：**本事件响应前**的局部计数（首脉冲为 0，核内用 max(N,1)）。
+        # 卡声明了孵化模型就必须有它 —— 缺了核会拒绝执行（不静默退回固定阈值）。
+        # 这里**自动开启**并记 warning：开历史是更完整的物理（不是近似），
+        # 且全程可追溯，故不属于"静默降级"。
+        _needs_history = getattr(law, "incubation", None) is not None
+        if _needs_history and not config.solver.history_enabled:
+            warnings.append(
+                "材料卡声明了累积孵化模型（Fth(N)=Fth1·N^(S-1)）："
+                "已自动开启逐点曝光历史（solver.history_enabled false→true），"
+                "阈值将随各点累积照射次数变化。"
+            )
+        history = HistoryState(
+            exposure_count=(
+                # ⚠️ 必须**切成当前窗口**：exposure_count 是全网格 (ny,nx)，
+                # 而 patch.fluence 只是窗口 (ny_win,nx_win)；
+                # 不切就会与能流形状不匹配（核里会直接报错，不静默错算）。
+                surface.exposure_count[patch.iy0:patch.iy1, patch.ix0:patch.ix1]
+                if (config.solver.history_enabled or _needs_history) else None),
+            definition=dict(getattr(material, "history_definition", {}) or {}),
+        )
         if phase_laws:
             # 只调用**当前暴露相**的响应；一个物理脉冲绝不拆给两个相各算一次
             cand_arr = _per_phase_candidate(surface, patch, section, phase_laws, history, material)

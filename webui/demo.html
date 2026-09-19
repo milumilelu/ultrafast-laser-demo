@@ -107,6 +107,26 @@
         <input type="range" id="s-passes" min="1" max="4" step="1" value="2">
       </div>
 
+      <div class="field">
+        <div class="lab"><span class="n">脉宽 τ</span><span class="v" id="v-tau">208 fs</span></div>
+        <input type="range" id="s-tau" min="150" max="300" step="1" value="208">
+        <div class="hint" id="tau-note"></div>
+      </div>
+
+      <div class="field">
+        <div class="lab"><span class="n">重复频率 f</span><span class="v" id="v-freq">33.3 kHz</span></div>
+        <input type="range" id="s-freq" min="10" max="80" step="0.5" value="33.3">
+      </div>
+
+      <div class="field">
+        <div class="lab"><span class="n">扫描速度 v</span><span class="v" id="v-speed">279 mm/s</span></div>
+        <input type="range" id="s-speed" min="80" max="700" step="0.1" value="279">
+      </div>
+
+      <div class="field">
+        <div class="hint" id="neff-note"></div>
+      </div>
+
       <button class="go" id="run">开始仿真</button>
       <div class="msg" id="msg"></div>
 
@@ -160,6 +180,55 @@ function syncLabels(){
   $("v-region").textContent = $("s-region").value + " µm";
   $("v-hatch").textContent  = (+$("s-hatch").value).toFixed(1) + " µm";
   $("v-passes").textContent = $("s-passes").value;
+  syncLaser();
+}
+
+/* ---- 激光与工艺参数：**全部自由设置** ------------------------------------
+   τ（脉宽）、f（重复频率）、v（扫描速度）互不联动，随便拖。
+
+   为什么可以自由设：材料卡里存的是**单脉冲阈值 Fth1**（材料常数）与文献的累积模型
+       Fth(N) = Fth1 · N^(S-1)，  S(f) = 0.969 − 0.0029·f [kHz]
+   求解器**逐点**追踪该点累积照射次数 N 并算阈值 —— 于是工艺参数不再是"必须匹配某个
+   工况点"的条件。旧实现把模型在 N=3 处的取值（12890）当常量存，才导致 τ/f/v 被焊死。
+
+   唯一要守的是 λ、τ：Fth1 与 S 是在 1030 nm / 208 fs 下标定的（参数自身的定义域）。 */
+let BASE = null;   // 协议基准，首次响应后由 dm.baseline 填充
+let INC = null;    // 阈值模型（Fth(N)=Fth1·N^(S-1)），后端回显
+
+function setLaserLabels(){
+  $("v-freq").textContent  = (+$("s-freq").value).toFixed(1) + " kHz";
+  $("v-speed").textContent = Math.round(+$("s-speed").value) + " mm/s";
+  $("v-tau").textContent   = $("s-tau").value + " fs";
+}
+
+function syncLaser(inc){
+  setLaserLabels();
+  if (inc) INC = inc;
+
+  // 脉宽：中性提示，不再说"会被拒绝"
+  if (BASE){
+    const t0 = BASE.pulseDurationFs, lo = t0*0.95, hi = t0*1.05, tau = +$("s-tau").value;
+    const tn = $("tau-note");
+    if (tau < lo || tau > hi){
+      tn.style.color = "#b45309";
+      tn.textContent = `超出该卡的标定范围（${lo.toFixed(0)}–${hi.toFixed(0)} fs）——` +
+                       `Fth1 与 S 只在该脉宽附近标定`;
+    } else {
+      tn.style.color = "";
+      tn.textContent = `该卡标定于 ${t0.toFixed(0)} fs（±5%）`;
+    }
+  }
+
+  // 阈值模型说明：把"为什么工艺能自由设"直接写在界面上
+  const nn = $("neff-note");
+  nn.style.color = "var(--ink2)";
+  if (INC && INC.enabled){
+    nn.textContent = `阈值随各点累积次数下降：${INC.model}，` +
+                     `Fth1 = ${INC.Fth1Jm2.toFixed(0)} J/m²，` +
+                     `S = ${INC.S.toFixed(4)}（当前 f）→ 工艺参数可自由设置`;
+  } else {
+    nn.textContent = "";
+  }
 }
 
 function to2d(layer, nx, ny){
@@ -265,6 +334,10 @@ async function run(){
         hatchUm: +$("s-hatch").value,
         passes: +$("s-passes").value,
         dxUm: 1.0,
+        // 三个工艺参数**直接传**，后端不再有 N_eff 门禁（ADR-0022）
+        pulseDurationFs: +$("s-tau").value,
+        repetitionRateKHz: +$("s-freq").value,
+        speedMmS: +$("s-speed").value,
       }),
     });
     if (!r.ok){ fail("服务返回 HTTP " + r.status); return; }
@@ -294,6 +367,8 @@ async function run(){
     $("k-center").innerHTML = um(st.center_depth_internal).toFixed(1) + "<em>µm</em>";
     $("k-events").textContent = (d.eventsProcessed || 0).toLocaleString();
 
+    if (d.demo && d.demo.baseline) BASE = d.demo.baseline;  // 协议基准（不受本次覆盖影响）
+    syncLaser(d.demo && d.demo.incubation);
     renderProto(d.demo);
     $("msg").textContent = "已完成 · " + Math.round((d.elapsedS||0)*1000) + " ms";
   }catch(e){
@@ -323,7 +398,11 @@ async function boot(){
   run();
 }
 
-["s-region","s-hatch","s-passes"].forEach(id =>
+// 全部自由：任一改动只刷新显示，**没有联动、没有互锁**
+// ⚠️ 必须走 syncLabels —— 它内部会再调 syncLaser() 刷激光那几个标签；
+//    只调 syncLaser() 会让 v-region / v-hatch / v-passes **不更新**
+//    （2026-09-18 的 bug：界面上的"加工层数"永远显示 2，虽然实际计算用的是滑块真值）。
+["s-region","s-hatch","s-passes","s-tau","s-freq","s-speed"].forEach(id =>
   $(id).addEventListener("input", syncLabels));
 $("card").addEventListener("change", run);
 $("run").addEventListener("click", run);

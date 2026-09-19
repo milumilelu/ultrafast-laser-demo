@@ -203,6 +203,7 @@ class FixedThresholdLogLaw:
         unit_mode: str = "SI",
         source_equation: str | None = None,
         kind: str = KIND,
+        incubation: Mapping[str, Any] | None = None,
     ) -> None:
         if not (math.isfinite(threshold_internal) and threshold_internal > 0):
             raise UFDemoError(
@@ -228,6 +229,32 @@ class FixedThresholdLogLaw:
         self.unit_mode = unit_mode
         self.source_equation = source_equation
         self.kind = kind
+        # 累积孵化（incubation）：阈值随**该点的曝光次数**下降
+        #     Fth(N) = Fth1 · N^(S-1)      （N ≥ 1；首脉冲必须用 Fth1，不得用 N=0）
+        #
+        # 有了它，「有效阈值」（= 模型在某个 N 处的取值）就还原成了
+        # **材料常数 Fth1 + 文献模型 S(f)** —— 于是 τ/f/v 不再被焊死在某一个工况点上。
+        # 这正是 ADR-0022 的做法：限制来自"把模型求值后存成常量"，不是材料、也不是算法。
+        self.incubation = dict(incubation) if incubation else None
+        if self.incubation is not None:
+            fth1 = self.incubation.get("Fth1_internal")
+            if not (isinstance(fth1, (int, float)) and math.isfinite(fth1) and fth1 > 0):
+                raise UFDemoError(
+                    RESPONSE_SEMANTICS_INVALID,
+                    "incubation.Fth1_internal 必须是有限正值",
+                    field_path="response.incubation.Fth1_internal",
+                    actual=fth1,
+                    requirement="有限正数（单脉冲阈值）",
+                )
+            s_exp = self.incubation.get("S")
+            if not (isinstance(s_exp, (int, float)) and math.isfinite(s_exp)):
+                raise UFDemoError(
+                    RESPONSE_SEMANTICS_INVALID,
+                    "incubation.S 必须是有限数",
+                    field_path="response.incubation.S",
+                    actual=s_exp,
+                    requirement="有限数（S=1 表示阈值不随 N 变）",
+                )
 
     def increment(
         self,
@@ -247,22 +274,52 @@ class FixedThresholdLogLaw:
                 actual="non-finite",
                 suggestion="修正上游光束或路径计算。",
             )
-        mask = F > self.threshold_internal
+        # —— 阈值：固定值，或随**该点曝光次数**变化（incubation）——
+        if self.incubation is not None:
+            if history is None or not history.enabled:
+                # 声明了模型却拿不到逐点历史 ⇒ **拒绝执行**，绝不静默退回固定阈值
+                raise UFDemoError(
+                    RESPONSE_SEMANTICS_INVALID,
+                    "材料卡声明了累积孵化模型，但本次运行没有逐点曝光历史"
+                    "（solver.history_enabled=false）—— 阈值将不随 N 变化，拒绝静默降级",
+                    field_path="solver.history_enabled",
+                    actual=False,
+                    requirement="history_enabled=true",
+                    suggestion="开启 solver.history_enabled；或改用不含 incubation 的材料卡。",
+                )
+            n = np.asarray(history.exposure_count, dtype=np.float64)
+            if n.shape != F.shape:
+                raise UFDemoError(
+                    RESPONSE_SEMANTICS_INVALID,
+                    "曝光计数与能流窗口形状不匹配",
+                    field_path="solver.history_enabled",
+                    actual={"exposure_count": list(n.shape), "fluence": list(F.shape)},
+                    requirement="两者一致",
+                )
+            # N 是**本事件响应前**的计数 ⇒ 首脉冲为 0；
+            # max(N,1) 保证首脉冲用 Fth1（细则 5.2：首脉冲不得用 N=0）
+            thr = float(self.incubation["Fth1_internal"]) * np.power(
+                np.maximum(n, 1.0), float(self.incubation["S"]) - 1.0)
+            thr_arr = np.asarray(thr, dtype=np.float64)
+        else:
+            if history is not None and history.enabled:
+                # 没声明模型却给了历史 ⇒ 不知道该拿 N 做什么，显式报错而不是忽略
+                raise UFDemoError(
+                    RESPONSE_SEMANTICS_INVALID,
+                    "该核未声明累积孵化模型，但本次运行提供了逐点曝光历史",
+                    field_path="solver.history_enabled",
+                    actual=True,
+                    requirement="history_enabled=false，或在 response.incubation 里声明模型",
+                    suggestion="二选一；不得让 N 被静默忽略。",
+                )
+            thr = self.threshold_internal
+            thr_arr = None
+
+        mask = F > thr
         values = np.zeros_like(F)
         if np.any(mask):
-            ratio = F[mask] / self.threshold_internal
-            values[mask] = self.delta_internal * np.log(ratio)
-
-        if history is not None and history.enabled:
-            # M0 不支持扫描孵化；这里显式报错而不是静默忽略
-            raise UFDemoError(
-                RESPONSE_SEMANTICS_INVALID,
-                "该核未实现历史耦合",
-                field_path="solver.history_enabled",
-                actual=True,
-                requirement="history_enabled=false（M0）",
-                suggestion="关闭历史；受标定的孵化核属批次 H（T15）。",
-            )
+            denom = thr if thr_arr is None else thr_arr[mask]
+            values[mask] = self.delta_internal * np.log(F[mask] / denom)
 
         res = IncrementResult(
             output_semantics=self.output_semantics,
@@ -276,6 +333,12 @@ class FixedThresholdLogLaw:
                 "delta_internal": self.delta_internal,
                 "source_equation": self.source_equation,
                 "kind": self.kind,
+                "incubation": (None if self.incubation is None else {
+                    "Fth1_internal": float(self.incubation["Fth1_internal"]),
+                    "S": float(self.incubation["S"]),
+                    "threshold_min_internal": float(np.min(thr_arr)),
+                    "threshold_max_internal": float(np.max(thr_arr)),
+                }),
                 "n_ablating_cells": int(np.count_nonzero(mask)),
                 "peak_increment_internal": float(np.max(values)) if values.size else 0.0,
             },
@@ -601,6 +664,39 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
             requirement="有限正数",
             suggestion="补齐配套深度曲线；不得由阈值反推物理深度，也不得用相近材料补值。",
         )
+    # —— 累积孵化：Fth(N) = Fth1 · N^(S-1)，S(f) = intercept + slope·f_kHz ——
+    # 卡里的 ``threshold_J_m2`` 存的是**单脉冲阈值 Fth1**（材料常数）。
+    # 所谓"有效阈值"只是这个模型在某个 N 处的取值，不该当常量存
+    # —— 那会把"材料的 N 依赖"伪装成"参数的适用条件"，进而把工艺焊死在一个点上（ADR-0022）。
+    incubation = None
+    inc = dict(r.get("incubation") or {})
+    if inc.get("enabled"):
+        s_spec = dict(inc.get("S_f_kHz") or {})
+        s0, s1 = s_spec.get("intercept"), s_spec.get("slope")
+        if not (isinstance(s0, (int, float)) and isinstance(s1, (int, float))):
+            raise UFDemoError(
+                RESPONSE_SEMANTICS_INVALID,
+                "response.incubation.S_f_kHz 需要 intercept 与 slope 两个数",
+                field_path="response.incubation.S_f_kHz",
+                actual=s_spec,
+                requirement='形如 {"intercept": 0.969, "slope": -0.0029}（f 单位 kHz）',
+            )
+        f_hz = (laser or {}).get("repetition_rate_Hz")
+        if not (isinstance(f_hz, (int, float)) and math.isfinite(float(f_hz)) and float(f_hz) > 0):
+            # S 依赖频率 ⇒ 算不出来就不能假装能用固定阈值（那是静默降级）
+            raise UFDemoError(
+                RESPONSE_SEMANTICS_INVALID,
+                "材料卡声明了累积孵化模型（S 依赖重复频率），但未提供有效的 repetition_rate_Hz",
+                field_path="laser.repetition_rate_Hz",
+                actual=f_hz,
+                requirement="有限正数",
+                suggestion="在运行时激光条件里给出 repetition_rate_Hz（必须是本次运行的值）。",
+            )
+        incubation = {
+            "Fth1_internal": float(thr),
+            "S": float(s0) + float(s1) * (float(f_hz) / 1e3),
+        }
+
     return FixedThresholdLogLaw(
         threshold_internal=float(thr),
         delta_internal=float(delta),
@@ -609,4 +705,5 @@ def build_pulse_law(material: Any, *, unit: Any | None = None, curve: Any = None
         unit_mode=getattr(unit, "mode", "SI"),
         source_equation=getattr(material, "source_equation", None),
         kind=str(r.get("kind", FixedThresholdLogLaw.KIND)),
+        incubation=incubation,
     )

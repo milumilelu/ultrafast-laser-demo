@@ -1248,13 +1248,33 @@ def demo_rect_payload(
         return float(x)
 
     w0 = _v("spot_radius_m")
-    tau = _v("pulse_duration_s")
-    freq = _v("repetition_rate_Hz")
     lam = _v("wavelength_m")
 
-    n_eff = (rp.get("required_history") or {}).get("effective_count")
-    n_eff = float(n_eff) if isinstance(n_eff, (int, float)) and n_eff > 0 else 3.0
-    speed_m_s = (math.pi / 4.0) * (2.0 * w0 * freq) / n_eff
+    # 允许请求**覆盖**脉宽与重复频率（演示页要手动调参）。
+    # ⚠️ 覆盖 ≠ 绕过门禁：τ 与 N_eff 正是 validate_run 要校验的量，下面的实际值照样
+    #    写进 laser / reference_conditions —— 对就放行，错就以 CONDITION_MISMATCH 拒绝。
+    _tau_req = float(body.get("pulseDurationFs") or 0.0)
+    _freq_req = float(body.get("repetitionRateKHz") or 0.0)
+    tau = _tau_req * 1e-15 if _tau_req > 0 else _v("pulse_duration_s")
+    freq = _freq_req * 1e3 if _freq_req > 0 else _v("repetition_rate_Hz")
+
+    card_n_eff = (rp.get("required_history") or {}).get("effective_count")
+    card_n_eff = (float(card_n_eff)
+                  if isinstance(card_n_eff, (int, float)) and card_n_eff > 0 else 3.0)
+    _speed_req = float(body.get("speedMmS") or 0.0)
+    if _speed_req > 0:
+        speed_m_s = _speed_req * 1e-3
+    else:
+        # 默认速度取**源文献装置的扫描速度**（协议 source_beam 里声明）。
+        # ⚠️ 不再用 N_eff 反推速度 —— 那是旧的联动逻辑，会把 f 与 v 绑死。
+        # 只在协议没声明速度时才回退到反推（兼容尚未补该字段的卡）。
+        _sb_speed = sb.get("scan_speed_mm_s")
+        if isinstance(_sb_speed, (int, float)) and float(_sb_speed) > 0:
+            speed_m_s = float(_sb_speed) * 1e-3
+        else:
+            speed_m_s = (math.pi / 4.0) * (2.0 * w0 * freq) / card_n_eff
+    # N_eff 现在只是**由路径导出的参考量**（用于回显），不再是任何条件
+    n_eff = (math.pi / 4.0) * (2.0 * w0 * freq) / speed_m_s
 
     # 峰值能流属**源文献装置条件**：ADR-0021 起随协议存放（装配后从 reference_protocol 读）
     peak = rp.get("reference_peak_fluence_J_m2")
@@ -1338,6 +1358,17 @@ def demo_rect_payload(
         label=str(cfg["label"]), curves_dir=curves_dir,
     )
     # 把"这次用的协议参数"一并回给前端，演示时可以直接展示"输入是什么"
+    _inc = dict(resp.get("incubation") or {})
+    _s_spec = dict(_inc.get("S_f_kHz") or {})
+    incubation_info = None
+    if _inc.get("enabled") and _s_spec:
+        incubation_info = {
+            "enabled": True,
+            "model": str(_inc.get("model") or "Fth(N) = Fth1 * N^(S-1)"),
+            "Fth1Jm2": float(resp.get("threshold_J_m2") or 0.0),
+            "S": float(_s_spec["intercept"]) + float(_s_spec["slope"]) * (freq / 1e3),
+            "note": "阈值随各点累积照射次数逐事件计算（首脉冲用 N=1）",
+        }
     out["demo"] = {
         "materialId": spec.id,
         "protocolId": rp.get("protocol_id"),
@@ -1351,6 +1382,21 @@ def demo_rect_payload(
         "effectiveCount": n_eff,
         "regionUm": region, "hatchUm": hatch, "passes": passes, "dxUm": dx,
         "nSegments": len(segs),
+        # 阈值模型回显：界面用它说明「为什么工艺参数可以自由设」——
+        # 阈值不是某个 N 处的常量，而是按 Fth(N)=Fth1·N^(S-1) 逐点算出来的。
+        "incubation": incubation_info,
+        # 协议基准（**不受本次覆盖影响**）：前端用它做容差提示，
+        # 否则用户改一次参数就把基准污染了，后面再也判断不出"偏离了多少"。
+        "baseline": {
+            "pulseDurationFs": _v("pulse_duration_s") * 1e15,
+            "repetitionRateKHz": _v("repetition_rate_Hz") / 1e3,
+            "spotRadiusUm": w0 * 1e6,
+            "effectiveCount": card_n_eff,
+            "speedMmS": float(
+                sb.get("scan_speed_mm_s")
+                or ((math.pi / 4.0) * (2.0 * w0 * _v("repetition_rate_Hz"))
+                    / card_n_eff) * 1e3),
+        },
     }
     return out
 

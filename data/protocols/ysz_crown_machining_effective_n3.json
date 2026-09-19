@@ -16,13 +16,10 @@
   "source_beam": {
     "spot_radius_m": 1.6e-05,
     "repetition_rate_Hz": 33300.0,
-    "note": "源文献装置描述（非适用条件）：w0=16 µm、f=33.3 kHz；仅供对照与 N_eff=(π/4)(2w₀f)/v 的复算，不参与门禁。"
+    "scan_speed_mm_s": 278.9734276388,
+    "note": "源文献装置描述（非适用条件）：w0=16 µm、f=33.3 kHz、v=278.97 mm/s；仅供对照与 N_eff 复算，不参与门禁。"
   },
-  "required_history": {
-    "effective_count": 3,
-    "definition": "area_equivalent_ysz_eq9"
-  },
-  "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+  "protocol_note": "原文式（9）N_eff=(π/4)·(2·w0·f)/v。原文献的有效核在 w0=16 µm、f=33.3 kHz、v=278.97 mm/s 处（即 N_eff=3）给出；本工程改用 Fth(N)=Fth1·N^(S-1) 逐点计算，故不锁定该工况点。",
   "reference_peak_fluence_J_m2": 501000.0,
   "source_ids": [
     "S01"

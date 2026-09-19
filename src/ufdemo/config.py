@@ -1507,32 +1507,22 @@ def check_reference_conditions(config: RunConfig, material: Any) -> list[UFDemoE
             )
         )
 
-    rh = dict(proto.get("required_history", {}) or {})
-    need_n = rh.get("effective_count")
-    if need_n is not None:
-        got_n = given.get("effective_count")
-        if got_n is None:
-            errs.append(
-                UFDemoError(
-                    CONDITION_MISMATCH,
-                    "未确认有效脉冲数定义，拒绝定量执行",
-                    field_path="reference_conditions.effective_count",
-                    actual=None,
-                    requirement=f"必须显式给出该协议的有效脉冲数（卡内为 {need_n}）",
-                    suggestion="补 effective_count；不得把 N=10 阈值当作单脉冲阈值使用。",
-                )
-            )
-        elif abs(float(got_n) - float(need_n)) > 1e-9:
-            errs.append(
-                UFDemoError(
-                    CONDITION_MISMATCH,
-                    "有效脉冲数与材料卡协议不一致",
-                    field_path="reference_conditions.effective_count",
-                    actual=got_n,
-                    requirement=f"== {need_n}（卡内该阈值的定义条件）",
-                    suggestion="该阈值的 N 定义不可替换；单脉冲阈值与 N 脉冲阈值是不同类型。",
-                )
-            )
+    # 有效脉冲数（N_eff）**不再是门禁条件**（ADR-0022）。
+    #
+    # 原先这里要求 `reference_conditions.effective_count` 必须等于卡里那个值，
+    # 理由是"该阈值的 N 定义不可替换"。**这个理由的前提后来被证伪了**：
+    # 卡里那个"有效阈值"并不是独立的材料参数，而是文献模型
+    #     Fth(N) = Fth1 · N^(S-1)，S(f) = 0.969 - 0.0029·f
+    # 在某个 N 处**求值**得到的（实测 N=3 时 14830·3^(S-1) = 12890.65，
+    # 与卡里存的 12890.0 相差 0.005%）。
+    #
+    # 也就是说：限制原本来自"把函数在某点的值当常量存"，不是材料属性、也不是算法。
+    # 现在核按 Fth(N) 逐点算阈值（response.py 的 incubation），N 可以任意 ——
+    # 于是 τ / f / v 这些**工艺参数**不再被焊死在一个工况点上。
+    #
+    # 仍然保留的约束（在核与激光条件两处）：
+    #   * 卡声明了 incubation 却没给逐点历史 ⇒ 核拒绝执行；
+    #   * S 需要 f ⇒ 没给 repetition_rate_Hz 就报错。
 
     # --- 光束条件：**只匹配决定 δ/F_th 是否适用的量** -----------------------
     #

@@ -16,21 +16,28 @@
     "synthetic_demo"
   ],
   "response": {
-    "kind": "log_fixed_effective",
+    "kind": "log_fixed_with_incubation",
     "output_semantics": "event_depth_increment",
     "fluence_basis": "incident_peak_fluence",
     "depth_direction": "surface_normal",
-    "threshold_J_m2": 12890.0,
-    "threshold_kind": "machining_effective",
+    "threshold_J_m2": 14830.0,
+    "threshold_kind": "single_pulse_with_incubation",
     "delta_m": 3.9e-07,
-    "incubation_enabled": false,
-    "extra_incubation_prohibited_without_refit": true
+    "incubation": {
+      "enabled": true,
+      "model": "Fth(N) = Fth1 * N^(S-1)",
+      "S_f_kHz": {
+        "intercept": 0.969,
+        "slope": -0.0029
+      },
+      "source": "F01 P01/P02/P03（S01）；与静态卡同一条文献关系式",
+      "note": "S(f)=0.969-0.0029·f_kHz 由文献给出；N=3、f=33.3 kHz 时 Fth=12890.65 J/m²，与原「加工有效阈值」12890 相差 0.005% —— 即原值正是本模型的一个采样点。"
+    }
   },
   "history_definition": {
-    "mode": "effective_count_embedded",
-    "exposure_count_meaning": "not_per_event",
-    "effective_count": 3,
-    "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"
+    "mode": "per_event_counting",
+    "exposure_count_meaning": "per_event",
+    "note": "阈值随**该点**累积照射次数下降（Fth(N)=Fth1·N^(S-1)），由求解器逐事件追踪；首脉冲用 N=1（不得用 N=0）。"
   },
   "reference_protocol": {
     "protocol_id": "ysz_crown_machining_effective_n3",
@@ -41,16 +48,17 @@
   "validity_domain": {
     "scope": "reference_protocol_only",
     "protocol_id": "ysz_crown_machining_effective_n3",
-    "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。"
+    "note": "阈值由文献模型 Fth(N)=Fth1·N^(S-1) 逐点给出；τ/f/v 可按实际设置，但 λ、τ 须落在协议容差内（Fth1 与 S 是在该条件下标定的）。"
   },
   "applicability": {
     "physical_material_prediction_allowed": true,
-    "condition": "仅限 reference_protocol 声明的条件匹配工况"
+    "condition": "λ/τ 落在协议容差内即可；任意 τ/f/v 组合都可求解"
   },
   "enabled_by_default": true,
   "limitations": [
-    "有效加工阈值不是 Fth1；不得与静态分支拼接。",
-    "任意单脉冲条件、任意氧化锆牌号均不适用。"
+    "Fth1 与 S(f) 标定于 1030 nm / 208 fs；换波长或脉宽需重新标定。",
+    "仅适用于 APS 8 wt% YSZ；任意氧化锆牌号不适用。",
+    "δ 沿用原有效核的拟合值，其他 N 下未重新拟合 —— 属待标定项，报告中标明。"
   ],
   "provenance": {
     "source_ids": [

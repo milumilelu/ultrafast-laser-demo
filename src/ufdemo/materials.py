@@ -331,7 +331,8 @@ def _check_log_kernel(spec: MaterialSpec) -> tuple[bool, str, tuple[str, ...]]:
     if not _finite_positive(r.get("delta_internal")):
         missing.append("delta_m")
 
-    if kind not in ("log_fixed", "log_fixed_effective", "logarithmic_effective"):
+    if kind not in ("log_fixed", "log_fixed_effective", "logarithmic_effective",
+                    "log_fixed_with_incubation"):
         detail = "、".join(missing) if missing else "响应类型不产生逐事件深度"
         return False, f"响应类型 {kind!r} 不是固定阈值对数核；缺 {detail}", tuple(missing)
     semantics = r.get("output_semantics")
@@ -353,8 +354,20 @@ def compute_capabilities(spec: MaterialSpec) -> dict[str, Capability]:
     # 1. 逐事件增量
     ok, reason, missing = _check_log_kernel(spec)
     if ok:
-        cond = spec.response.get("kind") == "log_fixed_effective"
-        if cond:
+        _kind = spec.response.get("kind")
+        # `conditional`：该能力是否附带条件（界面据此显示"有条件可用"）。
+        # 带孵化模型的卡仍有 λ/τ 容差（Fth1 与 S 的标定条件）⇒ 也是 conditional。
+        cond = _kind in ("log_fixed_effective", "logarithmic_effective",
+                         "log_fixed_with_incubation")
+        if _kind == "log_fixed_with_incubation":
+            # ADR-0022：阈值是**单脉冲常数 Fth1** + 文献累积模型，不再是"某个 N 的有效值"。
+            # 因此 τ/f/v 可按实际设置；只有 λ/τ 要落在协议容差内（Fth1 与 S 的标定条件）。
+            reason = (
+                "单脉冲阈值对数核 + 文献累积孵化模型（Fth(N)=Fth1·N^(S-1)）："
+                "阈值随各点累积照射次数逐事件计算；λ/τ 须落在协议容差内，"
+                "τ/f/v 可按实际设置。"
+            )
+        elif spec.response.get("kind") in ("log_fixed_effective", "logarithmic_effective"):
             reason = (
                 "固定阈值对数核字段完整，但阈值是“加工有效”阈值："
                 "仅在文献加工分支的条件匹配岗位上可用；不匹配时拒绝定量执行。"
@@ -776,8 +789,21 @@ def _probe_ysz_no_branch_merge(catalog: Mapping[str, MaterialSpec], mdir: str | 
         _entry_probe_catalog(catalog, mdir, "zirconia_ysz_static_aps8ysz"), "zirconia_ysz_static_aps8ysz"
     )
     machining = _entry_probe_catalog(catalog, mdir, "zirconia_ysz_machining_effective_n3")
-    if static_thr == machining.threshold_internal:
-        raise AssertionError("氧化锆：静态分支与加工分支的阈值被合并为同一数字")
+    # ADR-0022 之后两个分支的阈值**都是同一个材料常数 Fth1** —— 这不是"分支被合并"，
+    # 恰恰相反：Fth1 是材料常数，本来就该两边一致。分支的差别不在阈值数值，而在
+    # 「加工卡有 δ 与文献孵化模型，静态卡两者都缺」。
+    if static_thr != machining.threshold_internal:
+        raise AssertionError(
+            "氧化锆：两分支的 Fth1（材料常数）应当一致，实测 "
+            f"{static_thr} vs {machining.threshold_internal}")
+    if not _finite_positive(machining.response.get("delta_internal")):
+        raise AssertionError("氧化锆：加工分支必须有 δ（静态分支没有）")
+    if _finite_positive(
+            _entry_probe_catalog(catalog, mdir, "zirconia_ysz_static_aps8ysz")
+            .response.get("delta_internal")):
+        raise AssertionError("氧化锆：静态分支不应有 δ —— 文献该分支未给出，不得补值")
+    if not (dict(machining.response.get("incubation") or {}).get("enabled")):
+        raise AssertionError("氧化锆：加工分支必须声明文献孵化模型（Fth(N)=Fth1·N^(S-1)）")
     if machining.response_semantics != SEMANTIC_EVENT_INCREMENT:
         raise AssertionError("氧化锆：加工分支的响应语义不是逐事件增量")
 
@@ -790,20 +816,38 @@ def _finite_positive_error(spec: MaterialSpec, name: str) -> float:
 
 
 def _probe_ysz_no_extra_incubation(catalog: Mapping[str, MaterialSpec], mdir: str | Path) -> None:
+    """氧化锆加工卡：孵化是**文献模型**，不是"禁止项"（ADR-0022）。
+
+    改前这里断言的是「带局部历史的孵化必须显式报错」—— 因为当时卡里只存了
+    "有效阈值"（模型在 N=3 处的取值），没有模型可用，只能拒绝。
+    现在卡里存的是模型本身（Fth1 + S(f)），所以要断言的是**它真的按 N 起作用**，
+    以及**拿不到逐点历史时仍然拒绝**（不得静默退回固定阈值）。
+    """
     import numpy as np
 
     from .response import HistoryState, build_pulse_law
 
     card = _entry_probe_catalog(catalog, mdir, "zirconia_ysz_machining_effective_n3")
-    if card.response.get("extra_incubation_prohibited_without_refit") is not True:
-        raise AssertionError("氧化锆：卡未声明禁止无重拟合的额外孵化")
-    law = build_pulse_law(card)
-    fluence = np.array([[2.0 * float(law.threshold_internal)]])
-    history = HistoryState(exposure_count=np.zeros((1, 1), dtype=np.uint32))
+    law = build_pulse_law(card, laser={"repetition_rate_Hz": 33300.0})
+    if getattr(law, "incubation", None) is None:
+        raise AssertionError("氧化锆：卡声明了 incubation，但核没有组装出模型")
+    if law.incubation.get("Fth1_internal") != card.threshold_internal:
+        raise AssertionError("氧化锆：核用的 Fth1 必须等于卡里的单脉冲阈值")
+
+    f_test = np.array([[3.0 * float(law.threshold_internal)]])
+    n1 = HistoryState(exposure_count=np.ones((1, 1), dtype=np.uint32))
+    n9 = HistoryState(exposure_count=np.full((1, 1), 9, dtype=np.uint32))
+    a1 = float(law.increment(f_test, n1).values[0, 0])
+    a9 = float(law.increment(f_test, n9).values[0, 0])
+    if not a9 > a1:
+        raise AssertionError(
+            f"氧化锆：阈值未随累积次数下降（同一能流下 a(N=1)={a1:.3e}，a(N=9)={a9:.3e}）")
+
+    # 声明了模型却没给逐点历史 ⇒ 仍然必须拒绝（不静默退回固定阈值）
     _expect_blocked(
-        lambda: law.increment(fluence, history),
+        lambda: law.increment(f_test, HistoryState(exposure_count=None)),
         RESPONSE_SEMANTICS_INVALID,
-        "氧化锆：带局部历史的孵化必须显式报错（不得静默忽略、也不得默认启用）",
+        "氧化锆：声明了孵化模型却未提供逐点历史时必须报错（不得静默降级）",
     )
 
 

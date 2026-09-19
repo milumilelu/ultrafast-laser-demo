@@ -121,8 +121,11 @@ def test_loader_assembles_same_shape_as_before_separation():
     """装配后的 ``reference_protocol`` 必须保留分离前的键（形状只做超集扩展）。"""
     spec = load_material_card(DATA_MATERIALS / "zirconia_ysz_machining_effective_n3.json")
     rp = spec.reference_protocol
-    for key in ("protocol_id", "required_laser", "required_history", "protocol_note"):
-        assert key in rp, f"装配后缺少分离前就有的键：{key}"
+    for key in ("protocol_id", "required_laser", "protocol_note"):
+        assert key in rp, f"装配后缺少应有的键：{key}"
+    # ADR-0022：`required_history` 已**有意移除** —— N 不再是门禁条件，
+    # 阈值改由文献模型 Fth(N)=Fth1·N^(S-1) 逐点计算。
+    assert "required_history" not in rp
     # 2026-09-17 订正（ADR-0021 补记）：w0/f 实测不进物理（极差 4.5e-16），
     # 协议不再把它们声明为 required —— required 只留真正决定 F_th/δ 有效性的 λ/τ。
     assert sorted(rp["required_laser"]) == ["pulse_duration_s", "wavelength_m"]

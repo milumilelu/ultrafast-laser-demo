@@ -105,13 +105,18 @@ PROTOCOLS: dict[str, dict[str, Any]] = {
         "source_beam": {
             "spot_radius_m": 1.6e-05,
             "repetition_rate_Hz": 33300.0,
-            "note": "源文献装置描述（非适用条件）：w0=16 µm、f=33.3 kHz；仅供对照与 N_eff=(π/4)(2w₀f)/v 的复算，不参与门禁。",
+            # 源文献的扫描速度：由 N_eff=(π/4)(2w₀f)/v 在 N_eff=3 处解出（278.9734 mm/s）。
+            # 存下来作为**默认速度**，这样改 f 时速度不会被联动带走（工艺参数各自独立）。
+            "scan_speed_mm_s": 278.9734276388,
+            "note": "源文献装置描述（非适用条件）：w0=16 µm、f=33.3 kHz、v=278.97 mm/s；仅供对照与 N_eff 复算，不参与门禁。",
         },
-        "required_history": {
-            "effective_count": 3,
-            "definition": "area_equivalent_ysz_eq9",
-        },
-        "protocol_note": "原文式（9）N_eff=(pi/4)*(2*w0*f)/v；w0=16 um, f=33.3 kHz, N_eff=3 → v=278.9734276388 mm/s。",
+        # ⚠️ ADR-0022：**不再声明 required_history**。
+        # N_eff=3 不是"必须满足的条件"，而是原文献推导其"加工有效核"时用的**一个工况点**
+        # （w0=16 µm、f=33.3 kHz、v=278.97 mm/s ⇒ N_eff=3）。既然核已按
+        # Fth(N)=Fth1·N^(S-1) 逐点算阈值，N 可以任意 ⇒ 工艺参数（τ/f/v）不再需要匹配某一点。
+        "protocol_note": ("原文式（9）N_eff=(π/4)·(2·w0·f)/v。原文献的有效核在 "
+                          "w0=16 µm、f=33.3 kHz、v=278.97 mm/s 处（即 N_eff=3）给出；"
+                          "本工程改用 Fth(N)=Fth1·N^(S-1) 逐点计算，故不锁定该工况点。"),
         "reference_peak_fluence_J_m2": 501000.0,
         "source_ids": ["S01"],
     },
@@ -324,19 +329,30 @@ CARDS: list[dict[str, Any]] = [
         "source_type": "research_card_migration",
         "allowed_run_modes": ["reference_case", "threshold_only", "synthetic_demo"],
         "response": {
-            "kind": "log_fixed_effective",
+            "kind": "log_fixed_with_incubation",
             "output_semantics": "event_depth_increment",
             "fluence_basis": "incident_peak_fluence",
             "depth_direction": "surface_normal",
-            "threshold_J_m2": 12890.0,
-            "threshold_kind": "machining_effective",
+            # ⚠️ ADR-0022：这里存的是**单脉冲阈值 Fth1**（材料常数），不是"有效阈值"。
+            # 原实现存的是 Fth(N=3)=12890 —— 那只是下面这个模型在 N=3 处的**取值**；
+            # 存成常量会把"材料的 N 依赖"伪装成"参数的适用条件"，进而把 τ/f/v 焊死。
+            # 实测：14830 · 3^(S(33.3)−1) = 12890.65，与原值差 0.005%（同源同式）。
+            "threshold_J_m2": 14830.0,
+            "threshold_kind": "single_pulse_with_incubation",
             "delta_m": 3.9e-07,
-            "incubation_enabled": False,
-            "extra_incubation_prohibited_without_refit": True,
+            "incubation": {
+                "enabled": True,
+                "model": "Fth(N) = Fth1 * N^(S-1)",
+                "S_f_kHz": {"intercept": 0.969, "slope": -0.0029},
+                "source": "F01 P01/P02/P03（S01）；与静态卡同一条文献关系式",
+                "note": ("S(f)=0.969-0.0029·f_kHz 由文献给出；N=3、f=33.3 kHz 时 "
+                         "Fth=12890.65 J/m²，与原「加工有效阈值」12890 相差 0.005% —— "
+                         "即原值正是本模型的一个采样点。"),
+            },
         },
-        "history_definition": {"mode": "effective_count_embedded", "exposure_count_meaning": "not_per_event",
-                              "effective_count": 3,
-                              "note": "有效核已含多脉冲效应；禁止叠加未经重新标定的额外孵化。"},
+        "history_definition": {"mode": "per_event_counting", "exposure_count_meaning": "per_event",
+                               "note": ("阈值随**该点**累积照射次数下降（Fth(N)=Fth1·N^(S-1)），"
+                                        "由求解器逐事件追踪；首脉冲用 N=1（不得用 N=0）。")},
         "reference_protocol": {
             "protocol_id": "ysz_crown_machining_effective_n3",
             "protocol_file": "data/protocols/ysz_crown_machining_effective_n3.json",
@@ -345,13 +361,16 @@ CARDS: list[dict[str, Any]] = [
         "source_figure_or_table": "F01 P04/P05/P06/P07（S01 图14 配套有效核）",
         "validity_domain": {"scope": "reference_protocol_only",
                             "protocol_id": "ysz_crown_machining_effective_n3",
-                            "note": "仅在上述已确认的加工条件与历史协议下允许定量；超出拒绝执行。"},
+                            "note": ("阈值由文献模型 Fth(N)=Fth1·N^(S-1) 逐点给出；"
+                                     "τ/f/v 可按实际设置，但 λ、τ 须落在协议容差内"
+                                     "（Fth1 与 S 是在该条件下标定的）。")},
         "applicability": {"physical_material_prediction_allowed": True,
-                          "condition": "仅限 reference_protocol 声明的条件匹配工况"},
+                          "condition": "λ/τ 落在协议容差内即可；任意 τ/f/v 组合都可求解"},
         "enabled_by_default": True,
         "limitations": [
-            "有效加工阈值不是 Fth1；不得与静态分支拼接。",
-            "任意单脉冲条件、任意氧化锆牌号均不适用。",
+            "Fth1 与 S(f) 标定于 1030 nm / 208 fs；换波长或脉宽需重新标定。",
+            "仅适用于 APS 8 wt% YSZ；任意氧化锆牌号不适用。",
+            "δ 沿用原有效核的拟合值，其他 N 下未重新拟合 —— 属待标定项，报告中标明。",
         ],
         "provenance": {"source_ids": ["S01"], "from": "F01 P04-P07；F02 zirconia_ysz_reference 的加工分支",
                        "migration_note": "保留有效脉冲数与阈值类型；补充 required_laser 后才允许参考执行。"},
@@ -839,27 +858,25 @@ def admission_report(cards_by_id: dict[str, MaterialSpec]) -> list[dict[str, Any
     run_probe("unconfirmed_pulsewidth_candidate", "diamond_scd_cvd_1030nm_pulsewidth_unconfirmed", "reject",
               reference_conditions={"protocol_id": "diamond_scd_1030nm_candidate",
                                     "fluence_basis": "incident_peak_fluence", "effective_count": 1})
-    # 6. YSZ 有效加工核条件匹配 → 允许。
-    #    2026-09-17：改用**本机名义光斑 0.874 µm** —— 证明「文献材料参数 + 本机光束」
-    #    这条正确用法现在能过门禁（协议不再把 w0 声明为 required，见 ADR-0021 补记）。
+    # 6. YSZ 条件匹配 → 允许。**注意这里不给 effective_count**：
+    #    ADR-0022 之后 N 不再是门禁条件（核按 Fth(N)=Fth1·N^(S-1) 逐点算），
+    #    该探针本身就证明了「工艺参数不再被锁在某个工况点上」。
     run_probe("ysz_protocol_matched", "zirconia_ysz_machining_effective_n3", "accept",
               laser={"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15,
                      "pulse_energy_J": 2.01464053689406e-04, "repetition_rate_Hz": 33300.0,
                      "spot_radius_m": 0.874e-06, "focus_xyz_m": [0.0, 0.0, 0.0],
                      "direction_unit": [0.0, 0.0, 1.0]},
               reference_conditions={"protocol_id": "ysz_crown_machining_effective_n3",
-                                    "fluence_basis": "incident_peak_fluence", "effective_count": 3})
-    # 7. YSZ **有效脉冲数**不一致 → 必须拒绝（这才是真正不可替换的条件）。
-    #    2026-09-17 订正：原探针用「光斑半径不符」当拒绝理由 —— 但 w0 不进物理
-    #    （ADR-0021 补记实测极差 4.5e-16），协议也不再把它声明为 required。
-    #    真正不可替换的是**累积制程**：该 F_th 是 N_eff=3 的有效阈值，换 N 就是换参数。
+                                    "fluence_basis": "incident_peak_fluence"})
+    # 7. YSZ **脉宽**超出协议容差 → 必须拒绝。
+    #    λ/τ 是 Fth1 与 S(f) 的标定条件（参数自身的定义域），不是工艺自由度 —— 这条要留。
     run_probe("ysz_protocol_mismatch", "zirconia_ysz_machining_effective_n3", "reject",
-              laser={"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15,
+              laser={"wavelength_m": 1.03e-06, "pulse_duration_s": 208e-15 * 2.0,
                      "pulse_energy_J": 2.01464053689406e-04, "repetition_rate_Hz": 33300.0,
                      "spot_radius_m": 0.874e-06, "focus_xyz_m": [0.0, 0.0, 0.0],
                      "direction_unit": [0.0, 0.0, 1.0]},
               reference_conditions={"protocol_id": "ysz_crown_machining_effective_n3",
-                                    "fluence_basis": "incident_peak_fluence", "effective_count": 10})
+                                    "fluence_basis": "incident_peak_fluence"})
     return rows
 
 
