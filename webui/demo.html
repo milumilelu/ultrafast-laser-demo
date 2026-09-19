@@ -1,424 +1,75 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>超快激光加工工艺仿真 · 矩形槽</title>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>超快激光 · 机理递推仿真</title>
 <style>
-  :root{
-    --ink:#0f172a; --ink2:#475569; --ink3:#94a3b8;
-    --line:#e2e8f0; --bg:#ffffff; --soft:#f8fafc;
-    --accent:#2563eb;
-    --mono:ui-monospace,SFMono-Regular,Consolas,"Cascadia Mono",monospace;
-    --sans:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%}
-  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
-       font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-
-  .page{max-width:1380px;margin:0 auto;padding:42px 44px 56px}
-
-  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:34px}
-  h1{margin:0;font-size:23px;font-weight:600;letter-spacing:-.015em}
-  header .sub{color:var(--ink2);font-size:13.5px;margin-top:7px}
-
-  .layout{display:grid;grid-template-columns:296px minmax(0,1fr);gap:44px;align-items:start}
-  @media (max-width:1080px){.layout{grid-template-columns:1fr;gap:28px}}
-
-  h2{font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
-     color:var(--ink3);margin:0 0 16px}
-
-  .field{margin-bottom:22px}
-  .field .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-  .field .lab .n{font-size:13px;color:var(--ink2)}
-  .field .lab .v{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
-  select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;
-         font-family:var(--sans);font-size:13.5px;color:var(--ink);background:#fff;cursor:pointer}
-  select:focus{outline:none;border-color:var(--accent)}
-  input[type=range]{width:100%;height:20px;-webkit-appearance:none;background:transparent;margin:0;cursor:pointer}
-  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line)}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
-    background:#fff;border:2px solid var(--accent);margin-top:-7px;box-shadow:0 1px 4px rgba(37,99,235,.3)}
-
-  button.go{width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
-            font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px;
-            transition:background .15s}
-  button.go:hover{background:#1d4ed8}
-  button.go:disabled{background:#cbd5e1;cursor:not-allowed}
-
-  .proto{margin-top:30px;padding-top:22px;border-top:1px solid var(--line)}
-  .proto .row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0}
-  .proto .k{color:var(--ink3)}
-  .proto .v{font-family:var(--mono);color:var(--ink2)}
-
-  .view{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:22px}
-  #field{display:block;width:100%;height:auto;border-radius:8px;background:#fff}
-  .scale{display:flex;align-items:center;gap:10px;margin-top:14px;font-family:var(--mono);
-         font-size:11.5px;color:var(--ink2)}
-  .scale .bar{flex:1;height:8px;border-radius:4px;border:1px solid var(--line)}
-
-  .sec2{margin-top:26px;background:var(--soft);border:1px solid var(--line);
-        border-radius:14px;padding:22px}
-  #prof{display:block;width:100%;height:auto}
-
-  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
-  @media (max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}}
-  .m{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-  .m .k{font-size:12px;color:var(--ink3)}
-  .m .v{font-family:var(--mono);font-size:21px;font-weight:600;letter-spacing:-.02em;margin-top:5px}
-  .m .v em{font-style:normal;font-size:12px;font-weight:400;color:var(--ink3);margin-left:3px}
-
-  .msg{margin-top:20px;font-size:13px;color:var(--ink2)}
-  .msg.err{color:#b91c1c}
-  .hint{font-size:12px;color:var(--ink3);margin-top:10px;line-height:1.55}
-</style>
-</head>
-<body>
-<div class="page">
-
-  <header>
-    <h1>超快激光加工工艺仿真</h1>
-    <div class="sub">矩形槽形貌预测 · 逐脉冲事件求解器 · 固定焦点被动离焦</div>
-  </header>
-
-  <div class="layout">
-
-    <div>
-      <h2>输入</h2>
-
-      <div class="field">
-        <div class="lab"><span class="n">材料</span></div>
-        <select id="card"></select>
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">加工区域</span><span class="v" id="v-region">100 µm</span></div>
-        <input type="range" id="s-region" min="60" max="160" step="10" value="100">
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">填充间距 h</span><span class="v" id="v-hatch">4.0 µm</span></div>
-        <input type="range" id="s-hatch" min="2" max="10" step="1" value="4">
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">加工层数 N</span><span class="v" id="v-passes">2</span></div>
-        <input type="range" id="s-passes" min="1" max="4" step="1" value="2">
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">脉宽 τ</span><span class="v" id="v-tau">208 fs</span></div>
-        <input type="range" id="s-tau" min="150" max="300" step="1" value="208">
-        <div class="hint" id="tau-note"></div>
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">重复频率 f</span><span class="v" id="v-freq">33.3 kHz</span></div>
-        <input type="range" id="s-freq" min="10" max="80" step="0.5" value="33.3">
-      </div>
-
-      <div class="field">
-        <div class="lab"><span class="n">扫描速度 v</span><span class="v" id="v-speed">279 mm/s</span></div>
-        <input type="range" id="s-speed" min="80" max="700" step="0.1" value="279">
-      </div>
-
-      <div class="field">
-        <div class="hint" id="neff-note"></div>
-      </div>
-
-      <button class="go" id="run">开始仿真</button>
-      <div class="msg" id="msg"></div>
-
-      <div class="proto">
-        <h2>协议参数（自动）</h2>
-        <div id="proto"></div>
-        <div class="hint">激光条件从材料卡的参考协议自动读取，避免与门控不一致。</div>
-      </div>
-    </div>
-
-    <div>
-      <div class="view">
-        <canvas id="field" width="880" height="560"></canvas>
-        <div class="scale">
-          <span>0</span><span class="bar" id="cbar"></span><span id="cmax">—</span>
-        </div>
-      </div>
-
-      <div class="sec2">
-        <canvas id="prof" width="880" height="220"></canvas>
-        <div class="hint" id="proflab">中心剖面（沿 x 方向）</div>
-      </div>
-
-      <div class="metrics">
-        <div class="m"><div class="k">平均深度</div><div class="v" id="k-mean">—<em>µm</em></div></div>
-        <div class="m"><div class="k">最大深度</div><div class="v" id="k-max">—<em>µm</em></div></div>
-        <div class="m"><div class="k">中心深度</div><div class="v" id="k-center">—<em>µm</em></div></div>
-        <div class="m"><div class="k">脉冲事件</div><div class="v" id="k-events">—</div></div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
+:root{--bg:#f3f5f7;--ink:#172d3d;--muted:#617789;--line:#d9e1e7;--accent:#116d85;--warn:#996220;--card:#fff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}header{padding:22px 30px;background:#153748;color:white;display:flex;justify-content:space-between;gap:20px;align-items:center}h1{font-size:25px;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#c1d8e1;font-size:12px}.tag{display:inline-block;border:1px solid #b4c5ce;border-radius:4px;padding:3px 8px;font-size:11px;white-space:nowrap}.shell{display:grid;grid-template-columns:275px minmax(0,1fr);gap:18px;padding:20px;max-width:1800px;margin:auto}aside,.card{background:var(--card);border:1px solid var(--line);border-radius:10px}aside{padding:19px;align-self:start}main{min-width:0}h2{font-size:15px;margin:0 0 12px}h3{font-size:13px;margin:0 0 7px}.small{font-size:12px;color:var(--muted)}.field{margin:13px 0}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:10px}input[type=number],select{width:100%;padding:8px;border:1px solid var(--line);border-radius:5px;background:white;color:var(--ink);font:inherit}input[type=range]{width:100%;accent-color:var(--accent)}button,.fileLabel{border:1px solid var(--line);border-radius:5px;background:white;padding:8px 12px;color:var(--ink);font:inherit;cursor:pointer;display:inline-block}button:hover,.fileLabel:hover{border-color:var(--accent)}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:var(--accent);color:white;border-color:var(--accent);width:100%;font-weight:600;padding:11px}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.row.between{justify-content:space-between}hr{border:0;border-top:1px solid var(--line);margin:18px 0}.note{font-size:12px;color:var(--warn);background:#fff8ec;border:1px solid #f0e0c0;padding:10px;border-radius:6px}.strip{display:flex;gap:9px;align-items:center;margin-bottom:15px;flex-wrap:wrap}.step{padding:7px 11px;border:1px solid var(--line);border-radius:5px;background:white;font-size:12px}.card{padding:16px;margin-bottom:15px}.toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:9px}.toolbar select{width:auto;max-width:200px}.metricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:15px}.metric{padding:14px;background:white;border:1px solid var(--line);border-radius:8px}.metric label{display:block;font-size:11px;color:var(--muted)}.metric b{font-size:25px;display:block;font-variant-numeric:tabular-nums;line-height:1.5}.metric small{color:var(--muted);font-size:10px}.viewGrid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}.viewGrid.compare{grid-template-columns:1fr 1fr}.viewWrap{min-width:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#fbfdfe}.viewTitle{padding:8px 12px;font-size:11px;min-height:37px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}.viewWrap canvas{display:block;width:100%;height:365px;touch-action:none}.legend{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--muted);margin:9px 0}.bar{height:7px;width:180px;border-radius:3px;background:linear-gradient(90deg,#eaf3f5,#91bfcd,#347f9e,#173c68)}.chartGrid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.chart canvas{display:block;width:100%;height:190px}details summary{cursor:pointer;font-weight:600;font-size:12px}pre{white-space:pre-wrap;word-break:break-word;font:11px/1.6 ui-monospace,Consolas,monospace;max-height:230px;overflow:auto}#status{white-space:pre-wrap;margin:10px 0;min-height:35px}.error{color:#a02926!important}#comparisonText{margin-top:8px}a{color:var(--accent)}.hidden{display:none!important}.pending{background:#f8fafb;color:var(--muted);border:1px dashed var(--line);padding:10px;font-size:12px;border-radius:5px}.pill{font-size:11px;color:var(--accent);background:#edf5f7;padding:3px 7px;border-radius:4px}.footer{font-size:11px;color:var(--muted);margin:12px 0}#warnings{max-height:160px;overflow:auto}.viewWrap canvas:focus{outline:1px solid var(--accent)}@media(max-width:1100px){.shell{grid-template-columns:245px minmax(0,1fr);padding:12px;gap:12px}.metricGrid{grid-template-columns:1fr 1fr}.viewGrid.compare{grid-template-columns:1fr}.chartGrid{grid-template-columns:1fr}}@media(max-width:750px){header{padding:18px;display:block}.shell{grid-template-columns:1fr}.twocol{grid-template-columns:1fr 1fr}.viewWrap canvas{height:310px}}
+</style></head><body>
+<header><div><h1>超快激光加工工艺仿真 · 机理递推</h1><p>单脉冲响应 → 扫描搭接 → 表面更新 → 多遍槽形 ｜ 焦点固定在原始上表面</p></div><div><span class="tag" id="evidenceTag">本机光学 · 文献材料模型</span><span id="field" class="hidden">legacy-static-field-marker</span><p>面向当前服务接口；服务版本须查看实际运行记录</p></div></header>
+<div class="shell"><aside>
+<h2>工艺输入</h2><p class="small">只点击“实际求解”才提交任务。页面不自行生成或修饰槽形。</p>
+<div class="field"><label>材料 / 响应依据</label><select id="material"><option value="data/materials/zirconia_ysz_machining_effective_n3.json">YSZ · 文献响应参数</option></select></div>
+<div class="field"><label>演示预设（候选工况，尚需本机预跑）</label><select id="preset"><option value="quick">小区域联调 · 20 μm / 1遍</option><option value="dense">多遍形貌 · 60 μm / 4遍</option><option value="sparse">较大线间距 · 60 μm / 4遍</option><option value="experiment">正式区域 · 200 μm / 4遍</option></select></div>
+<div class="twocol"><div class="field"><label>正方形边长 / μm</label><input id="region" type="number" min="5" max="500" step="1" value="20"></div><div class="field"><label>扫描遍数</label><input id="passes" type="number" min="1" max="8" step="1" value="1"></div></div>
+<div class="twocol"><div class="field"><label>线间距 / μm</label><input id="hatch" type="number" min="0.1" step="0.5" value="2"></div><div class="field"><label>速度 / mm·s⁻¹</label><input id="speed" type="number" min="0.1" step="5" value="40"></div></div>
+<div class="twocol"><div class="field"><label>重复频率 / kHz</label><input id="freq" type="number" min="0.1" step="1" value="40"></div><div class="field"><label>网格步长 / μm</label><select id="dx"><option>0.5</option><option selected>0.25</option><option>0.125</option><option>0.0625</option></select></div></div>
+<div class="field"><label>脉宽 / fs（当前文献卡匹配条件）</label><input id="tau" type="number" value="208" disabled></div>
+<p id="derived" class="small"></p>
+<div class="note">预设只帮助选择工况，不表示实验精度已验证。20 / 60 μm 是不同加工区域，不能冒充 200 μm 实验复现。</div>
+<button id="solve" class="primary" style="margin-top:14px">实际求解</button><div id="status" class="small" role="status">尚无求解结果。可连接现有服务或载入真实运行 JSON。</div>
+<hr><h2>真实结果回放</h2><label class="fileLabel">载入运行 JSON<input id="import" type="file" accept=".json,application/json" hidden></label><button id="export" disabled>导出当前结果</button>
+<p class="small">回放与实时计算明确区分；不会在服务失败时偷偷替换为缓存结果。</p>
+<hr><div class="pending"><b>神经闭合：尚无经验证的实验权重</b><br>当前页面不提供伪“AI优化”开关。带闭合的真实结果可由同一求解器离线导出后载入，并明确模型来源。</div>
+</aside><main>
+<div class="strip"><span class="step">单脉冲机理</span>→<span class="step">直线搭接</span>→<span class="step">弓字形填充</span>→<span class="step">多遍形貌</span><span class="pill">当前实时入口：矩形槽</span></div>
+<div class="metricGrid"><div class="metric"><label id="meanLabel">当前帧 · 加工区平均深度</label><b id="mean">—</b><small id="depthUnit">单位待结果确认</small></div><div class="metric"><label id="maxLabel">当前帧 · ROI最大深度</label><b id="maximum">—</b><small id="maxUnit">—</small></div><div class="metric"><label id="volumeLabel">当前帧 · ROI去除体积</label><b id="volume">—</b><small id="volUnit">—</small></div><div class="metric"><label>实际事件总数 / 核心求解耗时</label><b id="events">—</b><small id="runtime">不是动画帧数，不是回放耗时</small></div></div>
+<section class="card"><div class="toolbar"><div class="row"><h2 style="margin:0">形貌演化</h2><span id="source" class="pill">无数据</span></div><div class="row"><select id="view"><option value="surface">三维高度场</option><option value="heat">等比例深度图</option></select><label class="small">Z显示倍率 <select id="zscale"><option>1</option><option>2</option><option>5</option><option>10</option></select></label><button id="pin" disabled>固定当前终态为 B</button><button id="clearB" disabled>清除 B</button></div></div>
+<div class="viewGrid" id="viewGrid"><div class="viewWrap"><div class="viewTitle"><span id="titleA">A · 等待数据</span><span id="frameTitle">—</span></div><canvas id="canvasA" tabindex="0" aria-label="真实仿真高度场"></canvas></div><div class="viewWrap hidden" id="wrapB"><div class="viewTitle"><span id="titleB">B · 固定终态</span><span>所有视图共用色标</span></div><canvas id="canvasB" tabindex="0" aria-label="对照终态高度场"></canvas></div></div>
+<div class="legend"><span>浅 0</span><span class="bar"></span><span id="legendMax">深 —</span><span>色标在当前全部快照及 A/B 间固定；三维可拖动旋转、滚轮缩放。</span></div>
+<div class="row"><button id="play" disabled>回放真实快照</button><input id="frame" type="range" min="0" max="0" value="0" disabled style="flex:1;width:auto"><span class="small" id="frameCount">0 / 0</span></div>
+<p class="small" id="frameNote">仅播放求解器保存的状态，不将终态乘进度伪造成中间形貌。</p><div class="small" id="comparisonText"></div></section>
+<div class="chartGrid"><section class="card chart"><h3>沿扫描方向 X 的截面</h3><p class="small" id="xPosition">截面位置待数据确认</p><input id="row" type="range" min="0" max="0" value="0" disabled><canvas id="profileX"></canvas></section><section class="card chart"><h3>垂直扫描方向 Y 的截面</h3><p class="small" id="yPosition">横向搭接、未加工区与槽边起伏</p><input id="col" type="range" min="0" max="0" value="0" disabled><canvas id="profileY"></canvas></section></div>
+<section class="card chart"><div class="row between"><h3>加工深度随真实保存状态变化</h3><span class="small">不强制饱和，不插入虚构的中间测量点</span></div><canvas id="growth"></canvas></section>
+<section class="card"><details open><summary>当前结果的物理设置、质量提示与适用边界</summary><p id="conditions" class="small">正式演示应确认加工区、网格、材料模型、响应来源及时间状态。</p><div id="warnings" class="small"></div><pre id="provenance">没有运行记录。</pre></details></section>
+<p class="footer">单页前端候选 · 只读取真实API/导入结果 · 不包含替代求解器或虚构训练权重 · 统计由完整分辨率数组计算，绘制可降采样</p>
+</main></div>
 <script>
-const $ = id => document.getElementById(id);
-let busy = false;
-
-const CMAP = [
-  [248,250,252],[219,234,254],[147,197,253],[96,165,250],
-  [59,130,246],[37,99,235],[29,78,216],[30,58,138],[23,37,84]
-];
-function cmap(t){
-  t = Math.max(0, Math.min(1, t));
-  const x = t * (CMAP.length - 1), i = Math.min(CMAP.length-2, Math.floor(x)), f = x - i;
-  const a = CMAP[i], b = CMAP[i+1];
-  return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
-}
-
-function syncLabels(){
-  $("v-region").textContent = $("s-region").value + " µm";
-  $("v-hatch").textContent  = (+$("s-hatch").value).toFixed(1) + " µm";
-  $("v-passes").textContent = $("s-passes").value;
-  syncLaser();
-}
-
-/* ---- 激光与工艺参数：**全部自由设置** ------------------------------------
-   τ（脉宽）、f（重复频率）、v（扫描速度）互不联动，随便拖。
-
-   为什么可以自由设：材料卡里存的是**单脉冲阈值 Fth1**（材料常数）与文献的累积模型
-       Fth(N) = Fth1 · N^(S-1)，  S(f) = 0.969 − 0.0029·f [kHz]
-   求解器**逐点**追踪该点累积照射次数 N 并算阈值 —— 于是工艺参数不再是"必须匹配某个
-   工况点"的条件。旧实现把模型在 N=3 处的取值（12890）当常量存，才导致 τ/f/v 被焊死。
-
-   唯一要守的是 λ、τ：Fth1 与 S 是在 1030 nm / 208 fs 下标定的（参数自身的定义域）。 */
-let BASE = null;   // 协议基准，首次响应后由 dm.baseline 填充
-let INC = null;    // 阈值模型（Fth(N)=Fth1·N^(S-1)），后端回显
-
-function setLaserLabels(){
-  $("v-freq").textContent  = (+$("s-freq").value).toFixed(1) + " kHz";
-  $("v-speed").textContent = Math.round(+$("s-speed").value) + " mm/s";
-  $("v-tau").textContent   = $("s-tau").value + " fs";
-}
-
-function syncLaser(inc){
-  setLaserLabels();
-  if (inc) INC = inc;
-
-  // 脉宽：中性提示，不再说"会被拒绝"
-  if (BASE){
-    const t0 = BASE.pulseDurationFs, lo = t0*0.95, hi = t0*1.05, tau = +$("s-tau").value;
-    const tn = $("tau-note");
-    if (tau < lo || tau > hi){
-      tn.style.color = "#b45309";
-      tn.textContent = `超出该卡的标定范围（${lo.toFixed(0)}–${hi.toFixed(0)} fs）——` +
-                       `Fth1 与 S 只在该脉宽附近标定`;
-    } else {
-      tn.style.color = "";
-      tn.textContent = `该卡标定于 ${t0.toFixed(0)} fs（±5%）`;
-    }
-  }
-
-  // 阈值模型说明：把"为什么工艺能自由设"直接写在界面上
-  const nn = $("neff-note");
-  nn.style.color = "var(--ink2)";
-  if (INC && INC.enabled){
-    nn.textContent = `阈值随各点累积次数下降：${INC.model}，` +
-                     `Fth1 = ${INC.Fth1Jm2.toFixed(0)} J/m²，` +
-                     `S = ${INC.S.toFixed(4)}（当前 f）→ 工艺参数可自由设置`;
-  } else {
-    nn.textContent = "";
-  }
-}
-
-function to2d(layer, nx, ny){
-  if (!Array.isArray(layer)) return null;
-  if (Array.isArray(layer[0])) return layer;                 // 已是 ny×nx
-  const flat = layer;
-  if (flat.length !== nx*ny) return null;
-  const out = [];
-  for (let j=0;j<ny;j++) out.push(flat.slice(j*nx, (j+1)*nx));
-  return out;
-}
-
-function drawField(depth, nx, ny, cmax){
-  const cv = $("field"), ctx = cv.getContext("2d");
-  const W = cv.width, H = cv.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,W,H);
-
-  const off = document.createElement("canvas");
-  off.width = nx; off.height = ny;
-  const octx = off.getContext("2d");
-  const img = octx.createImageData(nx, ny), px = img.data;
-  for (let j=0;j<ny;j++){
-    const src = depth[j], dst = (ny-1-j)*nx*4;
-    for (let i=0;i<nx;i++){
-      const c = cmap(cmax>0 ? (src[i]||0)/cmax : 0), o = dst+i*4;
-      px[o]=c[0]; px[o+1]=c[1]; px[o+2]=c[2]; px[o+3]=255;
-    }
-  }
-  octx.putImageData(img,0,0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(off,0,0,nx,ny,0,0,W,H);
-}
-
-function drawProfile(depth, nx, ny, cmax){
-  const cv = $("prof"), ctx = cv.getContext("2d");
-  const W = cv.width, H = cv.height, L=58, R=16, T=14, B=30;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
-  const row = depth[Math.floor(ny/2)] || [];
-  const ymax = Math.max(cmax, 1e-9);
-  const X = i => L + (W-L-R) * (i/Math.max(1,nx-1));
-  const Y = v => H-B - (H-T-B) * (v/ymax);
-
-  ctx.strokeStyle="#eef1f4"; ctx.lineWidth=1; ctx.font="10.5px ui-monospace";
-  for (let k=0;k<=3;k++){
-    const y = Y(ymax*k/3);
-    ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(W-R,y); ctx.stroke();
-    ctx.fillStyle="#94a3b8"; ctx.textAlign="right";
-    ctx.fillText((ymax*k/3).toFixed(1), L-8, y+3.5);
-  }
-  ctx.beginPath(); ctx.moveTo(X(0), Y(row[0]||0));
-  for (let i=1;i<nx;i++) ctx.lineTo(X(i), Y(row[i]||0));
-  ctx.strokeStyle="#2563eb"; ctx.lineWidth=2; ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,H-B); ctx.lineTo(W-R,H-B);
-  ctx.strokeStyle="#dbe3ec"; ctx.lineWidth=1; ctx.stroke();
-  ctx.fillStyle="#64748b"; ctx.textAlign="center"; ctx.font="11px ui-monospace";
-  ctx.fillText("位置 x（µm）", (L+W-R)/2, H-8);
-  ctx.save(); ctx.translate(14,(T+H-B)/2); ctx.rotate(-Math.PI/2);
-  ctx.fillText("深度 µm",0,0); ctx.restore();
-}
-
-function renderScale(cmax){
-  const g=[];
-  for (let i=0;i<=16;i++){ const c=cmap(i/16); g.push(`rgb(${c[0]|0},${c[1]|0},${c[2]|0}) ${i*6.25}%`); }
-  $("cbar").style.background = "linear-gradient(to right,"+g.join(",")+")";
-  $("cmax").textContent = cmax.toFixed(1) + " µm";
-}
-
-function renderProto(dm){
-  if (!dm) return;
-  const rows = [
-    ["材料卡", dm.materialId],
-    ["波长", dm.wavelengthNm.toFixed(0) + " nm"],
-    ["脉宽", dm.pulseDurationFs.toFixed(0) + " fs"],
-    ["重复频率", dm.repetitionRateKHz.toFixed(1) + " kHz"],
-    ["光斑半径", dm.spotRadiusUm.toFixed(1) + " µm"],
-    ["扫描速度", dm.speedMmS.toFixed(1) + " mm/s"],
-    ["峰值通量", dm.peakFluenceJcm2.toFixed(1) + " J/cm²"],
-    ["单脉冲能量", dm.pulseEnergyUJ.toFixed(1) + " µJ"],
-    ["有效脉冲数", String(dm.effectiveCount)],
-    ["路径段", dm.nSegments + " 段"],
-  ];
-  $("proto").innerHTML = rows.map(([k,v]) =>
-    `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
-}
-
-function fail(msg){ $("msg").className = "msg err"; $("msg").textContent = msg; }
-
-async function run(){
-  if (busy) return;
-  busy = true;
-  $("run").disabled = true;
-  $("run").textContent = "求解中…";
-  $("msg").className = "msg";
-  $("msg").textContent = "正在逐脉冲求解…";
-  try{
-    const r = await fetch("/api/demo-rect", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        // 统一主线：页面默认调用本机实际工艺装配；文献演示仍可由 API
-        // 显式传 processMode="reference" 使用。
-        processMode: "actual",
-        materialCardFile: $("card").value,
-        regionUm: +$("s-region").value,
-        hatchUm: +$("s-hatch").value,
-        passes: +$("s-passes").value,
-        dxUm: 1.0,
-        // 三个工艺参数**直接传**，后端不再有 N_eff 门禁（ADR-0022）
-        pulseDurationFs: +$("s-tau").value,
-        repetitionRateKHz: +$("s-freq").value,
-        speedMmS: +$("s-speed").value,
-      }),
-    });
-    if (!r.ok){ fail("服务返回 HTTP " + r.status); return; }
-    const d = await r.json();
-    if (!d || d.status !== "completed"){
-      const ers = (d && d.errors) || [];
-      fail("求解未完成：" + (ers.length ? ers.map(e => e.message).join("；") : (d && d.status) || "未知"));
-      return;
-    }
-    const nx = d.grid.nx, ny = d.grid.ny;
-    const depth = to2d(d.layers.depth, nx, ny);
-    if (!depth){ fail("返回的深度层格式无法识别"); return; }
-
-    let mx = 0;
-    for (let j=0;j<ny;j++) for (let i=0;i<nx;i++) if (depth[j][i] > mx) mx = depth[j][i];
-    const cmax = mx * 1e6;                       // m → µm
-
-    drawField(depth, nx, ny, mx);
-    // 剖面按 µm 画（内部量是 m，直接画会让刻度全是 0.0）
-    drawProfile(depth.map(r => r.map(v => v * 1e6)), nx, ny, mx * 1e6);
-    renderScale(cmax);
-
-    const st = d.stats || {};
-    const roi = (d.roiStats || []).find(x => x && x.name === "machining_region") || {};
-    const observed = Object.assign({}, st, {
-      mean_depth_internal: (typeof roi.mean_depth_internal === "number")
-        ? roi.mean_depth_internal : st.mean_depth_internal,
-      max_depth_internal: (typeof roi.max_depth_internal === "number")
-        ? roi.max_depth_internal : st.max_depth_internal,
-    });
-    const um = v => (typeof v === "number" ? (v*1e6) : NaN);
-    $("k-mean").innerHTML   = um(observed.mean_depth_internal).toFixed(1)   + "<em>µm</em>";
-    $("k-max").innerHTML    = um(observed.max_depth_internal).toFixed(1)    + "<em>µm</em>";
-    $("k-center").innerHTML = um(st.center_depth_internal).toFixed(1) + "<em>µm</em>";
-    $("k-events").textContent = (d.eventsProcessed || 0).toLocaleString();
-
-    if (d.demo && d.demo.baseline) BASE = d.demo.baseline;  // 协议基准（不受本次覆盖影响）
-    syncLaser(d.demo && d.demo.incubation);
-    renderProto(d.demo);
-    $("msg").textContent = "已完成 · " + Math.round((d.elapsedS||0)*1000) + " ms";
-  }catch(e){
-    fail("请求失败：" + e.message);
-  }finally{
-    busy = false;
-    $("run").disabled = false;
-    $("run").textContent = "开始仿真";
-  }
-}
-
-/* 当前具备**完整参考协议**（波长/脉宽/频率/光斑全声明）的材料卡。
-   其余卡缺 required_laser，无法自动配置激光条件 —— 极简版只列能直接跑通的。 */
-const CARDS = [
-  { f: "data/materials/zirconia_ysz_machining_effective_n3.json",
-    n: "氧化锆 YSZ · 文献加工卡（1030 nm / 208 fs / 33.3 kHz）" },
-];
-
-async function boot(){
-  const sel = $("card");
-  sel.innerHTML = "";
-  for (const c of CARDS){
-    const o = document.createElement("option");
-    o.value = c.f; o.textContent = c.n;
-    sel.appendChild(o);
-  }
-  run();
-}
-
-// 全部自由：任一改动只刷新显示，**没有联动、没有互锁**
-// ⚠️ 必须走 syncLabels —— 它内部会再调 syncLaser() 刷激光那几个标签；
-//    只调 syncLaser() 会让 v-region / v-hatch / v-passes **不更新**
-//    （2026-09-18 的 bug：界面上的"加工层数"永远显示 2，虽然实际计算用的是滑块真值）。
-["s-region","s-hatch","s-passes","s-tau","s-freq","s-speed"].forEach(id =>
-  $(id).addEventListener("input", syncLabels));
-$("card").addEventListener("change", run);
-$("run").addEventListener("click", run);
-
-syncLabels();
-boot();
-</script>
-</body>
-</html>
+'use strict';
+const $=id=>document.getElementById(id);let A=null,B=null,frameIndex=0,playTimer=null,busy=false,lastOrigin='';
+const camera={yaw:-0.7,elev:0.80,zoom:1};let colorMax=1;
+const numeric=x=>typeof x==='number'&&Number.isFinite(x);const fmt=(x,n=3)=>numeric(x)?x.toLocaleString('zh-CN',{maximumFractionDigits:n}):'—';
+const COLORS=[[234,243,245],[145,191,205],[52,127,158],[23,60,104]];
+function colr(q){q=Math.max(0,Math.min(1,q));const t=q*3,k=Math.min(2,Math.floor(t)),f=t-k;return COLORS[k].map((v,i)=>Math.round(v*(1-f)+COLORS[k+1][i]*f));}
+function arr(a,n){if(!Array.isArray(a))throw Error('结果缺少网格数组');const flat=Array.isArray(a[0])?a.flat():a;if(flat.length!==n)throw Error(`网格数组长度错误：${flat.length}，期望 ${n}`);return Float64Array.from(flat,x=>numeric(x)?x:NaN);}
+function requestData(){const v=id=>Number($(id).value);const out={processMode:'actual',materialCardFile:$('material').value,regionUm:v('region'),hatchUm:v('hatch'),passes:v('passes'),dxUm:v('dx'),pulseDurationFs:v('tau'),repetitionRateKHz:v('freq'),speedMmS:v('speed')};for(const [k,x] of Object.entries(out)){if(typeof x==='number'&&(!Number.isFinite(x)||x<=0))throw Error(k+' 必须为有限正数');}if(!Number.isInteger(out.passes)||out.passes>8)throw Error('此演示页面支持1–8遍；更大任务请先离线计算');return out;}
+function derived(){try{const q=requestData();const pitch=q.speedMmS/q.repetitionRateKHz;const n=Math.round((q.regionUm+20)/q.dxUm);$('derived').textContent=`扫描方向脉冲间距 v/f = ${fmt(pitch)} μm；预计横向网格 ${n} × ${n}。实际能量与光学值以服务回显为准。`;if(A&&!busy)$('status').textContent='输入已编辑。下方仍是上次已提交结果；点击实际求解后才更新。';}catch(e){$('derived').textContent=e.message;}}
+function prepare(wrapper,origin){const p=wrapper.response||wrapper;if(p.status!=='completed')throw Error('仅能载入 completed 的真实运行；失败结果请查看错误信息');const g=p.grid||{};const nx=Number(g.nx),ny=Number(g.ny);if(!Number.isInteger(nx)||!Number.isInteger(ny)||nx<2||ny<2||nx*ny>30000000)throw Error('缺少有效网格或数组过大');const si=p.unitSystem==='SI';if(!si&&p.unitSystem!=='dimensionless')throw Error('unitSystem 不明，不自动猜测长度单位');const s=si?1e6:1;const xs=arr(g.xs,nx),ys=arr(g.ys,ny);for(let i=0;i<nx;i++)xs[i]*=s;for(let i=0;i<ny;i++)ys[i]*=s;if([...xs,...ys].some(v=>!numeric(v)))throw Error('横向坐标含缺失值');const dx=Number(g.dx)*s,dy=Number(g.dy)*s;if(!(dx>0&&dy>0))throw Error('网格间距缺失');const depth=arr((p.layers||{}).depth,nx*ny);for(let i=0;i<depth.length;i++)depth[i]*=s;
+const req=wrapper.request||null;const region=si?Number(p.demo?.regionUm||req?.regionUm||0):0;let flatInitial=null;if(Array.isArray(p.layers?.height)){const h=arr(p.layers.height,nx*ny);let b0=null,ok=true;for(let i=0;i<h.length;i++){if(numeric(h[i])&&numeric(depth[i])){let z=h[i]*s+depth[i];if(b0===null)b0=z;else if(Math.abs(z-b0)>1e-7*Math.max(1,Math.abs(b0)))ok=false;}}if(ok&&b0!==null)flatInitial=b0;}
+const frames=[];let skipped=0;for(const ss of (p.snapshots||[])){let d=null;if(Array.isArray(ss.depth)){d=arr(ss.depth,nx*ny);for(let i=0;i<d.length;i++)d[i]*=s;}else if(Array.isArray(ss.height)&&flatInitial!==null){const h=arr(ss.height,nx*ny);d=Float64Array.from(h,z=>numeric(z)?flatInitial-z*s:NaN);}else{skipped++;continue;}const m=ss.label||{};const idx=Number(m.event_index??m.eventIndex);const t=Number(m.time_s??m.timeS);frames.push({d,label:numeric(idx)?`事件索引 ${idx}`:`快照 ${frames.length+1}`,event:numeric(idx)?idx:null,time:numeric(t)?t:null});}
+// Final state is always appended from its own result field, not interpolated.
+frames.push({d:depth,label:'终态',event:numeric(p.eventsProcessed)?Math.max(0,p.eventsProcessed-1):null,time:null});
+const obj={p,wrapper,req,origin,nx,ny,xs,ys,dx,dy,region,s,unit:si?'μm':'L_ref',volUnit:si?'μm³':'L_ref³',frames,skipped,depth};obj.stats=frames.map(f=>metrics(obj,f.d));obj.boundMax=0;for(const f of frames)for(const v of f.d)if(numeric(v)&&v>obj.boundMax)obj.boundMax=v;return obj;}
+function metrics(o,d){let total=0,area=0,maximum=-Infinity,invalidArea=0;const wX=new Float64Array(o.nx),wY=new Float64Array(o.ny);for(let i=0;i<o.nx;i++)wX[i]=o.region>0?Math.max(0,Math.min(o.xs[i]+o.dx/2,o.region/2)-Math.max(o.xs[i]-o.dx/2,-o.region/2)):o.dx;for(let j=0;j<o.ny;j++)wY[j]=o.region>0?Math.max(0,Math.min(o.ys[j]+o.dy/2,o.region/2)-Math.max(o.ys[j]-o.dy/2,-o.region/2)):o.dy;for(let j=0;j<o.ny;j++)for(let i=0;i<o.nx;i++){const a=wX[i]*wY[j];if(!a)continue;const v=d[j*o.nx+i];if(numeric(v)){total+=v*a;area+=a;maximum=Math.max(maximum,v);}else invalidArea+=a;}return {mean:area?total/area:NaN,max:maximum===-Infinity?NaN:maximum,volume:total,area,invalidArea};}
+function canvasCtx(id){const c=$(id),r=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;const w=Math.max(200,r.width),h=Math.max(120,r.height);if(c.width!==Math.round(w*ratio)||c.height!==Math.round(h*ratio)){c.width=Math.round(w*ratio);c.height=Math.round(h*ratio);}const ctx=c.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#fbfdfe';ctx.fillRect(0,0,w,h);return {ctx,w,h};}
+function empty(id,msg='载入真实求解结果后显示'){const {ctx,w,h}=canvasCtx(id);ctx.fillStyle='#8297a4';ctx.font='13px sans-serif';ctx.textAlign='center';ctx.fillText(msg,w/2,h/2);}
+function project(o,x,y,z,w,h){const cx=(o.xs[0]+o.xs[o.nx-1])/2,cy=(o.ys[0]+o.ys[o.ny-1])/2;const span=Math.max(o.nx*o.dx,o.ny*o.dy,A?.nx*A?.dx||0,A?.ny*A?.dy||0,B?.nx*B?.dx||0,B?.ny*B?.dy||0),zs=Number($('zscale').value);let xx=x-cx,yy=y-cy;let xr=xx*Math.cos(camera.yaw)-yy*Math.sin(camera.yaw),yr=xx*Math.sin(camera.yaw)+yy*Math.cos(camera.yaw);const denom=Math.max(span,span*.45+colorMax*zs*.75);const k=Math.min(w*.7,h*.67)/Math.max(denom,1e-9)*camera.zoom;return [w*.5+k*xr,h*.31+k*(yr*Math.sin(camera.elev)-z*zs*Math.cos(camera.elev))];}
+function renderField(id,o,d){if(!o){empty(id);return;}const {ctx,w,h}=canvasCtx(id);if($('view').value==='heat'){const pad=35,scale=Math.min((w-2*pad)/(o.nx*o.dx),(h-2*pad)/(o.ny*o.dy)),rw=o.nx*o.dx*scale,rh=o.ny*o.dy*scale,x0=(w-rw)/2,y0=(h-rh)/2;const stride=Math.max(1,Math.ceil(Math.max(o.nx,o.ny)/700)),nx=Math.ceil(o.nx/stride),ny=Math.ceil(o.ny/stride),tmp=document.createElement('canvas');tmp.width=nx;tmp.height=ny;const tc=tmp.getContext('2d'),im=tc.createImageData(nx,ny);for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const v=d[Math.min(o.ny-1,j*stride)*o.nx+Math.min(o.nx-1,i*stride)],k=(j*nx+i)*4;let c=numeric(v)?colr(v/colorMax):[205,205,205];im.data[k]=c[0];im.data[k+1]=c[1];im.data[k+2]=c[2];im.data[k+3]=255;}tc.putImageData(im,0,0);ctx.imageSmoothingEnabled=false;ctx.drawImage(tmp,x0,y0,rw,rh);ctx.strokeStyle='#8297a4';ctx.strokeRect(x0,y0,rw,rh);if(o.region){ctx.strokeStyle='#e8a247';ctx.setLineDash([5,3]);const ax=x0+(-o.region/2-(o.xs[0]-o.dx/2))*scale,ay=y0+(-o.region/2-(o.ys[0]-o.dy/2))*scale;ctx.strokeRect(ax,ay,o.region*scale,o.region*scale);ctx.setLineDash([]);}ctx.fillStyle='#617789';ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillText(`X：${fmt(o.xs[0])} … ${fmt(o.xs[o.nx-1])} ${o.unit}`,w/2,h-9);ctx.save();ctx.translate(12,h/2);ctx.rotate(-Math.PI/2);ctx.fillText(`Y / ${o.unit}`,0,0);ctx.restore();return;}
+const stride=Math.max(1,Math.ceil(Math.max(o.nx,o.ny)/75)),polys=[];for(let j=0;j<o.ny-1;j+=stride)for(let i=0;i<o.nx-1;i+=stride){const i1=Math.min(i+stride,o.nx-1),j1=Math.min(j+stride,o.ny-1),pts=[[i,j],[i1,j],[i1,j1],[i,j1]],values=pts.map(([x,y])=>d[y*o.nx+x]);if(values.some(v=>!numeric(v)))continue;const xy=pts.map(([x,y],k)=>project(o,o.xs[x],o.ys[y],-values[k],w,h));const depthSort=pts.reduce((s,[x,y])=>s+o.xs[x]*Math.sin(camera.yaw)+o.ys[y]*Math.cos(camera.yaw),0)/4;polys.push({xy,z:values.reduce((a,b)=>a+b,0)/4,sort:depthSort});}polys.sort((a,b)=>a.sort-b.sort);for(const p of polys){ctx.beginPath();ctx.moveTo(...p.xy[0]);for(const pt of p.xy.slice(1))ctx.lineTo(...pt);ctx.closePath();ctx.fillStyle=`rgb(${colr(p.z/colorMax).join(',')})`;ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.45;ctx.stroke();}
+const x0=o.xs[0],x1=o.xs[o.nx-1],y0=o.ys[0],y1=o.ys[o.ny-1];ctx.strokeStyle='#7998a7';ctx.lineWidth=1;ctx.setLineDash([4,4]);const corners=[[x0,y0],[x1,y0],[x1,y1],[x0,y1],[x0,y0]];ctx.beginPath();corners.forEach(([x,y],i)=>{const p=project(o,x,y,0,w,h);i?ctx.lineTo(...p):ctx.moveTo(...p);});ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#516a7a';ctx.font='11px sans-serif';ctx.textAlign='left';ctx.fillText(`z = 0 参考平面（原始面以输入为准）`,12,20);ctx.fillText(`显示 Z 倍率 ×${$('zscale').value} · ${o.unit}`,12,h-15);ctx.textAlign='right';ctx.fillText(`XY范围 ${fmt(o.nx*o.dx)} × ${fmt(o.ny*o.dy)} ${o.unit}`,w-12,h-15);}
+function chart(id,series,xlabel,ylabel){const {ctx,w,h}=canvasCtx(id);const pts=series.flatMap(s=>s.points.filter(p=>numeric(p[0])&&numeric(p[1])));if(!pts.length){empty(id,'无可用数据');return;}let xmin=Math.min(...pts.map(p=>p[0])),xmax=Math.max(...pts.map(p=>p[0])),ymin=Math.min(0,...pts.map(p=>p[1])),ymax=Math.max(...pts.map(p=>p[1]));if(xmin===xmax)xmax=xmin+1;if(ymin===ymax)ymax=ymin+1;const L=61,R=18,T=18,D=33;const X=x=>L+(x-xmin)/(xmax-xmin)*(w-L-R),Y=y=>T+(ymax-y)/(ymax-ymin)*(h-T-D);ctx.font='10px sans-serif';for(let k=0;k<4;k++){const v=ymin+(ymax-ymin)*k/3;ctx.strokeStyle='#e1e8ed';ctx.beginPath();ctx.moveTo(L,Y(v));ctx.lineTo(w-R,Y(v));ctx.stroke();ctx.fillStyle='#617789';ctx.textAlign='right';ctx.fillText(fmt(v,2),L-7,Y(v)+4);}for(let k=0;k<3;k++){const x=xmin+(xmax-xmin)*k/2;ctx.textAlign='center';ctx.fillStyle='#617789';ctx.fillText(fmt(x,2),X(x),h-D+16);}const palette=['#116d85','#c17b35'];series.forEach((s,idx)=>{ctx.beginPath();ctx.lineWidth=1.6;ctx.strokeStyle=palette[idx%2];let pen=false;for(const [x,y] of s.points){if(!numeric(x)||!numeric(y)){pen=false;continue;}pen?ctx.lineTo(X(x),Y(y)):ctx.moveTo(X(x),Y(y));pen=true;}ctx.stroke();if(s.dots)for(const [x,y] of s.points){if(!numeric(x)||!numeric(y))continue;ctx.beginPath();ctx.arc(X(x),Y(y),3,0,Math.PI*2);ctx.fillStyle=palette[idx%2];ctx.fill();}});ctx.fillStyle='#617789';ctx.textAlign='center';ctx.fillText(xlabel,w/2,h-2);ctx.textAlign='left';ctx.fillText(ylabel,5,11);}
+function redraw(){colorMax=Math.max(A?.boundMax||0,B?.boundMax||0,1e-12);renderField('canvasA',A,A?.frames[frameIndex]?.d);if(B)renderField('canvasB',B,B.depth);if(!A){['profileX','profileY','growth'].forEach(id=>empty(id));return;}const f=A.frames[frameIndex],m=A.stats[frameIndex],scope=A.region?'加工区':'全计算域（未提供加工ROI）';$('meanLabel').textContent=`当前帧 · ${scope}平均深度`;$('maxLabel').textContent=`当前帧 · ${scope}最大深度`;$('volumeLabel').textContent=`当前帧 · ${scope}去除体积`;$('mean').textContent=fmt(m.mean);$('maximum').textContent=fmt(m.max);$('volume').textContent=fmt(m.volume,1);$('depthUnit').textContent=A.unit;$('maxUnit').textContent=A.unit;$('volUnit').textContent=A.volUnit;$('events').textContent=fmt(A.p.eventsProcessed,0);$('runtime').textContent=numeric(A.p.elapsedS)?`核心求解：${fmt(A.p.elapsedS,3)} s`:'核心求解耗时未提供';$('frameTitle').textContent=f.label+(f.time!==null?` · t=${fmt(f.time,6)} s`:'');$('frameCount').textContent=`${frameIndex+1} / ${A.frames.length}`;$('legendMax').textContent=`${fmt(colorMax)} ${A.unit}`;$('frameNote').textContent=`只显示保存状态；A当前为${f.label}，B始终为固定终态。${A.skipped?'跳过 '+A.skipped+' 个无法安全换算深度的快照。':''}${m.invalidArea?'ROI含缺失点：均值为有效面积均值，体积仅为有效区积分。':''}`;
+const j=Math.min(A.ny-1,Number($('row').value)),i=Math.min(A.nx-1,Number($('col').value));$('xPosition').textContent=`截面位置 y = ${fmt(A.ys[j])} ${A.unit}`;$('yPosition').textContent=`截面位置 x = ${fmt(A.xs[i])} ${A.unit}`;const sx=[{points:Array.from(A.xs,(x,k)=>[x,f.d[j*A.nx+k]])}],sy=[{points:Array.from(A.ys,(y,k)=>[y,f.d[k*A.nx+i]])}];if(B&&B.unit===A.unit){const jb=nearest(B.ys,A.ys[j]),ib=nearest(B.xs,A.xs[i]);$('xPosition').textContent+=`；B截面 y=${fmt(B.ys[jb])} ${B.unit}`;$('yPosition').textContent+=`；B截面 x=${fmt(B.xs[ib])} ${B.unit}`;sx.push({points:Array.from(B.xs,(x,k)=>[x,B.depth[jb*B.nx+k]])});sy.push({points:Array.from(B.ys,(y,k)=>[y,B.depth[k*B.nx+ib]])});}chart('profileX',sx,`X / ${A.unit}`,`深度 / ${A.unit}`);chart('profileY',sy,`Y / ${A.unit}`,`深度 / ${A.unit}`);
+const ev=A.frames.every(x=>x.event!==null);chart('growth',[{points:A.frames.map((f,k)=>[ev?f.event:k+1,A.stats[k].mean]),dots:true}],ev?'保存状态对应的事件索引':'真实保存状态编号',`ROI均深 / ${A.unit}`);if(B){const bm=B.stats[B.stats.length-1];$('comparisonText').textContent=Math.abs(A.region-B.region)>1e-8?'A/B加工ROI尺寸不同：仅展示各自结果，不计算均深差；不同区域不能冒充同一实验对照。':frameIndex===A.frames.length-1?`终态 A − B：ROI均深差 ${fmt(m.mean-bm.mean)} ${A.unit}。A/B 必须按实际工况解释；这不是自动的实验误差或精度提升率。`:'A 正在回放中间状态；不计算它与 B 终态的“改进率”。';}else $('comparisonText').textContent='先固定当前结果为 B，再改变一个工艺参数求解 A，可进行真实工况对照。';}
+function nearest(axis,x){let n=0;for(let k=1;k<axis.length;k++)if(Math.abs(axis[k]-x)<Math.abs(axis[n]-x))n=k;return n;}
+function activate(obj){if(B&&B.unit!==obj.unit)throw Error('A/B单位不一致，请先清除B再载入');stopPlay();A=obj;frameIndex=A.frames.length-1;$('frame').max=frameIndex;$('frame').value=frameIndex;$('frame').disabled=false;$('row').max=A.ny-1;$('row').value=nearest(A.ys,0);$('row').disabled=false;$('col').max=A.nx-1;$('col').value=nearest(A.xs,0);$('col').disabled=false;['pin','export','play'].forEach(x=>$(x).disabled=false);$('source').textContent=obj.p.provenance?.verificationKind==='FRONTEND_TEST_FIXTURE'?'自动化夹具 · 非仿真结果':obj.origin;$('evidenceTag').textContent=obj.p.unitSystem==='dimensionless'?'无量纲模型 · 非实测材料结果':obj.p.runMode==='synthetic_demo'?'研究/合成模式 · 不作精度结论':'模型依据与适用范围见运行记录';$('titleA').textContent=`A · ${A.p.materialId||'材料未标明'} · ${A.p.runId||'运行ID未提供'}`;const dm=A.p.demo||{};$('conditions').textContent=`长度单位：${A.unit}；计算网格：${A.nx}×${A.ny}，Δ=${fmt(A.dx)}×${fmt(A.dy)} ${A.unit}；${A.region?'加工区边长：'+fmt(A.region)+' μm':'加工ROI未提供，不能显示加工区统计'}。${numeric(dm.spotRadiusUm)?' 光斑半径 '+fmt(dm.spotRadiusUm)+' μm。':''}${numeric(dm.pulseEnergyUJ)?' 单脉冲能量 '+fmt(dm.pulseEnergyUJ)+' μJ。':''}`;
+$('warnings').replaceChildren();for(const text of (A.p.warnings||[])){const p=document.createElement('p');p.textContent=String(text);$('warnings').appendChild(p);}const meta={source:obj.origin,runId:A.p.runId||null,inputHash:A.p.inputHash||null,runMode:A.p.runMode,unitSystem:A.p.unitSystem,demo:A.p.demo||null,effectiveConfiguration:A.p.effectiveConfiguration||null,watermark:A.p.watermark||null,provenance:A.p.provenance||null,geometry:A.p.panels?.geometry||null,structure:A.p.panels?.structure||null,acceleration:A.p.panels?.acceleration||null,request:obj.req};$('provenance').textContent=JSON.stringify(meta,null,2);redraw();}
+async function run(){if(busy)return;let req;try{req=requestData();}catch(e){$('status').className='small error';$('status').textContent=e.message;return;}if(location.protocol==='file:'){$('status').className='small error';$('status').textContent='实时求解需由现有服务提供此页；直接打开文件时请载入真实运行JSON。';return;}busy=true;['solve','material','preset','region','passes','hatch','speed','freq','dx','import'].forEach(id=>$(id).disabled=true);stopPlay();$('status').className='small';const t=performance.now();let timer=setInterval(()=>{$('status').textContent=`服务正在计算；请求已耗时 ${((performance.now()-t)/1000).toFixed(1)} s。同步接口未提供进度百分比。`;},200);try{const resp=await fetch('/api/demo-rect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});const text=await resp.text();let p;try{p=JSON.parse(text);}catch(e){throw Error('服务未返回JSON：HTTP '+resp.status);}if(!resp.ok||p.status!=='completed'){const errors=p.errors||p.error&&[p.error]||[];throw Error(errors.map(e=>typeof e==='string'?e:e.message||JSON.stringify(e)).join('；')||`HTTP ${resp.status} / ${p.status||'未知状态'}`);}activate(prepare({schema:'ufdemo.demo_archive/1',request:req,response:p},'本次服务计算'));$('status').textContent=`已完成。请求总耗时 ${((performance.now()-t)/1000).toFixed(2)} s；核心求解耗时见结果卡。`;}catch(e){$('status').className='small error';$('status').textContent=`求解失败：${e.message}\n上次结果保持不变；没有生成或替换新结果。`;}finally{clearInterval(timer);busy=false;['solve','material','preset','region','passes','hatch','speed','freq','dx','import'].forEach(id=>$(id).disabled=false);}}
+function stopPlay(){if(playTimer)clearInterval(playTimer);playTimer=null;$('play').textContent='回放真实快照';}
+$('solve').onclick=run;$('import').onchange=async ev=>{const file=ev.target.files[0];if(!file)return;try{if(file.size>200*1024*1024)throw Error('JSON超过200MB，请在不改变统计的前提下使用展示导出');const p=JSON.parse(await file.text());activate(prepare(p,'真实结果回放 · 来源待运行ID核验'));$('status').className='small';$('status').textContent=`已载入 ${file.name}。这是已保存结果，不是实时计算。`;}catch(e){$('status').className='small error';$('status').textContent='载入失败：'+e.message;}ev.target.value='';};
+$('export').onclick=()=>{if(!A)return;const url=URL.createObjectURL(new Blob([JSON.stringify(A.wrapper)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=`run_${String(A.p.runId||'archive').replace(/[^a-zA-Z0-9_-]/g,'_')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('pin').onclick=()=>{if(!A)return;B=A;$('wrapB').classList.remove('hidden');$('viewGrid').classList.add('compare');$('clearB').disabled=false;$('titleB').textContent=`B · ${B.p.runId||'固定结果'} · ${B.origin}`;redraw();};$('clearB').onclick=()=>{B=null;$('wrapB').classList.add('hidden');$('viewGrid').classList.remove('compare');$('clearB').disabled=true;redraw();};
+$('frame').oninput=()=>{stopPlay();frameIndex=Number($('frame').value);redraw();};$('play').onclick=()=>{if(!A)return;if(playTimer){stopPlay();return;}if(frameIndex>=A.frames.length-1)frameIndex=0;$('frame').value=frameIndex;redraw();$('play').textContent='停止回放';playTimer=setInterval(()=>{frameIndex++;if(frameIndex>=A.frames.length){frameIndex=A.frames.length-1;stopPlay();return;}$('frame').value=frameIndex;redraw();},850);};
+['view','zscale','row','col'].forEach(id=>$(id).oninput=redraw);['region','hatch','passes','speed','freq','dx'].forEach(id=>$(id).oninput=derived);
+$('preset').onchange=()=>{const v={quick:[20,1,2,40],dense:[60,4,2,20],sparse:[60,4,8,20],experiment:[200,4,2,20]}[$('preset').value];['region','passes','hatch','speed'].forEach((id,k)=>$(id).value=v[k]);derived();};
+for(const id of ['canvasA','canvasB']){const c=$(id);let dragging=null;c.onpointerdown=e=>{dragging=[e.clientX,e.clientY];c.setPointerCapture(e.pointerId);};c.onpointermove=e=>{if(!dragging)return;camera.yaw+=(e.clientX-dragging[0])*.01;camera.elev=Math.max(.15,Math.min(1.4,camera.elev+(e.clientY-dragging[1])*.006));dragging=[e.clientX,e.clientY];redraw();};c.onpointerup=()=>dragging=null;c.onpointercancel=()=>dragging=null;c.addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.4,Math.min(3,camera.zoom*Math.exp(-e.deltaY*.001)));redraw();},{passive:false});}
+window.addEventListener('resize',()=>requestAnimationFrame(redraw));derived();redraw();
+</script></body></html>
