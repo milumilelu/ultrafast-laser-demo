@@ -22,7 +22,7 @@ import dataclasses
 import json
 import math
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 import numpy as np
 
@@ -288,6 +288,7 @@ def solve_payload(
     project_root: str | Path,
     label: str = "web_run",
     curves_dir: str | Path | None = None,
+    progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """用**真实求解器**跑一次并返回契约。
 
@@ -330,6 +331,7 @@ def solve_payload(
         frozen = U.submit(
             state, material, out_base=out_base, project_root=project_root, label=label,
             curves_dir=curves_dir,   # U07：让 solver.response_curve 能被加载
+            progress_callback=progress_callback,
         )
     except UFDemoError as err:
         # 准入失败 → 带上完整校验报告，前端逐条显示
@@ -1245,6 +1247,8 @@ def demo_rect_payload(
     out_base: str | Path,
     project_root: str | Path,
     curves_dir: str | Path | None = None,
+    progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
+    estimate_only: bool = False,
 ) -> dict[str, Any]:
     """**极简演示端点**：给材料卡 + 间距/层数/区域，跑一次矩形槽。
 
@@ -1456,10 +1460,44 @@ def demo_rect_payload(
         },
     }
 
+    if estimate_only:
+        # 预估阶段只构造并校验同一份配置，不调用求解器、不落盘。
+        try:
+            estimate_cfg = RunConfig.from_dict(cfg, base_dir=str(project_root))
+            estimate_report = validate_run(estimate_cfg, spec)
+        except UFDemoError as err:
+            return _failure([err.to_dict()])
+        if not estimate_report.ok:
+            return _failure(estimate_report.errors, warnings=estimate_report.warnings)
+        events = int(estimate_report.estimated_events or 0)
+        cells = int(n * n)
+        # 这是用于交互确认的保守工程估计，不是精度结论；实际进度仍以后端
+        # 逐事件回调为准。事件数和网格规模越大，估计时间相应增加。
+        estimated_seconds = max(0.2, min(3600.0, events * cells * 3.0e-8))
+        return {
+            "schema": "ufdemo.web.progress_estimate/1",
+            "status": "estimated",
+            "estimatedEvents": events,
+            "gridCells": cells,
+            "grid": {"nx": n, "ny": n, "dxUm": dx},
+            "estimatedMemoryBytes": int(estimate_report.estimated_memory_bytes or 0),
+            "estimatedSeconds": estimated_seconds,
+            "estimatedMinutes": estimated_seconds / 60.0,
+            "estimateBasis": "基于当前网格单元数与路径事件数的保守工程估计；实际进度以后端事件回调为准。",
+            "request": {
+                "regionUm": region,
+                "hatchUm": hatch,
+                "passes": passes,
+                "speedMmS": speed_m_s * 1e3,
+                "repetitionRateKHz": freq / 1e3,
+            },
+        }
+
     out = solve_payload(
         cfg,   # 注意：solve_payload 收的就是配置本身（拆 params 是 webapp 路由的活）
         out_base=out_base, project_root=project_root,
         label=str(cfg["label"]), curves_dir=curves_dir,
+        progress_callback=progress_callback,
     )
     # 把"这次用的协议参数"一并回给前端，演示时可以直接展示"输入是什么"
     _inc = dict(resp.get("incubation") or {})

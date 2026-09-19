@@ -28,6 +28,7 @@ import sys
 import threading
 import traceback
 import urllib.parse
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,125 @@ MAX_BODY_BYTES = 8 * 1024 * 1024
 
 # 求解串行化：避免并发大网格求解耗尽内存
 _SOLVE_LOCK = threading.Lock()
+
+# 异步进度任务只服务于本地单用户界面。结果仍由同一个同步契约生成，
+# 这里只把求解放到后台线程，并保存短生命周期的进度/结果供前端轮询。
+_PROGRESS_LOCK = threading.Lock()
+_PROGRESS_JOBS: dict[str, dict[str, Any]] = {}
+_PROGRESS_JOB_LIMIT = 32
+
+
+def _progress_update(job_id: str, info: dict[str, Any]) -> None:
+    """把 solver 的回调转成可 JSON 化的轮询状态。"""
+    with _PROGRESS_LOCK:
+        job = _PROGRESS_JOBS.get(job_id)
+        if job is None:
+            return
+        stage = str(info.get("stage") or job.get("stage") or "solving")
+        if "events_done" in info:
+            job["eventsDone"] = max(0, int(info.get("events_done") or 0))
+        if "events_total" in info:
+            job["eventsTotal"] = max(0, int(info.get("events_total") or 0))
+        job["stage"] = stage
+        total = int(job.get("eventsTotal") or 0)
+        done = int(job.get("eventsDone") or 0)
+        job["percent"] = min(100.0, max(0.0, 100.0 * done / total)) if total else 0.0
+
+
+def _run_demo_progress_job(job_id: str, body: dict[str, Any], ctx: "AppContext") -> None:
+    """后台执行一个 demo 求解；所有业务结果仍来自 ``demo_rect_payload``。"""
+    def callback(info: Any) -> None:
+        if isinstance(info, dict):
+            _progress_update(job_id, info)
+
+    try:
+        with _SOLVE_LOCK:
+            result = W.demo_rect_payload(
+                body,
+                out_base=ctx.runs_dir,
+                project_root=ctx.project_root,
+                curves_dir=ctx.curves_dir,
+                progress_callback=callback,
+            )
+        status = str(result.get("status") or "failed")
+        with _PROGRESS_LOCK:
+            job = _PROGRESS_JOBS.get(job_id)
+            if job is None:
+                return
+            job["status"] = status
+            job["result"] = result
+            if status == "completed":
+                job["percent"] = 100.0
+                job["stage"] = "finished"
+                job["eventsDone"] = max(
+                    int(job.get("eventsDone") or 0), int(result.get("eventsProcessed") or 0)
+                )
+                job["eventsTotal"] = max(
+                    int(job.get("eventsTotal") or 0), int(result.get("eventsTotal") or 0)
+                )
+            elif status == "failed":
+                job["stage"] = "failed"
+    except Exception as err:  # noqa: BLE001 - 轮询端点必须返回可读错误
+        code, message, status_code, extra = error_response(err)
+        with _PROGRESS_LOCK:
+            job = _PROGRESS_JOBS.get(job_id)
+            if job is not None:
+                job["status"] = "failed"
+                job["stage"] = "failed"
+                job["result"] = {
+                    "schema": "ufdemo.web.run/1",
+                    "status": "failed",
+                    "errors": [{"code": code, "message": message, **extra}],
+                    "warnings": [],
+                    "removalAvailable": False,
+                    "layers": {},
+                    "blocked": {},
+                    "snapshots": [],
+                    "panels": {},
+                    "rows": {},
+                    "stats": {},
+                    "httpStatus": status_code,
+                }
+
+
+def _start_demo_progress_job(body: dict[str, Any], ctx: "AppContext") -> str:
+    job_id = uuid.uuid4().hex
+    record: dict[str, Any] = {
+        "jobId": job_id,
+        "status": "queued",
+        "stage": "queued",
+        "percent": 0.0,
+        "eventsDone": 0,
+        "eventsTotal": 0,
+        "result": None,
+    }
+    with _PROGRESS_LOCK:
+        _PROGRESS_JOBS[job_id] = record
+        # 本地演示不需要无限缓存；只清理已结束的最旧任务。
+        if len(_PROGRESS_JOBS) > _PROGRESS_JOB_LIMIT:
+            for old_id, old in list(_PROGRESS_JOBS.items()):
+                if old_id != job_id and old.get("status") in {"completed", "failed"}:
+                    _PROGRESS_JOBS.pop(old_id, None)
+                    if len(_PROGRESS_JOBS) <= _PROGRESS_JOB_LIMIT:
+                        break
+    threading.Thread(
+        target=_run_demo_progress_job,
+        args=(job_id, body, ctx),
+        daemon=True,
+        name=f"ufdemo-progress-{job_id[:8]}",
+    ).start()
+    return job_id
+
+
+def _progress_payload(job_id: str) -> dict[str, Any] | None:
+    with _PROGRESS_LOCK:
+        job = _PROGRESS_JOBS.get(job_id)
+        if job is None:
+            return None
+        out = {k: v for k, v in job.items() if k != "result"}
+        if job.get("result") is not None:
+            out["result"] = job["result"]
+        return out
 
 
 class AppContext:
@@ -319,6 +439,16 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self._send_error_json("BAD_REQUEST", "缺少运行标识", status=400)
                 return
             self._send_json(W.read_run_payload(ctx.runs_dir, run_id))
+        elif path.startswith("/api/progress/"):
+            job_id = path[len("/api/progress/"):].strip("/")
+            if not job_id:
+                self._send_error_json("BAD_REQUEST", "缺少进度任务标识", status=400)
+                return
+            payload = _progress_payload(job_id)
+            if payload is None:
+                self._send_error_json("NOT_FOUND", f"进度任务不存在：{job_id}", status=404)
+                return
+            self._send_json(payload)
         elif path == "/api/layers":
             # 图层标签与不可用口径与 Streamlit 侧同源，避免两处各写一份
             from . import ui_service as U
@@ -355,10 +485,34 @@ class WebAppHandler(BaseHTTPRequestHandler):
                     curves_dir=ctx.curves_dir,   # U07：实测曲线驱动的求解
                 )
             self._send_json(payload)
+        elif path == "/api/demo-rect/estimate":
+            body = self._read_body()
+            payload = W.demo_rect_payload(
+                body,
+                out_base=ctx.runs_dir,
+                project_root=ctx.project_root,
+                curves_dir=ctx.curves_dir,
+                estimate_only=True,
+            )
+            self._send_json(payload)
         elif path == "/api/demo-rect":
             # 极简演示：材料卡 + 间距/层数/区域即可，协议参数从卡里自动读。
             # 与 /api/solve 走同一个求解器与落盘，只是省掉了手填完整配置。
             body = self._read_body()
+            if bool(body.get("asyncProgress")):
+                job_id = _start_demo_progress_job(body, ctx)
+                self._send_json(
+                    {
+                        "schema": "ufdemo.web.progress/1",
+                        "status": "accepted",
+                        "jobId": job_id,
+                        "percent": 0.0,
+                        "eventsDone": 0,
+                        "eventsTotal": 0,
+                    },
+                    status=202,
+                )
+                return
             with _SOLVE_LOCK:
                 payload = W.demo_rect_payload(
                     body,

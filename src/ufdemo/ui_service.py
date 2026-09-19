@@ -22,7 +22,7 @@ import copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .config import RunConfig, UnitContext, validate_run
 from .errors import UFDemoError
@@ -741,6 +741,7 @@ def submit(
     label: str = "ui_run",
     code_info: Mapping[str, Any] | None = None,
     curves_dir: str | Path | None = None,
+    progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> FrozenRun:
     """冻结当前参数、求解一次并把结果写入新目录。
 
@@ -783,8 +784,12 @@ def submit(
 
     # U07：把曲线目录传下去 —— 否则 `solver.response_curve` 指定的实测曲线
     # 加载不到，界面上「用真实数据求解」这条路永远走不通。
-    result = solve(cfg, material,
-                   curves_dir=str(curves_dir) if curves_dir else None)
+    result = solve(
+        cfg,
+        material,
+        progress_callback=progress_callback,
+        curves_dir=str(curves_dir) if curves_dir else None,
+    )
     result.run_id = run_id
     saved = save_run(result, run_dir, project_root=project_root, code_info=code_info)
 
